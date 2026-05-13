@@ -9,11 +9,7 @@ use warp_core::ui::theme::WarpTheme;
 use warpui::color::ColorU;
 
 use crate::ai::artifacts::{deserialize_artifacts, Artifact};
-use crate::server::server_api::ServerApiProvider;
 use crate::ui_components::icons::Icon;
-use crate::view_components::DismissibleToast;
-use crate::workspace::ToastStack;
-use warpui::{SingletonEntity, View, ViewContext};
 
 use super::AmbientAgentTaskId;
 
@@ -158,7 +154,6 @@ pub enum AgentSource {
     Interactive,
     WebApp,
     GitHubAction,
-    CloudMode,
 }
 
 impl AgentSource {
@@ -174,7 +169,6 @@ impl AgentSource {
             AgentSource::Interactive => "LOCAL",
             AgentSource::WebApp => "WEB_APP",
             AgentSource::GitHubAction => "GITHUB_ACTION",
-            AgentSource::CloudMode => "CLOUD_MODE",
         }
     }
 
@@ -186,9 +180,8 @@ impl AgentSource {
             AgentSource::Cli => "CLI",
             AgentSource::ScheduledAgent => "Scheduled",
             AgentSource::Interactive => "Warp (local agent)",
-            AgentSource::WebApp => "Oz Web",
+            AgentSource::WebApp => "Oz",
             AgentSource::GitHubAction => "GitHub Action",
-            AgentSource::CloudMode => "Warp (cloud agent)",
         }
     }
 
@@ -199,8 +192,7 @@ impl AgentSource {
             AgentSource::Linear
             | AgentSource::Slack
             | AgentSource::Interactive
-            | AgentSource::WebApp
-            | AgentSource::CloudMode => true,
+            | AgentSource::WebApp => true,
             AgentSource::Cli
             | AgentSource::ScheduledAgent
             | AgentSource::AgentWebhook
@@ -226,7 +218,7 @@ where
             "SCHEDULED_AGENT" => Some(AgentSource::ScheduledAgent),
             "WEB_APP" => Some(AgentSource::WebApp),
             "GITHUB_ACTION" => Some(AgentSource::GitHubAction),
-            "CLOUD_MODE" => Some(AgentSource::CloudMode),
+            "CLOUD_MODE" => None,
             _ => {
                 report_error!(anyhow!("Unknown AmbientAgentSource: {}", s));
                 None
@@ -330,24 +322,6 @@ pub enum AmbientAgentTaskState {
 }
 
 impl AmbientAgentTaskState {
-    /// Returns the query param value for the server API.
-    pub fn as_query_param(&self) -> Option<&str> {
-        match self {
-            AmbientAgentTaskState::Queued => Some("QUEUED"),
-            AmbientAgentTaskState::Pending => Some("PENDING"),
-            AmbientAgentTaskState::Claimed => Some("CLAIMED"),
-            AmbientAgentTaskState::InProgress => Some("INPROGRESS"),
-            AmbientAgentTaskState::Succeeded => Some("SUCCEEDED"),
-            AmbientAgentTaskState::Failed => Some("FAILED"),
-            AmbientAgentTaskState::Error => Some("ERROR"),
-            AmbientAgentTaskState::Blocked => Some("BLOCKED"),
-            AmbientAgentTaskState::Cancelled => Some("CANCELLED"),
-            // Unknown states are only for resilient deserialization and should not be
-            // sent back as filter values.
-            AmbientAgentTaskState::Unknown => None,
-        }
-    }
-
     pub fn is_working(&self) -> bool {
         match self {
             AmbientAgentTaskState::Queued
@@ -450,26 +424,4 @@ pub struct TaskStatusMessage {
 pub struct RequestUsage {
     pub inference_cost: Option<f64>,
     pub compute_cost: Option<f64>,
-}
-
-/// Cancel an ambient agent task and show a toast with the result.
-pub fn cancel_task_with_toast<V: View>(task_id: AmbientAgentTaskId, ctx: &mut ViewContext<V>) {
-    let ai_client = ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client();
-    let window_id = ctx.window_id();
-    ctx.spawn(
-        async move { ai_client.cancel_ambient_agent_task(&task_id).await },
-        move |_view, result, ctx| {
-            let message = match result {
-                Ok(()) => "Task cancelled".to_string(),
-                Err(e) => {
-                    log::error!("Failed to cancel task: {e}");
-                    format!("Failed to cancel task: {e}")
-                }
-            };
-            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                let toast = DismissibleToast::default(message);
-                toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-            });
-        },
-    );
 }

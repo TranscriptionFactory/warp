@@ -1,22 +1,23 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use crate::ai::api_error::AIApiError;
 use anyhow::anyhow;
 use chrono::{DateTime, Local, TimeDelta};
 use futures::channel::oneshot;
+use futures_util::StreamExt;
 use uuid::Uuid;
 use warp_multi_agent_api::response_event;
 use warpui::{Entity, ModelContext};
 
 use crate::{
     ai::agent::{
-        api::{self, generate_multi_agent_output, ConvertToAPITypeError},
+        api::{self, ConvertToAPITypeError},
         conversation::AIConversationId,
         AIAgentInput, AIIdentifiers, CancellationReason,
     },
     ai::blocklist::BlocklistAIHistoryModel,
     network::NetworkStatus,
     report_error, send_telemetry_from_ctx,
-    server::server_api::ServerApiProvider,
 };
 use warpui::SingletonEntity;
 
@@ -232,7 +233,6 @@ impl ResponseStream {
         can_attempt_resume_on_error: bool,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
-        let server_api = ServerApiProvider::as_ref(ctx).get();
         let (cancellation_tx, cancellation_rx) = oneshot::channel();
         let start_time = Local::now();
 
@@ -266,7 +266,7 @@ impl ResponseStream {
                     )
                     .await
                 } else {
-                    generate_multi_agent_output(server_api, params_clone, cancellation_rx).await
+                    byop_required_response_stream(cancellation_rx).await
                 }
             },
             move |me, stream, ctx| {
@@ -349,7 +349,6 @@ impl ResponseStream {
         let request_id = Uuid::new_v4();
         self.current_request_id = Some(request_id);
         let params = self.params.clone();
-        let server_api = ServerApiProvider::as_ref(ctx).get();
         let byop_dispatch = byop_dispatch_info(&params, &self.ai_identifiers, ctx);
         let _ = ctx.spawn(
             async move {
@@ -372,7 +371,7 @@ impl ResponseStream {
                     )
                     .await
                 } else {
-                    generate_multi_agent_output(server_api, params, cancellation_rx).await
+                    byop_required_response_stream(cancellation_rx).await
                 }
             },
             move |me, stream, ctx| {
@@ -608,4 +607,17 @@ pub enum ResponseStreamEvent {
 
 impl Entity for ResponseStream {
     type Event = ResponseStreamEvent;
+}
+
+async fn byop_required_response_stream(
+    cancellation_rx: oneshot::Receiver<()>,
+) -> Result<api::ResponseStream, ConvertToAPITypeError> {
+    log::debug!("No BYOP provider selected for OpenWarp agent request");
+    let error_stream = futures::stream::once(async {
+        Err(Arc::new(AIApiError::Other(anyhow!(
+            "OpenWarp requires a configured BYOP provider in Settings"
+        ))))
+    })
+    .take_until(cancellation_rx);
+    Ok(Box::pin(error_stream))
 }
