@@ -85,8 +85,8 @@ impl EditorMetadata {
         // field codes within each token.  This preserves spaces inside
         // substituted values (e.g. file paths) while still honouring the
         // quoting in the original .desktop Exec line.
-        let tokens = shell_words::split(raw_exec)
-            .map_err(|_| DesktopExecError::MalformedFieldCode)?;
+        let tokens =
+            shell_words::split(raw_exec).map_err(|_| DesktopExecError::MalformedFieldCode)?;
 
         let mut argv: Vec<String> = Vec::with_capacity(tokens.len());
         for token in &tokens {
@@ -213,7 +213,7 @@ impl EditorMetadata {
                         parts.last_mut().unwrap().push_str("--line");
                         parts.push(line_column_number.line_num.to_string());
                         if let Some(column_num) = line_column_number.column_num {
-                            parts.push(format!("--column"));
+                            parts.push("--column".to_string());
                             parts.push(column_num.to_string());
                         }
                     }
@@ -240,7 +240,8 @@ impl EditorMetadata {
                 if let Some(file_path) = file_path.to_str() {
                     let mut arg = file_path.to_string();
                     if let Some(line_column_number) = line_column_number {
-                        arg += &format!(":{}", line_column_number.line_num);
+                        let line_num = line_column_number.line_num;
+                        arg += &format!(":{line_num}");
                         if let Some(column_num) = line_column_number.column_num {
                             arg += &format!(":{column_num}");
                         }
