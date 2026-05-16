@@ -8,11 +8,9 @@ pub use overrides::{get_overrides, set_overrides};
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug, Sequence)]
 pub enum FeatureFlag {
     Changelog,
-    CocoaSentry,
     CrashReporting,
     DebugMode,
     Autoupdate,
-    LogExpensiveFramesInSentry,
     WithSandboxTelemetry,
     RecordAppActiveEvents,
 
@@ -206,14 +204,6 @@ pub enum FeatureFlag {
 
     /// Enables support for Warp Packs.
     WarpPacks,
-
-    /// Enables the revised AI analytics policy banner.
-    ///
-    /// This does not gate actual collection of data under the new policy.
-    GlobalAIAnalyticsBanner,
-
-    /// Enables actual collection of AI analytics data per the revised AI analytics policy.
-    GlobalAIAnalyticsCollection,
 
     /// Enables auto-generated AI memories.
     AIMemories,
@@ -423,13 +413,6 @@ pub enum FeatureFlag {
     /// Enables auto-opening code review pane on first agent change and its setting UI.
     AutoOpenCodeReviewPane,
 
-    /// Enables the ambient agents command-line interface.
-    AmbientAgentsCommandLine,
-
-    /// Feature flags for the Build Plan Auto Reload experiment.
-    BuildPlanAutoReloadBannerToggle,
-    BuildPlanAutoReloadPostPurchaseModal,
-
     /// Enables inline code review functionality
     InlineCodeReview,
 
@@ -486,15 +469,6 @@ pub enum FeatureFlag {
 
     /// Enables the /rewind slash command.
     RewindSlashCommand,
-
-    /// Agent Management View.
-    AgentManagementView,
-
-    /// Agent Management Details View - enables new details panel on card click.
-    AgentManagementDetailsView,
-
-    /// Enables scheduled ambient agents.
-    ScheduledAmbientAgents,
 
     AgentView,
 
@@ -568,9 +542,6 @@ pub enum FeatureFlag {
     /// Skills are loaded from `.agents/skills/`, `.warp/skills/`, `.claude/skills/`, and `.codex/skills/`
     /// directories to provide base prompts for agent runs.
     OzPlatformSkills,
-    /// Enables image upload for ambient agents.
-    AmbientAgentsImageUpload,
-
     /// Enables loading and returning bundled skills in the SkillManager.
     BundledSkills,
 
@@ -604,15 +575,6 @@ pub enum FeatureFlag {
     /// Enables scroll position preservation in the code review pane when file
     /// content changes via auto-reload.
     CodeReviewScrollPreservation,
-
-    /// Enables orchestration mode (multi-agent parallel execution).
-    Orchestration,
-
-    /// Enables server-side durable messaging for orchestration (v2).
-    /// When enabled, messages and events are stored in Postgres and the client
-    /// opens a persistent SSE connection to the server to receive events in
-    /// real time.
-    OrchestrationV2,
 
     /// Shows a pending user query indicator during summarization when a follow-up
     /// prompt is queued via `/fork-and-compact` or `/compact-and`.
@@ -710,6 +672,11 @@ pub enum FeatureFlag {
     /// `base_model_context_window_limit` is not sent on outbound requests, so
     /// the server falls back to its default.
     ConfigurableContextWindow,
+
+    /// 启用全局 HTTP 代理设置页面与 `Client::new()` 中的代理覆盖逻辑。
+    /// 关闭时,UI 入口隐藏,`Client::new()` 退回 reqwest 默认(读环境变量)。
+    /// 见 Issue #72。
+    HttpProxySettings,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
@@ -732,7 +699,6 @@ pub const DEBUG_FLAGS: &[FeatureFlag] = &[FeatureFlag::DebugMode, FeatureFlag::R
 /// Features enabled for the development team.  The expectation is that, over
 /// time, these will move on to PREVIEW_FLAGS before being launched.
 pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::LogExpensiveFramesInSentry,
     FeatureFlag::ToggleBootstrapBlock,
     FeatureFlag::RemoveAutosuggestionDuringTabCompletions,
     FeatureFlag::ResizeFix,
@@ -767,7 +733,6 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::AgentHarness,
     FeatureFlag::RememberFastForwardState,
     FeatureFlag::HOANotifications,
-    FeatureFlag::OrchestrationV2,
     FeatureFlag::GeminiNotifications,
     FeatureFlag::LocalDockerSandbox,
     FeatureFlag::VerticalTabsSummaryMode,
@@ -778,7 +743,6 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
 /// Features enabled for feature preview build users (e.g.: Friends of Warp).
 /// All PREVIEW_FLAGS are also automatically added to dogfood builds (WarpDev).
 pub const PREVIEW_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::Orchestration,
     FeatureFlag::BlocklistMarkdownTableRendering,
     FeatureFlag::MarkdownTables,
     FeatureFlag::GitOperationsInCodeReview,

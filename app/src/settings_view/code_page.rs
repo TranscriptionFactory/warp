@@ -121,13 +121,11 @@ impl View for CodeSettingsPageView {
 
 #[derive(Debug, Clone)]
 pub enum CodeSettingsPageEvent {
-    SignupAnonymousUser,
     OpenProjectRules { rule_paths: Vec<PathBuf> },
 }
 
 #[derive(Debug, Clone)]
 pub enum CodeSettingsPageAction {
-    SignupAnonymousUser,
     OpenProjectRules { rule_paths: Vec<PathBuf> },
     ToggleCodeReviewPanel,
     ToggleShowCodeReviewDiffStats,
@@ -141,9 +139,6 @@ impl TypedActionView for CodeSettingsPageView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
-            CodeSettingsPageAction::SignupAnonymousUser => {
-                ctx.emit(CodeSettingsPageEvent::SignupAnonymousUser);
-            }
             CodeSettingsPageAction::OpenProjectRules { rule_paths } => {
                 ctx.emit(CodeSettingsPageEvent::OpenProjectRules {
                     rule_paths: rule_paths.clone(),
@@ -250,7 +245,7 @@ impl SettingsWidget for AutoOpenCodeReviewPaneCodeWidget {
     ) -> Box<dyn Element> {
         let general_settings = GeneralSettings::as_ref(app);
         render_body_item::<CodeSettingsPageAction>(
-            crate::t!("settings-code-auto-open-review-panel").into(),
+            crate::t!("settings-code-auto-open-review-panel"),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
@@ -264,7 +259,7 @@ impl SettingsWidget for AutoOpenCodeReviewPaneCodeWidget {
                     ctx.dispatch_typed_action(CodeSettingsPageAction::ToggleAutoOpenCodeReviewPane);
                 })
                 .finish(),
-            Some(crate::t!("settings-code-auto-open-review-panel-desc").into()),
+            Some(crate::t!("settings-code-auto-open-review-panel-desc")),
         )
     }
 }
@@ -320,7 +315,7 @@ impl SettingsWidget for CodeReviewPanelToggleWidget {
         let tab_settings = TabSettings::as_ref(app);
 
         render_body_item::<CodeSettingsPageAction>(
-            crate::t!("settings-code-show-code-review-button").into(),
+            crate::t!("settings-code-show-code-review-button"),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
@@ -334,7 +329,7 @@ impl SettingsWidget for CodeReviewPanelToggleWidget {
                     ctx.dispatch_typed_action(CodeSettingsPageAction::ToggleCodeReviewPanel);
                 })
                 .finish(),
-            Some(crate::t!("settings-code-show-code-review-button-desc").into()),
+            Some(crate::t!("settings-code-show-code-review-button-desc")),
         )
     }
 }
@@ -360,7 +355,7 @@ impl SettingsWidget for CodeReviewDiffStatsToggleWidget {
         let tab_settings = TabSettings::as_ref(app);
 
         render_body_item::<CodeSettingsPageAction>(
-            crate::t!("settings-code-show-diff-stats").into(),
+            crate::t!("settings-code-show-diff-stats"),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
@@ -376,7 +371,7 @@ impl SettingsWidget for CodeReviewDiffStatsToggleWidget {
                     );
                 })
                 .finish(),
-            Some(crate::t!("settings-code-show-diff-stats-desc").into()),
+            Some(crate::t!("settings-code-show-diff-stats-desc")),
         )
     }
 }
@@ -402,7 +397,7 @@ impl SettingsWidget for ProjectExplorerToggleWidget {
         let code_settings = CodeSettings::as_ref(app);
 
         render_body_item::<CodeSettingsPageAction>(
-            crate::t!("settings-code-project-explorer").into(),
+            crate::t!("settings-code-project-explorer"),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
@@ -416,7 +411,7 @@ impl SettingsWidget for ProjectExplorerToggleWidget {
                     ctx.dispatch_typed_action(CodeSettingsPageAction::ToggleProjectExplorer);
                 })
                 .finish(),
-            Some(crate::t!("settings-code-project-explorer-desc").into()),
+            Some(crate::t!("settings-code-project-explorer-desc")),
         )
     }
 }
@@ -442,7 +437,7 @@ impl SettingsWidget for GlobalSearchToggleWidget {
         let code_settings = CodeSettings::as_ref(app);
 
         render_body_item::<CodeSettingsPageAction>(
-            crate::t!("settings-code-global-search").into(),
+            crate::t!("settings-code-global-search"),
             None,
             LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
@@ -456,7 +451,7 @@ impl SettingsWidget for GlobalSearchToggleWidget {
                     ctx.dispatch_typed_action(CodeSettingsPageAction::ToggleGlobalSearch);
                 })
                 .finish(),
-            Some(crate::t!("settings-code-global-search-desc").into()),
+            Some(crate::t!("settings-code-global-search-desc")),
         )
     }
 }

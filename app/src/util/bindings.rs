@@ -35,7 +35,6 @@ pub enum CustomAction {
     ShowAboutWarp,
     ShowSettings,
     ConfigureKeybindings,
-    ShowAccount,
     ShowAppearance,
     ReferAFriend,
     ViewChangelog,
@@ -112,12 +111,7 @@ pub enum CustomAction {
     NewPersonalWorkflow,
     NewPersonalNotebook,
     NewPersonalEnvVars,
-    NewTeamWorkflow,
-    NewTeamNotebook,
-    NewTeamEnvVars,
     SearchDrive,
-    OpenTeamSettings,
-    ShareCurrentSession,
     #[cfg(windows)]
     WindowsPaste,
     #[cfg(windows)]
@@ -130,7 +124,6 @@ pub enum CustomAction {
     OpenMCPServerCollection,
     ToggleProjectExplorer,
     NewPersonalAIPrompt,
-    NewTeamAIPrompt,
     OpenRepository,
     NewTerminalTab,
     NewAgentTab,
@@ -454,7 +447,6 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::CloseOtherTabs
         | CustomAction::CloseTabsRight
         | CustomAction::ReferAFriend
-        | CustomAction::ShowAccount
         | CustomAction::ShowAppearance
         | CustomAction::SaveCurrentConfig
         | CustomAction::TriggerWelcomeBlock
@@ -464,16 +456,10 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::NewPersonalWorkflow
         | CustomAction::NewPersonalNotebook
         | CustomAction::NewPersonalEnvVars
-        | CustomAction::NewTeamWorkflow
-        | CustomAction::NewTeamNotebook
-        | CustomAction::NewTeamEnvVars
         | CustomAction::SearchDrive
-        | CustomAction::OpenTeamSettings
-        | CustomAction::ShareCurrentSession
         | CustomAction::OpenAIFactCollection
         | CustomAction::OpenMCPServerCollection
         | CustomAction::NewPersonalAIPrompt
-        | CustomAction::NewTeamAIPrompt
         | CustomAction::NewAgentTab => None,
     }
 }

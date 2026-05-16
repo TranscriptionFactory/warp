@@ -21,10 +21,10 @@ pub struct EmbeddedWorkflowsDataSource {
 
 impl EmbeddedWorkflowsDataSource {
     pub fn new(notebook_space: Space, app: &mut AppContext) -> Self {
-        let cloud_model = ObjectStoreModel::as_ref(app);
+        let object_store_model = ObjectStoreModel::as_ref(app);
         Self {
             embedding_space: notebook_space,
-            workflows: cloud_model
+            workflows: object_store_model
                 .get_all_active_workflows()
                 .filter(|workflow| workflow.id.into_server().is_some()) // Filter out local workflows.
                 .cloned()
@@ -56,7 +56,7 @@ impl SyncDataSource for EmbeddedWorkflowsDataSource {
                     let is_accessible =
                         is_embed_accessible(self.embedding_space, workflow.permissions.owner);
                     WorkflowSearchItem {
-                        workflow: workflow,
+                        workflow,
                         fuzzy_matched_workflow: match_result,
                         is_accessible,
                     }

@@ -222,7 +222,7 @@ impl TerminalView {
     pub fn on_session_share_started(
         &mut self,
         sharer_id: ParticipantId,
-        firebase_uid: UserUid,
+        user_uid: UserUid,
         scrollback_type: SharedSessionScrollbackType,
         session_id: SessionId,
         source_type: SessionSourceType,
@@ -235,7 +235,7 @@ impl TerminalView {
         let _self_handle = ctx.handle();
         let adapter = Adapter::new_for_sharer(
             sharer_id,
-            firebase_uid,
+            user_uid,
             session_id,
             started_at,
             source_type,
@@ -286,7 +286,7 @@ impl TerminalView {
     pub fn on_session_share_joined(
         &mut self,
         viewer_id: ParticipantId,
-        firebase_uid: UserUid,
+        user_uid: UserUid,
         input_replica_id: ReplicaId,
         participant_list: Box<ParticipantList>,
         session_id: SessionId,
@@ -300,7 +300,7 @@ impl TerminalView {
         let _self_handle = ctx.handle();
         let adapter = Adapter::new_for_viewer(
             viewer_id.clone(),
-            firebase_uid,
+            user_uid,
             participant_list,
             session_id,
             started_at,
@@ -374,16 +374,6 @@ impl TerminalView {
     /// Clear the presence manager and handle any UI necessary on shared session end.
     /// Applies to both sharer and viewer when the session sharing ends.
     pub fn on_session_share_ended(&mut self, ctx: &mut ViewContext<Self>) {
-        let should_insert_tombstone = {
-            let model = self.model.lock();
-            false
-                && model.is_shared_ambient_agent_session()
-                && !self.has_inserted_conversation_ended_tombstone
-                && !model.is_receiving_agent_conversation_replay()
-        };
-        if should_insert_tombstone {
-            self.insert_conversation_ended_tombstone(ctx);
-        }
         // Ensure inactivity timer is aborted for sharer
         if let Some(sharer) = self.shared_session_sharer_mut() {
             if let Some(old_abort_handle) = sharer.inactivity_timer_abort_handle.take() {
@@ -766,8 +756,6 @@ impl TerminalView {
                 },
                 ctx,
             );
-        } else {
-            return;
         }
     }
 
@@ -1136,8 +1124,7 @@ impl TerminalView {
                     one_viewer
                         && (skip_uid_check
                             || manager.get_present_viewers().all(|v| {
-                                v.info.profile_data.firebase_uid
-                                    == manager.firebase_uid().as_string()
+                                v.info.profile_data.user_uid == manager.user_uid().as_string()
                             }))
                 } else {
                     // We are a viewer — we must be the only viewer and the sharer must be us.
@@ -1146,8 +1133,7 @@ impl TerminalView {
                     only_viewer
                         && (skip_uid_check
                             || manager.get_sharer().is_some_and(|s| {
-                                s.info.profile_data.firebase_uid
-                                    == manager.firebase_uid().as_string()
+                                s.info.profile_data.user_uid == manager.user_uid().as_string()
                             }))
                 }
             })
@@ -1165,7 +1151,7 @@ impl TerminalView {
     /// Forces a fresh viewer-size report to the sharer by clearing the dedup cache and
     /// refreshing size. No-op when not an active viewer or when viewer-driven sizing is
     /// not eligible. Used when a new process (e.g. the harness CLI starting for a non-oz
-    /// Cloud Mode run) needs the sharer to resize its PTY so the new process picks up
+    /// ambient-agent run) needs the sharer to resize its PTY so the new process picks up
     /// correct terminal dimensions at startup.
     pub(in crate::terminal::view) fn force_report_viewer_terminal_size(
         &mut self,

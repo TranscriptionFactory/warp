@@ -249,20 +249,22 @@ impl ResponseStream {
             async move {
                 if let Some(byop) = byop_dispatch {
                     crate::ai::agent_providers::chat_stream::generate_byop_output(
-                        params_clone,
-                        byop.base_url,
-                        byop.api_key,
-                        byop.model_id,
-                        byop.api_type,
-                        byop.reasoning_effort,
-                        byop.extra_headers,
-                        byop.root_task_id,
-                        byop.target_task_id,
-                        byop.needs_create_task,
-                        byop.lrc_command_id,
-                        byop.lrc_should_spawn_subagent,
-                        byop.context_window,
-                        cancellation_rx,
+                        crate::ai::agent_providers::chat_stream::ByopOutputInput {
+                            params: params_clone,
+                            base_url: byop.base_url,
+                            api_key: byop.api_key,
+                            model_id: byop.model_id,
+                            api_type: byop.api_type,
+                            reasoning_effort: byop.reasoning_effort,
+                            extra_headers: byop.extra_headers,
+                            task_id: byop.root_task_id,
+                            target_task_id: byop.target_task_id,
+                            needs_create_task: byop.needs_create_task,
+                            lrc_command_id: byop.lrc_command_id,
+                            lrc_should_spawn_subagent: byop.lrc_should_spawn_subagent,
+                            context_window: byop.context_window,
+                            cancellation_rx,
+                        },
                     )
                     .await
                 } else {
@@ -354,20 +356,22 @@ impl ResponseStream {
             async move {
                 if let Some(byop) = byop_dispatch {
                     crate::ai::agent_providers::chat_stream::generate_byop_output(
-                        params,
-                        byop.base_url,
-                        byop.api_key,
-                        byop.model_id,
-                        byop.api_type,
-                        byop.reasoning_effort,
-                        byop.extra_headers,
-                        byop.root_task_id,
-                        byop.target_task_id,
-                        byop.needs_create_task,
-                        byop.lrc_command_id,
-                        byop.lrc_should_spawn_subagent,
-                        byop.context_window,
-                        cancellation_rx,
+                        crate::ai::agent_providers::chat_stream::ByopOutputInput {
+                            params,
+                            base_url: byop.base_url,
+                            api_key: byop.api_key,
+                            model_id: byop.model_id,
+                            api_type: byop.api_type,
+                            reasoning_effort: byop.reasoning_effort,
+                            extra_headers: byop.extra_headers,
+                            task_id: byop.root_task_id,
+                            target_task_id: byop.target_task_id,
+                            needs_create_task: byop.needs_create_task,
+                            lrc_command_id: byop.lrc_command_id,
+                            lrc_should_spawn_subagent: byop.lrc_should_spawn_subagent,
+                            context_window: byop.context_window,
+                            cancellation_rx,
+                        },
                     )
                     .await
                 } else {
@@ -522,32 +526,16 @@ impl ResponseStream {
                     self.should_resume_conversation_after_stream_finished = true;
                 }
 
-                #[cfg(feature = "crash_reporting")]
-                sentry::with_scope(
-                    |scope| {
-                        scope.set_tag(
-                            "has_received_client_actions",
-                            self.has_received_client_actions,
-                        );
-                        scope.set_tag("error", format!("{e:?}"));
-                        scope.set_tag("is_retryable", e.is_retryable());
-                        scope.set_tag("is_online", is_online);
-                        scope.set_tag("retry_count", self.retry_count);
-                    },
-                    || {
-                        report_error!(anyhow!(e.clone()).context(format!(
-                            "MultiAgent request failed after {} retries",
-                            self.retry_count
-                        )));
-                    },
+                log::warn!(
+                    "MultiAgent request failed after {} retries: has_received_client_actions={}, is_retryable={}, is_online={is_online}",
+                    self.retry_count,
+                    self.has_received_client_actions,
+                    e.is_retryable()
                 );
-                #[cfg(not(feature = "crash_reporting"))]
-                {
-                    report_error!(anyhow!(e.clone()).context(format!(
-                        "MultiAgent request failed after {} retries",
-                        self.retry_count
-                    )));
-                }
+                report_error!(anyhow!(e.clone()).context(format!(
+                    "MultiAgent request failed after {} retries",
+                    self.retry_count
+                )));
 
                 ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(event)));
             }

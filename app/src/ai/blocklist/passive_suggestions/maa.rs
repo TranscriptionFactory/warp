@@ -167,13 +167,13 @@ impl PassiveSuggestionsModel {
         };
 
         log::debug!(
-            "[passive-suggestions] skipped MAA request because cloud multi-agent endpoint is disabled in OpenWarp"
+            "[passive-suggestions] skipped MAA request because the multi-agent endpoint is disabled in OpenWarp"
         );
         let (cancellation_tx, cancellation_rx) = futures::channel::oneshot::channel();
 
         let stream_handle = ctx.spawn(
             async move {
-                let _ = cancellation_rx;
+                std::mem::drop(cancellation_rx);
                 None
             },
             move |me, result, ctx| {
@@ -401,7 +401,7 @@ impl PassiveSuggestionsModel {
             return;
         }
 
-        // Suppress passive suggestions in cloud mode sessions.
+        // Suppress passive suggestions in ambient-agent sessions.
         if self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent() {
             return;
         }
@@ -450,7 +450,7 @@ impl PassiveSuggestionsModel {
         ctx: &mut ModelContext<Self>,
     ) {
         self.abort_pending_requests(ctx);
-        // Suppress passive suggestions in cloud mode sessions.
+        // Suppress passive suggestions in ambient-agent sessions.
         if self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent() {
             return;
         }

@@ -12,7 +12,6 @@ use crate::ai::execution_profiles::{AIExecutionProfile, ActionPermission, WriteT
 use crate::ai::llms::{LLMContextWindow, LLMId, LLMPreferences, LLMPreferencesEvent};
 use crate::ai::mcp::TemplatableMCPServerManager;
 use crate::ai::paths::host_native_absolute_path;
-use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::persistence::{ObjectStoreEvent, ObjectStoreModel};
 use crate::cloud_object::GenericStringObjectFormat::Json;
 use crate::cloud_object::JsonObjectType;
@@ -26,10 +25,10 @@ use crate::settings::{
     AgentModeCommandExecutionPredicate, AgentModeQuerySuggestionsEnabled, AwsBedrockAutoLogin,
     AwsBedrockCredentialsEnabled, FileBasedMcpEnabled, GitOperationsAutogenEnabled,
     IncludeAgentCommandsInHistory, IntelligentAutosuggestionsEnabled, MemoryEnabled,
-    NLDInTerminalEnabled, NaturalLanguageAutosuggestionsEnabled, OrchestrationEnabled,
-    RuleSuggestionsEnabled, ShouldRenderCLIAgentToolbar,
-    ShouldRenderUseAgentToolbarForUserCommands, ShowAgentTips, ShowConversationHistory,
-    ShowHintText, ThinkingDisplayMode, VoiceInputEnabled,
+    NLDInTerminalEnabled, NaturalLanguageAutosuggestionsEnabled, RuleSuggestionsEnabled,
+    ShouldRenderCLIAgentToolbar, ShouldRenderUseAgentToolbarForUserCommands, ShowAgentTips,
+    ShowAgentZeroStateHints, ShowConversationHistory, ShowHintText, ThinkingDisplayMode,
+    VoiceInputEnabled,
 };
 use crate::terminal::session_settings::{SessionSettings, SessionSettingsChangedEvent};
 use crate::terminal::CLIAgent;
@@ -60,7 +59,6 @@ use warpui::{
         Container, Flex, FormattedTextElement, HighlightedHyperlink, HyperlinkUrl, ParentElement,
     },
     ui_components::{
-        button::ButtonVariant,
         components::{Coords, UiComponent, UiComponentStyles},
         switch::SwitchStateHandle,
     },
@@ -154,17 +152,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     context: &ContextPredicate,
     builder: fn(SettingsAction) -> T,
 ) {
-    ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
-        vec![ToggleSettingActionPair::new(
-            &crate::t!("toggle-suffix-ai"),
-            builder(SettingsAction::AI(AISettingsPageAction::ToggleGlobalAI)),
-            context,
-            flags::IS_ANY_AI_ENABLED,
-        )
-        .with_group(bindings::BindingGroup::WarpAi)],
-        app,
-    );
-
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
         vec![ToggleSettingActionPair::new(
             &crate::t!("toggle-suffix-active-ai"),
@@ -734,8 +721,8 @@ impl AISettingsPageView {
             },
         );
 
-        let cloud_model = ObjectStoreModel::handle(ctx);
-        ctx.subscribe_to_model(&cloud_model, |me, _, event, ctx| {
+        let object_store_model = ObjectStoreModel::handle(ctx);
+        ctx.subscribe_to_model(&object_store_model, |me, _, event, ctx| {
             let added_or_deleted_mcp_servers = matches!(
                 event,
                 ObjectStoreEvent::ObjectCreated { type_and_id } | ObjectStoreEvent::ObjectDeleted { type_and_id, .. }
@@ -1431,7 +1418,7 @@ impl AISettingsPageView {
         match subpage {
             None => {
                 // Full page: all widgets (legacy behavior)
-                widgets.push(Box::new(GlobalAIWidget::default()));
+                widgets.push(Box::new(WarpAgentHeaderWidget));
                 if should_show_usage_widget {
                     widgets.push(Box::new(UsageWidget::default()));
                 }
@@ -1471,13 +1458,10 @@ impl AISettingsPageView {
                 widgets.push(Box::new(AwsBedrockWidget::new(ctx)));
                 widgets.push(Box::new(AgentProvidersWidget::new(ctx)));
                 widgets.push(Box::new(OtherAIWidget::default()));
-                if FeatureFlag::Orchestration.is_enabled() {
-                    widgets.push(Box::new(OrchestrationWidget::default()));
-                }
             }
             Some(AISubpage::WarpAgent) => {
-                // Oz page: global toggle + Active AI + Input + Other
-                widgets.push(Box::new(GlobalAIWidget::default()));
+                // Oz page: header + Active AI + Input + Other
+                widgets.push(Box::new(WarpAgentHeaderWidget));
                 if ai_settings
                     .intelligent_autosuggestions_enabled_internal
                     .is_supported_on_current_platform()
@@ -1505,9 +1489,6 @@ impl AISettingsPageView {
                 }
                 widgets.push(Box::new(AwsBedrockWidget::new(ctx)));
                 widgets.push(Box::new(OtherAIWidget::default()));
-                if FeatureFlag::Orchestration.is_enabled() {
-                    widgets.push(Box::new(OrchestrationWidget::default()));
-                }
             }
             Some(AISubpage::Providers) => {
                 widgets.push(Box::new(AgentProvidersWidget::new(ctx)));
@@ -2134,6 +2115,41 @@ impl AISettingsPageView {
             })
             .collect()
     }
+
+    fn save_agent_provider_edits(
+        provider_id: &str,
+        name: &str,
+        base_url: &str,
+        api_key: &str,
+        headers: &[(String, String)],
+        models: &[(usize, String, String, u32, u32)],
+        ctx: &mut ViewContext<Self>,
+    ) {
+        AISettings::handle(ctx).update(ctx, |settings, ctx| {
+            let mut providers = settings.agent_providers.value().clone();
+            if let Some(p) = providers.iter_mut().find(|p| p.id == provider_id) {
+                p.name = name.to_owned();
+                p.base_url = base_url.to_owned();
+                p.extra_headers = headers.to_vec();
+                // 按 model_index 更新，跳过越界索引（rebuild 中间表单与 settings 可能短暂不一致）。
+                for (idx, m_name, m_id, ctx_window, max_out) in models {
+                    if let Some(m) = p.models.get_mut(*idx) {
+                        m.name = m_name.clone();
+                        m.id = m_id.clone();
+                        m.context_window = *ctx_window;
+                        m.max_output_tokens = *max_out;
+                    }
+                }
+            }
+            let _ = settings.agent_providers.set_value(providers, ctx);
+        });
+        crate::ai::agent_providers::AgentProviderSecrets::handle(ctx).update(
+            ctx,
+            |secrets, ctx| {
+                secrets.set(provider_id, api_key.to_owned(), ctx);
+            },
+        );
+    }
 }
 
 impl View for AISettingsPageView {
@@ -2151,7 +2167,6 @@ pub enum AISettingsPageEvent {
     OpenAIFactCollection,
     OpenMCPServerCollection,
     OpenExecutionProfileEditor(ClientProfileId),
-    SignupAnonymousUser,
 }
 
 impl Entity for AISettingsPageView {
@@ -2162,7 +2177,6 @@ impl Entity for AISettingsPageView {
 pub enum AISettingsPageAction {
     OpenUrl(String),
     SetVoiceInputToggleKey(VoiceInputToggleKey),
-    ToggleGlobalAI,
     ToggleActiveAI,
     ToggleIntelligentAutosuggestions,
     TogglePromptSuggestions,
@@ -2178,6 +2192,8 @@ pub enum AISettingsPageAction {
     HyperlinkClick(HyperlinkUrl),
     ToggleShowInputHintText,
     ToggleShowAgentTips,
+    /// 切换「显示 Agent 快捷键提示」设置（零状态三件套 + message bar 底部 4 项 hint）。
+    ToggleShowAgentZeroStateHints,
     SetThinkingDisplayMode(ThinkingDisplayMode),
     RemoveCLIAgentToolbarEnabledCommand(String),
     RemoveFromCommandExecutionAllowlist(AgentModeCommandExecutionPredicate),
@@ -2213,7 +2229,6 @@ pub enum AISettingsPageAction {
     AddToMCPDenylist(uuid::Uuid),
     RemoveFromMCPDenylist(uuid::Uuid),
     CreateProfile,
-    SignupAnonymousUser,
     ToggleAwsBedrockAutoLogin,
     ToggleAwsBedrockCredentialsEnabled,
     RefreshAwsBedrockCredentials,
@@ -2221,7 +2236,6 @@ pub enum AISettingsPageAction {
     ToggleIncludeAgentCommandsInHistory,
     #[cfg(feature = "local_fs")]
     SetConversationLayout(crate::util::file::external_editor::settings::OpenConversationPreference),
-    ToggleOrchestration,
     ToggleShowConversationHistory,
     ToggleAutoToggleRichInput,
     ToggleAutoOpenRichInputOnCLIAgentStart,
@@ -2265,6 +2279,16 @@ pub enum AISettingsPageAction {
         /// 只携带可编辑部分:`(model_index, name, id, context_window, max_output_tokens)`。
         /// reasoning / tool_call / image / pdf / audio 由独立的 chip 动作维护,不走这里。
         models: Vec<(usize, String, String, u32, u32)>,
+    },
+    SaveAgentProviderEditsThen {
+        provider_id: String,
+        name: String,
+        base_url: String,
+        api_key: String,
+        headers: Vec<(String, String)>,
+        /// 只携带可编辑部分:`(model_index, name, id, context_window, max_output_tokens)`。
+        models: Vec<(usize, String, String, u32, u32)>,
+        action: Box<AISettingsPageAction>,
     },
     UpdateAgentProviderModels {
         provider_id: String,
@@ -2381,24 +2405,6 @@ impl TypedActionView for AISettingsPageView {
                         .explicitly_interacted_with_voice
                         .set_value(true, ctx));
                 });
-                ctx.notify();
-            }
-            AISettingsPageAction::ToggleGlobalAI => {
-                match AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    settings.is_any_ai_enabled.toggle_and_save_value(ctx)
-                }) {
-                    Ok(new_value) => {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::ToggleGlobalAI {
-                                is_ai_enabled: new_value,
-                            },
-                            ctx
-                        );
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to set value for Global AI setting: {e:?}");
-                    }
-                }
                 ctx.notify();
             }
             AISettingsPageAction::ToggleActiveAI => {
@@ -2688,6 +2694,19 @@ impl TypedActionView for AISettingsPageView {
                 });
                 ctx.notify();
             }
+            AISettingsPageAction::ToggleShowAgentZeroStateHints => {
+                InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
+                    if let Err(e) = input_settings
+                        .show_agent_zero_state_hints
+                        .toggle_and_save_value(ctx)
+                    {
+                        log::warn!(
+                            "Failed to set value for Show Agent Zero-State Hints setting: {e:?}"
+                        );
+                    }
+                });
+                ctx.notify();
+            }
             AISettingsPageAction::SetThinkingDisplayMode(mode) => {
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.thinking_display_mode.set_value(*mode, ctx));
@@ -2954,9 +2973,6 @@ impl TypedActionView for AISettingsPageView {
                 }
                 ctx.notify();
             }
-            AISettingsPageAction::SignupAnonymousUser => {
-                ctx.emit(AISettingsPageEvent::SignupAnonymousUser);
-            }
             AISettingsPageAction::ToggleAwsBedrockAutoLogin => {
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.aws_bedrock_auto_login.toggle_and_save_value(ctx));
@@ -3009,12 +3025,6 @@ impl TypedActionView for AISettingsPageView {
                     },
                     ctx
                 );
-                ctx.notify();
-            }
-            AISettingsPageAction::ToggleOrchestration => {
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    report_if_error!(settings.orchestration_enabled.toggle_and_save_value(ctx));
-                });
                 ctx.notify();
             }
             AISettingsPageAction::ToggleShowConversationHistory => {
@@ -3109,33 +3119,36 @@ impl TypedActionView for AISettingsPageView {
                 headers,
                 models,
             } => {
-                // 1) settings.toml 一次性写入所有明文字段
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    let mut providers = settings.agent_providers.value().clone();
-                    if let Some(p) = providers.iter_mut().find(|p| p.id == *provider_id) {
-                        p.name = name.clone();
-                        p.base_url = base_url.clone();
-                        p.extra_headers = headers.clone();
-                        // 按 model_index 更新，跳过越界索引（rebuild 中间表单与 settings 可能短暂不一致）。
-                        for (idx, m_name, m_id, ctx_window, max_out) in models {
-                            if let Some(m) = p.models.get_mut(*idx) {
-                                m.name = m_name.clone();
-                                m.id = m_id.clone();
-                                m.context_window = *ctx_window;
-                                m.max_output_tokens = *max_out;
-                            }
-                        }
-                    }
-                    let _ = settings.agent_providers.set_value(providers, ctx);
-                });
-                // 2) API key 写入 secure storage
-                crate::ai::agent_providers::AgentProviderSecrets::handle(ctx).update(
+                Self::save_agent_provider_edits(
+                    provider_id,
+                    name,
+                    base_url,
+                    api_key,
+                    headers,
+                    models,
                     ctx,
-                    |secrets, ctx| {
-                        secrets.set(provider_id, api_key.clone(), ctx);
-                    },
                 );
                 ctx.notify();
+            }
+            AISettingsPageAction::SaveAgentProviderEditsThen {
+                provider_id,
+                name,
+                base_url,
+                api_key,
+                headers,
+                models,
+                action,
+            } => {
+                Self::save_agent_provider_edits(
+                    provider_id,
+                    name,
+                    base_url,
+                    api_key,
+                    headers,
+                    models,
+                    ctx,
+                );
+                self.handle_action(action.as_ref(), ctx);
             }
             AISettingsPageAction::UpdateAgentProviderModels {
                 provider_id,
@@ -3777,17 +3790,13 @@ fn render_ai_list(
         .finish()
 }
 
-#[derive(Default)]
-struct GlobalAIWidget {
-    switch_state: SwitchStateHandle,
-    sign_up_button: MouseStateHandle,
-}
+struct WarpAgentHeaderWidget;
 
-impl SettingsWidget for GlobalAIWidget {
+impl SettingsWidget for WarpAgentHeaderWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz warp agent global ai a.i. active next command prompt code diffs suggestion suggested suggestions \
+        "oz warp agent ai a.i. active next command prompt code diffs suggestion suggested suggestions \
                 agent mode natural language detection input hint api keys bring your own byo google anthropic openai"
     }
 
@@ -3795,17 +3804,9 @@ impl SettingsWidget for GlobalAIWidget {
         &self,
         _view: &Self::View,
         appearance: &Appearance,
-        app: &AppContext,
+        _app: &AppContext,
     ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        let is_ai_disabled_due_to_remote_session_org_policy =
-            AISettings::as_ref(app).is_ai_disabled_due_to_remote_session_org_policy(app);
-
-        let is_anonymous = AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out();
-
-        let mut row = Flex::row()
+        let row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
             .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
@@ -3819,97 +3820,6 @@ impl SettingsWidget for GlobalAIWidget {
                 .with_color(appearance.theme().active_ui_text_color().into())
                 .finish(),
             );
-
-        if is_ai_disabled_due_to_remote_session_org_policy {
-            row.add_child(
-                ConstrainedBox::new(
-                    Container::new(
-                        Text::new(
-                            crate::t!("settings-ai-org-disallows-remote-session"),
-                            appearance.ui_font_family(),
-                            12.,
-                        )
-                        .with_color(appearance.theme().ui_warning_color())
-                        .finish(),
-                    )
-                    .with_padding_left(8.)
-                    .with_padding_right(8.)
-                    .finish(),
-                )
-                .with_max_width(400.)
-                .finish(),
-            );
-        }
-
-        // Show sign-up button for anonymous users, toggle for logged-in users
-        if is_anonymous {
-            row.add_child(
-                Flex::row()
-                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                    .with_child(
-                        Container::new(
-                            Text::new_inline(
-                                crate::t!("settings-ai-anonymous-create-account"),
-                                appearance.ui_font_family(),
-                                14.,
-                            )
-                            .with_color(
-                                appearance
-                                    .theme()
-                                    .sub_text_color(appearance.theme().surface_2())
-                                    .into_solid(),
-                            )
-                            .finish(),
-                        )
-                        .with_margin_right(16.)
-                        .finish(),
-                    )
-                    .with_child(
-                        Container::new(
-                            ui_builder
-                                .button(ButtonVariant::Accent, self.sign_up_button.clone())
-                                .with_style(UiComponentStyles {
-                                    font_size: Some(14.),
-                                    font_weight: Some(Weight::Semibold),
-                                    border_radius: Some(CornerRadius::with_all(Radius::Pixels(4.))),
-                                    padding: Some(Coords {
-                                        top: 8.,
-                                        bottom: 8.,
-                                        left: 24.,
-                                        right: 24.,
-                                    }),
-                                    ..Default::default()
-                                })
-                                .with_text_label(crate::t!("settings-ai-sign-up"))
-                                .build()
-                                .on_click(move |ctx, _, _| {
-                                    ctx.dispatch_typed_action(
-                                        AISettingsPageAction::SignupAnonymousUser,
-                                    );
-                                })
-                                .finish(),
-                        )
-                        .with_padding_right(TOGGLE_BUTTON_RIGHT_PADDING)
-                        .finish(),
-                    )
-                    .finish(),
-            );
-        } else {
-            row.add_child(
-                Container::new(
-                    ui_builder
-                        .switch(self.switch_state.clone())
-                        .check(AISettings::as_ref(app).is_any_ai_enabled(app))
-                        .build()
-                        .on_click(move |ctx, _, _| {
-                            ctx.dispatch_typed_action(AISettingsPageAction::ToggleGlobalAI);
-                        })
-                        .finish(),
-                )
-                .with_padding_right(TOGGLE_BUTTON_RIGHT_PADDING)
-                .finish(),
-            );
-        }
 
         Container::new(row.finish())
             .with_padding_bottom(15.)
@@ -5090,7 +5000,7 @@ impl AgentsWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let header = Container::new(render_body_item_label_with_icon::<AISettingsPageAction>(
-            crate::t!("settings-ai-call-mcp-servers").into(),
+            crate::t!("settings-ai-call-mcp-servers"),
             Icon::Dataflow,
             Some(styles::header_font_color(
                 ai_settings.is_any_ai_enabled(app),
@@ -5292,6 +5202,8 @@ struct AIInputWidget {
     nld_in_terminal_toggle: SwitchStateHandle,
     show_input_hint_toggle: SwitchStateHandle,
     show_agent_tips_toggle: SwitchStateHandle,
+    // 「显示 Agent 快捷键提示」开关对应的 switch 状态句柄。
+    show_agent_zero_state_hints_toggle: SwitchStateHandle,
     include_agent_commands_in_history_toggle: SwitchStateHandle,
 }
 
@@ -5359,6 +5271,19 @@ impl SettingsWidget for AIInputWidget {
             widget_children.push(agent_tips_toggle);
         }
 
+        // 「显示 Agent 快捷键提示」：控制零状态三件套与 message bar 底部 4 项 hint。
+        widget_children.push(
+            render_ai_setting_toggle::<ShowAgentZeroStateHints>(
+                crate::t!("settings-ai-show-agent-zero-state-hints"),
+                AISettingsPageAction::ToggleShowAgentZeroStateHints,
+                *InputSettings::as_ref(app).show_agent_zero_state_hints,
+                is_any_ai_enabled,
+                self.show_agent_zero_state_hints_toggle.clone(),
+                &view.local_only_icon_tooltip_states,
+                app,
+            ),
+        );
+
         widget_children.push(render_ai_setting_toggle::<IncludeAgentCommandsInHistory>(
             crate::t!("settings-ai-include-agent-commands-in-history"),
             AISettingsPageAction::ToggleIncludeAgentCommandsInHistory,
@@ -5397,7 +5322,6 @@ impl AIInputWidget {
                     left: 6.,
                     right: 6.,
                 }),
-                background: Some(appearance.theme().surface_2().into()),
                 ..Default::default()
             })
             .build()
@@ -6164,7 +6088,7 @@ impl SettingsWidget for CLIAgentWidget {
             if FeatureFlag::CLIAgentRichInput.is_enabled() {
                 // Setting 1: Auto show/hide rich input based on agent status
                 let auto_show_toggle_label = render_body_item_label::<AISettingsPageAction>(
-                    crate::t!("settings-ai-auto-show-rich-input").into(),
+                    crate::t!("settings-ai-auto-show-rich-input"),
                     Some(styles::header_font_color(true, app)),
                     Some(AdditionalInfo {
                         mouse_state: self.auto_toggle_rich_input_info_tooltip.clone(),
@@ -6342,58 +6266,6 @@ impl SettingsWidget for CLIAgentWidget {
                 ));
             }
         }
-
-        column.finish()
-    }
-}
-
-#[derive(Default)]
-struct OrchestrationWidget {
-    orchestration_toggle: SwitchStateHandle,
-}
-
-impl SettingsWidget for OrchestrationWidget {
-    type View = AISettingsPageView;
-
-    fn search_terms(&self) -> &str {
-        "oz orchestration multi-agent"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
-        let ai_settings = AISettings::as_ref(app);
-
-        let mut column = Flex::column()
-            .with_child(render_separator(appearance))
-            .with_child(
-                build_sub_header(
-                    appearance,
-                    crate::t!("settings-ai-experimental-section"),
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
-                )
-                .with_padding_bottom(HEADER_PADDING)
-                .finish(),
-            );
-
-        column.add_child(render_ai_setting_toggle::<OrchestrationEnabled>(
-            crate::t!("settings-ai-orchestration-label"),
-            AISettingsPageAction::ToggleOrchestration,
-            *ai_settings.orchestration_enabled,
-            is_any_ai_enabled,
-            self.orchestration_toggle.clone(),
-            &view.local_only_icon_tooltip_states,
-            app,
-        ));
-        column.add_child(render_ai_setting_description(
-            crate::t!("settings-ai-orchestration-description"),
-            is_any_ai_enabled,
-            app,
-        ));
 
         column.finish()
     }

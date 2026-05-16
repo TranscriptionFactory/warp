@@ -95,7 +95,7 @@ pub struct AmbientAgentViewModel {
     /// Defaults to `Harness::Oz`. Used to populate `AgentConfigSnapshot.harness` on spawn.
     harness: Harness,
     /// Whether the optimistic InitialUserQuery block has been inserted for the current run.
-    has_inserted_cloud_mode_user_query_block: bool,
+    has_inserted_ambient_agent_user_query_block: bool,
     /// Whether the harness CLI (e.g. `claude`, `gemini`) has started running for a non-oz run.
     /// Used to transition the ambient-agent setup UI out of the pre-first-exchange phase when
     /// there is no oz `AppendedExchange` to key off of.
@@ -120,7 +120,7 @@ impl AmbientAgentViewModel {
             task_id: None,
             conversation_id: None,
             harness: Harness::default(),
-            has_inserted_cloud_mode_user_query_block: false,
+            has_inserted_ambient_agent_user_query_block: false,
             harness_command_started: false,
         }
     }
@@ -188,12 +188,12 @@ impl AmbientAgentViewModel {
         self.task_id
     }
 
-    pub fn has_inserted_cloud_mode_user_query_block(&self) -> bool {
-        self.has_inserted_cloud_mode_user_query_block
+    pub fn has_inserted_ambient_agent_user_query_block(&self) -> bool {
+        self.has_inserted_ambient_agent_user_query_block
     }
 
-    pub fn set_has_inserted_cloud_mode_user_query_block(&mut self, has_inserted: bool) {
-        self.has_inserted_cloud_mode_user_query_block = has_inserted;
+    pub fn set_has_inserted_ambient_agent_user_query_block(&mut self, has_inserted: bool) {
+        self.has_inserted_ambient_agent_user_query_block = has_inserted;
     }
 
     /// Returns whether this ambient agent view has a parent terminal to return to.
@@ -313,7 +313,7 @@ impl AmbientAgentViewModel {
         self.status = Status::NotAmbientAgent;
         self.task_id = None;
         self.conversation_id = None;
-        self.has_inserted_cloud_mode_user_query_block = false;
+        self.has_inserted_ambient_agent_user_query_block = false;
         self.harness_command_started = false;
         self.stop_progress_timer();
         ctx.notify();
@@ -419,9 +419,8 @@ impl AmbientAgentViewModel {
                                 return;
                             }
 
-                            // Wire the run_id to the associated conversation for
-                            // orchestration v2. This unblocks the parent agent's
-                            // pending start_agent tool call.
+                            // Wire the run_id to the associated conversation so parent/child
+                            // links can resolve after restore.
                             if let Some(conversation_id) = me.conversation_id {
                                 let terminal_view_id = me.terminal_view_id;
                                 let spawned_task_id = Some(task_id);

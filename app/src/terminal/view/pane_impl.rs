@@ -4,7 +4,6 @@ use super::shared_session::adapter::Kind as SharedSessionKind;
 use super::{Event, PaneConfiguration, TerminalAction, TerminalViewState, Viewer};
 use crate::ai::agent::conversation::{AIConversation, ConversationStatus};
 use crate::ai::blocklist::agent_view::agent_view_bg_fill;
-use crate::ai::blocklist::agent_view::orchestration_conversation_links::parent_conversation_navigation_card;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::conversation_status_ui::{render_status_element, STATUS_ELEMENT_PADDING};
 use crate::appearance::Appearance;
@@ -140,21 +139,10 @@ impl TerminalView {
             return;
         }
 
-        // In cloud mode, we want to preserve the shared session sharing dialog even after the shared session has ended.
-        // We need this to be able to view and change permissions on a cloud mode shared session that failed before
-        // any conversation started, to view cloud mode sessions that failed during setup.
-        let is_ambient_agent = self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent();
-        if !is_ambient_agent {
-            self.pane_configuration.update(ctx, |pane_config, ctx| {
-                pane_config.notify_header_content_changed(ctx);
-                pane_config.refresh_pane_header_overflow_menu_items(ctx);
-            });
-        } else {
-            self.pane_configuration.update(ctx, |pane_config, ctx| {
-                pane_config.notify_header_content_changed(ctx);
-                pane_config.refresh_pane_header_overflow_menu_items(ctx);
-            });
-        }
+        self.pane_configuration.update(ctx, |pane_config, ctx| {
+            pane_config.notify_header_content_changed(ctx);
+            pane_config.refresh_pane_header_overflow_menu_items(ctx);
+        });
     }
 
     pub(super) fn is_pane_focused(&self, app: &AppContext) -> bool {
@@ -194,19 +182,12 @@ impl TerminalView {
         let is_fullscreen_agent_view = self.agent_view_controller.as_ref(app).is_fullscreen();
 
         if in_nav_stack || (is_fullscreen_agent_view && has_parent_terminal) {
-            if FeatureFlag::Orchestration.is_enabled() {
-                Flex::row()
-                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                    .with_child(ChildView::new(&self.agent_view_back_button).finish())
-                    .finish()
-            } else {
-                Flex::column()
-                    .with_main_axis_alignment(MainAxisAlignment::Center)
-                    .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                    .with_main_axis_size(MainAxisSize::Max)
-                    .with_child(ChildView::new(&self.agent_view_back_button).finish())
-                    .finish()
-            }
+            Flex::column()
+                .with_main_axis_alignment(MainAxisAlignment::Center)
+                .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_child(ChildView::new(&self.agent_view_back_button).finish())
+                .finish()
         } else {
             Flex::row().finish()
         }
@@ -336,30 +317,7 @@ impl TerminalView {
             None
         };
 
-        let mut left_of_overflow = self.render_shared_session_header_content(app);
-
-        let mut icon_button_count: u32 = 0;
-
-        if false {
-            let ambient_agent_model = self.ambient_agent_view_model.as_ref(app);
-            let button_element = if ambient_agent_model.is_ambient_agent()
-                && ambient_agent_model.is_waiting_for_session()
-            {
-                Some(self.render_ambient_agent_cancel_button(app))
-            } else {
-                None
-            };
-
-            if let Some(button) = button_element {
-                icon_button_count += 1;
-                if let Some(existing) = left_of_overflow {
-                    left_of_overflow =
-                        Some(Flex::row().with_child(existing).with_child(button).finish());
-                } else {
-                    left_of_overflow = Some(button);
-                }
-            }
-        }
+        let left_of_overflow = self.render_shared_session_header_content(app);
 
         let mut right_row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
@@ -385,61 +343,12 @@ impl TerminalView {
                 button_size,
             ),
         );
-        icon_button_count += show_close_button as u32
+        let icon_button_count = show_close_button as u32
             + header_ctx.has_overflow_items as u32
             + has_sharing_element as u32;
 
         let min_width = header_edge_min_width(icon_button_count);
         (right_row.finish(), min_width)
-    }
-
-    fn render_parent_conversation_header_card(&self, app: &AppContext) -> Option<Box<dyn Element>> {
-        if !(FeatureFlag::Orchestration.is_enabled()
-            && FeatureFlag::AgentView.is_enabled()
-            && self.agent_view_controller.as_ref(app).is_fullscreen())
-        {
-            return None;
-        }
-
-        let active_conversation_id = self
-            .agent_view_controller
-            .as_ref(app)
-            .agent_view_state()
-            .active_conversation_id()?;
-        let active_conversation =
-            BlocklistAIHistoryModel::as_ref(app).conversation(&active_conversation_id)?;
-        parent_conversation_navigation_card(
-            active_conversation,
-            self.mouse_states.parent_conversation_header_link.clone(),
-            app,
-        )
-    }
-
-    fn maybe_add_parent_navigation_card(
-        &self,
-        header: Box<dyn Element>,
-        parent_conversation_header_card: Option<Box<dyn Element>>,
-    ) -> Box<dyn Element> {
-        if !FeatureFlag::Orchestration.is_enabled() {
-            return header;
-        }
-
-        if let Some(parent_card) = parent_conversation_header_card {
-            Flex::column()
-                .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .with_child(
-                    Container::new(parent_card)
-                        .with_padding_left(4.)
-                        .with_padding_right(4.)
-                        .with_padding_top(4.)
-                        .with_padding_bottom(2.)
-                        .finish(),
-                )
-                .with_child(header)
-                .finish()
-        } else {
-            header
-        }
     }
 
     fn render_terminal_pane_header(
@@ -449,7 +358,6 @@ impl TerminalView {
     ) -> Box<dyn Element> {
         let is_fullscreen_agent_view = FeatureFlag::AgentView.is_enabled()
             && self.agent_view_controller.as_ref(app).is_fullscreen();
-        let parent_conversation_header_card = self.render_parent_conversation_header_card(app);
 
         let left = self.maybe_render_header_back_button(app);
         let center = self.render_header_title(is_fullscreen_agent_view, header_ctx, app);
@@ -466,7 +374,6 @@ impl TerminalView {
             header_ctx.header_left_inset,
             header_ctx.draggable_state.is_dragging(),
         );
-        let header = self.maybe_add_parent_navigation_card(header, parent_conversation_header_card);
 
         if is_fullscreen_agent_view {
             Container::new(header)
@@ -525,14 +432,12 @@ impl BackingView for TerminalView {
 
         // Shared-session related items.
         let shared_session_status = model.shared_session_status();
-        if shared_session_status.is_sharer_or_viewer() {
-            if shared_session_status.is_sharer() {
-                items.push(
-                    MenuItemFields::new(crate::t!("menu-pane-stop-sharing-session"))
-                        .with_on_select_action(TerminalAction::StopSharingCurrentSession { source })
-                        .into_item(),
-                );
-            }
+        if shared_session_status.is_sharer_or_viewer() && shared_session_status.is_sharer() {
+            items.push(
+                MenuItemFields::new(crate::t!("menu-pane-stop-sharing-session"))
+                    .with_on_select_action(TerminalAction::StopSharingCurrentSession { source })
+                    .into_item(),
+            );
         }
         // OpenWarp:删除 Pane 头部 "Share session" 入口(云端 shared session)
 
@@ -724,10 +629,14 @@ impl TerminalView {
                 .clone(),
             move |state| {
                 let mut stack = Stack::new().with_child(
-                    ConstrainedBox::new(icons::Icon::OzCloud.to_warpui_icon(icon_color).finish())
-                        .with_height(font_size * 1.5)
-                        .with_width(font_size * 1.5)
-                        .finish(),
+                    ConstrainedBox::new(
+                        icons::Icon::AmbientAgentMode
+                            .to_warpui_icon(icon_color)
+                            .finish(),
+                    )
+                    .with_height(font_size * 1.5)
+                    .with_width(font_size * 1.5)
+                    .finish(),
                 );
                 if state.is_hovered() {
                     let tooltip = ui_builder
@@ -773,7 +682,7 @@ impl TerminalView {
                 }
             };
 
-        // Hide role change button in cloud mode conversations
+        // Hide role change button in ambient-agent conversations
         let hide_role_change_button = self.model.lock().is_shared_ambient_agent_session();
 
         // Render participant avatars and role elements
@@ -788,8 +697,8 @@ impl TerminalView {
         ))
     }
 
-    pub fn is_ambient_agent_session(&self, ctx: &AppContext) -> bool {
-        false && self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent()
+    pub fn is_ambient_agent_session(&self, _ctx: &AppContext) -> bool {
+        false
     }
 
     fn selected_conversation_for_user_facing_chrome<'a>(
@@ -869,9 +778,7 @@ impl TerminalView {
 
     pub fn selected_conversation_display_title(&self, ctx: &AppContext) -> Option<String> {
         self.selected_conversation_for_user_facing_chrome(ctx)
-            .map(|conversation| {
-                self.selected_conversation_display_title_for_chrome(conversation)
-            })
+            .map(|conversation| self.selected_conversation_display_title_for_chrome(conversation))
     }
 
     pub fn selected_conversation_latest_user_prompt_for_tab_name(

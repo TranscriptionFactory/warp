@@ -3345,7 +3345,7 @@ impl FeaturesPageView {
                         *val != DefaultSessionMode::DockerSandbox || docker_sandbox_enabled
                     })
                     // 去中心化分支:不再展示 Oz / Agent 选项。
-                    .filter(|val| *val != DefaultSessionMode::CloudAgent)
+                    .filter(|val| *val != DefaultSessionMode::AmbientAgent)
                     .map(|val| {
                         DropdownItem::new(
                             val.display_name(),
@@ -4216,9 +4216,9 @@ impl SettingsWidget for NativeRedirectWidget {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: None,
                 secondary_text: None,
-                tooltip_override_text: Some(
-                    crate::t!("settings-features-open-links-in-desktop-tooltip").into(),
-                ),
+                tooltip_override_text: Some(crate::t!(
+                    "settings-features-open-links-in-desktop-tooltip"
+                )),
             }),
             LocalOnlyIconState::for_setting(
                 UserNativeRedirectPreference::storage_key(),

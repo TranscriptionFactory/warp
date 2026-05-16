@@ -757,7 +757,7 @@ enum SummaryPaneKind {
     Workflow { is_ai_prompt: bool },
     Settings,
     EnvVarCollection,
-    // OpenWarp Wave 7-3:`EnvironmentManagement` variant 随 Cloud Mode UI 子系统物理删。
+    // OpenWarp Wave 7-3:`EnvironmentManagement` variant 随 ambient-agent UI 子系统物理删。
     AIFact,
     AIDocument,
     ExecutionProfileEditor,
@@ -2021,7 +2021,7 @@ fn render_tab_group_internal(
         };
 
         // Show the action buttons when the group OR the buttons themselves
-        // are hovered, following the pattern from AgentManagementView.
+        // are hovered.
         // This prevents flickering when the mouse moves from the group
         // to the overlay buttons (which may sit outside the group bounds).
         let should_show_action_buttons = !drag_state.is_any_pane_dragging
@@ -2390,7 +2390,7 @@ fn resolve_icon_with_status_variant(
             }
         }
         // Settings and environment management use the foreground color per design spec
-        // OpenWarp Wave 7-3:`TypedPane::EnvironmentManagement` 随 Cloud Mode UI 子系统物理删。
+        // OpenWarp Wave 7-3:`TypedPane::EnvironmentManagement` 随 ambient-agent UI 子系统物理删。
         TypedPane::Settings => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: main_text,
@@ -2550,7 +2550,7 @@ enum TypedPane<'a> {
     Workflow { is_ai_prompt: bool },
     Settings,
     EnvVarCollection,
-    // OpenWarp Wave 7-3:`EnvironmentManagement` variant 随 Cloud Mode UI 子系统物理删。
+    // OpenWarp Wave 7-3:`EnvironmentManagement` variant 随 ambient-agent UI 子系统物理删。
     AIFact,
     AIDocument,
     ExecutionProfileEditor,

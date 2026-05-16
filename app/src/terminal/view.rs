@@ -71,9 +71,7 @@ use super::cli_agent;
 use super::CLIAgent;
 #[cfg(feature = "local_fs")]
 use crate::ai::agent::{CurrentHead, DiffBase};
-use crate::ai::ambient_agents::{
-    conversation_output_status_from_conversation, AmbientAgentTaskId, AmbientConversationStatus,
-};
+use crate::ai::ambient_agents::{conversation_output_status_from_conversation, AmbientAgentTaskId};
 use crate::ai::blocklist::block::cli::{CLISubagentView, CLISubagentViewEvent};
 use crate::ai::blocklist::block::cli_controller::{
     CLISubagentController, CLISubagentEvent, UserTakeOverReason,
@@ -192,7 +190,7 @@ use crate::ai::{
         get_attached_blocks_chip_element_position_id,
         inline_action::code_diff_view::{CodeDiffView, FileDiff},
         summarization_cancel_dialog::SummarizationCancelDialog,
-        telemetry_banner::{should_collect_ai_ugc_telemetry, TelemetryBanner},
+        telemetry_banner::should_collect_ai_ugc_telemetry,
         AIBlock, AIBlockEvent, BlocklistAIActionEvent, BlocklistAIActionModel,
         BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
         BlocklistAIControllerEvent, BlocklistAIHistoryEvent, BlocklistAIHistoryModel,
@@ -307,16 +305,14 @@ use crate::workflows::WorkflowSelectionSource;
 use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace::{CommandSearchOptions, OneTimeModalModel, ToastStack, WorkspaceAction};
 use crate::workspace::{ForkAIConversationParams, ForkFromExchange, ForkedConversationDestination};
-use crate::workspaces::{user_workspaces::UserWorkspaces, workspace::CustomerType};
+use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::AIRequestUsageModel;
 use crate::ActiveSession as WindowActiveSession;
 use crate::{report_if_error, AIAgentActionResultType};
 use crate::{safe_error, safe_warn};
 
 use crate::terminal::shared_session::protocol::{
-    AgentAttachment, ParticipantId, Role,
-    ServerConversationToken as SessionSharingServerConversationToken,
-    WindowSize as SessionSharingWindowSize,
+    ParticipantId, Role, WindowSize as SessionSharingWindowSize,
 };
 use async_channel::{Receiver, Sender};
 use chrono::{DateTime, Local, NaiveDateTime};
@@ -417,9 +413,9 @@ use crate::resource_center::{
 };
 use crate::server::telemetry::{
     self, AgentModeAttachContextMethod, AgentModeEntrypoint, AgentModeRewindEntrypoint,
-    AnonymousUserSignupEntrypoint, InteractionSource, LinkOpenMethod, NotificationAgentVariant,
-    PaletteSource, PromptSuggestionViewType, SecretInteraction, SlowBootstrapInfo,
-    ToggleBlockFilterSource, WorkflowTelemetryMetadata,
+    InteractionSource, LinkOpenMethod, NotificationAgentVariant, PaletteSource,
+    PromptSuggestionViewType, SecretInteraction, SlowBootstrapInfo, ToggleBlockFilterSource,
+    WorkflowTelemetryMetadata,
 };
 use crate::server::telemetry::{
     CommandCorrectionAcceptedType, CommandCorrectionEvent, NotificationsTurnedOnSource,
@@ -540,10 +536,10 @@ use inline_banner::{
     render_inline_notifications_error_banner, render_inline_shared_session_ended_banner,
     render_inline_shared_session_started_banner, render_inline_ssh_wrapper_banner,
     render_open_in_warp_banner, render_shell_process_terminated_banner, render_vim_mode_banner,
-    AliasExpansionBanner, AliasExpansionBannerAction, AnonymousUserAISignUpBannerState,
-    AnonymousUserLoginBannerAction, AwsBedrockLoginBannerAction, AwsBedrockLoginBannerState,
-    AwsCliNotInstalledBannerAction, AwsCliNotInstalledBannerState, ByoLlmAuthBannerSessionState,
-    OpenInWarpBannerState, SSHBannerAction, SSHBannerState, VimModeBannerAction,
+    AliasExpansionBanner, AliasExpansionBannerAction, AwsBedrockLoginBannerAction,
+    AwsBedrockLoginBannerState, AwsCliNotInstalledBannerAction, AwsCliNotInstalledBannerState,
+    ByoLlmAuthBannerSessionState, OpenInWarpBannerState, SSHBannerAction, SSHBannerState,
+    VimModeBannerAction,
 };
 use warp_core::command::ExitCode;
 
@@ -993,7 +989,6 @@ pub enum InlineBannerType {
     OpenInWarp,
     VimMode,
     AgentModeSetup,
-    AnonymousUserAISignUp,
     AwsBedrockLogin,
     AwsCliNotInstalled,
 }
@@ -1006,7 +1001,6 @@ impl InlineBannerType {
             // Agent-related banners: visible in agent view
             Self::PromptSuggestions
             | Self::AgentModeSetup
-            | Self::AnonymousUserAISignUp
             | Self::AwsBedrockLogin
             | Self::AwsCliNotInstalled => true,
             // Terminal-context banners: hidden in agent view
@@ -1068,8 +1062,6 @@ struct InlineBannersState {
     vim_banner_state: Option<VimModeBannerState>,
 
     agent_setup_speedbump_banner: Option<AgentModeSetupSpeedbumpBannerState>,
-
-    anonymous_user_ai_sign_up_banner: Option<AnonymousUserAISignUpBannerState>,
 
     aws_bedrock_login_banner: Option<AwsBedrockLoginBannerState>,
 
@@ -1723,16 +1715,6 @@ pub enum Event {
         participant_id: ParticipantId,
         role: Role,
     },
-    /// A viewer in a shared session is requesting to send an agent prompt.
-    SendAgentPrompt {
-        server_conversation_token: Option<SessionSharingServerConversationToken>,
-        prompt: String,
-        attachments: Vec<AgentAttachment>,
-    },
-    /// A viewer in a shared session is requesting to cancel the active agent conversation.
-    CancelSharedSessionConversation {
-        server_conversation_token: SessionSharingServerConversationToken,
-    },
     /// The viewer is reporting its terminal size for viewer-driven PTY sizing.
     ReportViewerTerminalSize {
         window_size: SessionSharingWindowSize,
@@ -1751,7 +1733,6 @@ pub enum Event {
     /// been submitted and its block has completed.
     PendingCommandCompleted,
     SessionBootstrapped,
-    AnonymousUserSignup,
     ShellSpawned(ShellType),
 
     /// This terminal pane has initiated a file upload to a remote host.
@@ -1783,10 +1764,6 @@ pub enum Event {
     RemoteServerSkipRequested {
         session_id: SessionId,
     },
-    SignupAnonymousUser {
-        entrypoint: AnonymousUserSignupEntrypoint,
-    },
-
     OpenThemeChooser,
     OpenConversationHistory,
     OpenMCPSettingsPage {
@@ -1843,7 +1820,6 @@ pub enum Event {
         title: Option<String>,
         body: String,
     },
-    FreeTierLimitCheckTriggered,
     /// Emitted when the user clicks a child agent row in the status card to reveal
     /// its hidden pane.
     RevealChildAgent {
@@ -2363,6 +2339,9 @@ pub struct TerminalView {
     /// `pane_tree_from_template_recursive` when a tab config has both
     /// commands and `PaneMode::Agent`.
     enter_agent_view_after_pending_commands: bool,
+    /// SSH 管理器创建的 tab 会先启动本地 shell，再执行 ssh 并等待远端 shell
+    /// bootstrap；默认 Agent 模式必须延后到远端会话可用后再进入。
+    enter_agent_view_after_ssh_bootstrap: bool,
     slow_bootstrap_banner: ViewHandle<Banner<TerminalAction>>,
     is_slow_bootstrap_banner_open: bool,
 
@@ -2607,8 +2586,8 @@ pub struct TerminalView {
     /// Weak handle to the [`PaneStack`] this view is part of, allowing push/pop operations.
     pane_stack: Option<WeakModelHandle<crate::pane_group::pane::PaneStack<Self>>>,
 
-    /// If set, indicates a cloud mode entry is waiting for the fullscreen agent view to be exited.
-    /// This is used to ensure rich content inserted for cloud mode is scoped to the top-level
+    /// If set, indicates a ambient-agent entry is waiting for the fullscreen agent view to be exited.
+    /// This is used to ensure rich content inserted for ambient-agent content is scoped to the top-level
     /// terminal view (not a specific agent view conversation).
 
     /// Whether we're waiting for the result of an AWS CLI login command.
@@ -2861,7 +2840,7 @@ impl TerminalView {
                                 && !matches!(
                                     origin,
                                     AgentViewEntryOrigin::SlashInit
-                                        | AgentViewEntryOrigin::ThirdPartyCloudAgent
+                                        | AgentViewEntryOrigin::ExternalAmbientAgent
                                 );
                             if should_insert_zero_state_block {
                                 let mut should_show_init_callout = false;
@@ -3790,6 +3769,7 @@ impl TerminalView {
             is_login_shell_bootstrapped: false,
             awaiting_pending_command_completion: false,
             enter_agent_view_after_pending_commands: false,
+            enter_agent_view_after_ssh_bootstrap: false,
             slow_bootstrap_banner,
             is_slow_bootstrap_banner_open: false,
             incompatible_configuration_banner,
@@ -4165,7 +4145,7 @@ impl TerminalView {
             .can_exit_agent_view(ctx)
         {
             Err(ExitAgentViewError::LongRunningCommand)
-                if self.can_pop_nested_cloud_agent_view(ctx) =>
+                if self.can_pop_nested_ambient_agent_view(ctx) =>
             {
                 Ok(())
             }
@@ -4173,16 +4153,16 @@ impl TerminalView {
         }
     }
 
-    fn can_pop_nested_cloud_agent_view(&self, _ctx: &AppContext) -> bool {
-        // openWarp:cloud_mode 已删除,nested agent view 永远不存在。
+    fn can_pop_nested_ambient_agent_view(&self, _ctx: &AppContext) -> bool {
+        // openWarp:ambient_agent 已删除,nested agent view 永远不存在。
         false
     }
 
     /// Exits the active agent, either:
     /// * Exiting agent view for the selected conversation
-    /// * Popping the current view off the navigation stack (for cloud mode agents)
+    /// * Popping the current view off the navigation stack (for ambient-agent sessions)
     fn exit_agent_view(&mut self, ctx: &mut ViewContext<Self>) {
-        // For ambient agent sessions (cloud mode), always pop from pane stack.
+        // For ambient-agent sessions, always pop from pane stack.
         // These sessions are pushed onto a nav stack and have no underlying terminal
         // to return to via the normal agent view exit path.
         if self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent() {
@@ -4338,12 +4318,6 @@ impl TerminalView {
         event: &BlocklistAIControllerEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        if matches!(
-            event,
-            BlocklistAIControllerEvent::FreeTierLimitCheckTriggered
-        ) {
-            ctx.emit(Event::FreeTierLimitCheckTriggered);
-        }
         if let BlocklistAIControllerEvent::SentRequest { model_id, .. } = event {
             self.maybe_insert_aws_bedrock_login_banner(model_id, ctx);
         }
@@ -4750,15 +4724,6 @@ impl TerminalView {
                 response_stream_id,
                 ..
             } => {
-                // Hide telemetry banner forever after first AI input user sends.
-                if FeatureFlag::GlobalAIAnalyticsBanner.is_enabled()
-                    && !GeneralSettings::as_ref(ctx)
-                        .telemetry_banner_dismissed
-                        .value()
-                {
-                    self.hide_telemetry_banner_permanently(ctx);
-                }
-
                 // Close any open usage footer(s) when a new AI block is added
                 if !self.usage_footer_view_ids.is_empty() {
                     let owner_block_ids: Vec<EntityId> =
@@ -5004,25 +4969,6 @@ impl TerminalView {
 
                 self.maybe_send_agent_mode_desktop_notification(conversation_id, ctx);
 
-                // Show AI credits modal for cloud-mode out-of-credits failures.
-                if false
-                    && self.ambient_agent_view_model.as_ref(ctx).is_ambient_agent()
-                    && !self.model.lock().is_shared_ambient_agent_session()
-                {
-                    if let Some(conversation) =
-                        BlocklistAIHistoryModel::as_ref(ctx).conversation(conversation_id)
-                    {
-                        if matches!(
-                            conversation_output_status_from_conversation(conversation),
-                            Some(AmbientConversationStatus::Error {
-                                error: RenderableAIError::QuotaLimit
-                            })
-                        ) {
-                            self.show_out_of_credits_modal(ctx);
-                        }
-                    }
-                }
-
                 // For conversation transcript viewers (on WASM) and shared ambient sessions,
                 // insert a conversation-ended tombstone when the conversation completes.
                 // We only insert the tombstone once per session (when the conversation finishes).
@@ -5035,12 +4981,12 @@ impl TerminalView {
                         let model = self.model.lock();
                         // On WASM, keep transcript viewers on the conversation-driven path.
                         model.is_conversation_transcript_viewer()
-                            || (!false && model.is_shared_ambient_agent_session())
+                            || model.is_shared_ambient_agent_session()
                     }
                     #[cfg(not(target_family = "wasm"))]
                     {
                         // Show tombstone for shared ambient agent sessions
-                        self.model.lock().is_shared_ambient_agent_session() && !false
+                        self.model.lock().is_shared_ambient_agent_session()
                     }
                 } else {
                     false
@@ -6483,7 +6429,6 @@ impl TerminalView {
 
         let active_command_block = model.block_list().active_block();
         let is_active_and_long_running = active_command_block.is_active_and_long_running();
-        let is_oz_env_startup_command = active_command_block.is_oz_environment_startup_command();
         let is_running_in_band_command =
             model.block_list().is_writing_or_executing_in_band_command();
 
@@ -6492,7 +6437,6 @@ impl TerminalView {
 
         if (active_ai_block.is_none() || has_active_long_running_agent_interaction)
             && is_active_and_long_running
-            && (!false || !is_oz_env_startup_command)
             && !is_running_in_band_command
             && model.block_list().is_bootstrapped()
         {
@@ -8755,67 +8699,6 @@ impl TerminalView {
         // No-op when local filesystem is unavailable.
     }
 
-    fn anonymous_user_ai_sign_up_banner_action(
-        &mut self,
-        action: AnonymousUserLoginBannerAction,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match action {
-            AnonymousUserLoginBannerAction::SignUp => {
-                ctx.emit(Event::SignupAnonymousUser {
-                    entrypoint: AnonymousUserSignupEntrypoint::LoginGatedFeature,
-                });
-                self.remove_anonymous_user_ai_sign_up_banner(ctx);
-            }
-            AnonymousUserLoginBannerAction::Close => {
-                self.remove_anonymous_user_ai_sign_up_banner(ctx);
-            }
-        }
-    }
-
-    fn insert_anonymous_user_ai_sign_up_banner(&mut self, ctx: &mut ViewContext<Self>) {
-        if *GeneralSettings::as_ref(ctx)
-            .anonymous_user_ai_sign_up_banner_shown
-            .value()
-        {
-            return;
-        }
-
-        let banner_id = self.inline_banners_state.next_banner_id();
-        let banner_state = AnonymousUserAISignUpBannerState::new(banner_id);
-
-        self.model
-            .lock()
-            .block_list_mut()
-            .append_inline_banner_with_custom_height(
-                InlineBannerItem::new(banner_id, InlineBannerType::AnonymousUserAISignUp),
-                3.0,
-            );
-
-        self.inline_banners_state.anonymous_user_ai_sign_up_banner = Some(banner_state);
-        GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
-            let _ = settings
-                .anonymous_user_ai_sign_up_banner_shown
-                .set_value(true, ctx);
-        });
-
-        ctx.notify();
-    }
-
-    fn remove_anonymous_user_ai_sign_up_banner(&mut self, ctx: &mut ViewContext<Self>) {
-        if let Some(banner_state) = self
-            .inline_banners_state
-            .anonymous_user_ai_sign_up_banner
-            .take()
-        {
-            self.model
-                .lock()
-                .block_list_mut()
-                .remove_inline_banner(banner_state.id);
-            ctx.notify();
-        }
-    }
-
     fn remove_aws_bedrock_login_banner(&mut self, ctx: &mut ViewContext<Self>) {
         if let Some(banner_state) = self.inline_banners_state.aws_bedrock_login_banner.take() {
             self.model
@@ -9043,7 +8926,11 @@ impl TerminalView {
                     InlineBannerItem::new(banner_id, InlineBannerType::ShellProcessTerminated),
                 );
         } else {
-            let (termination_reason, termination_details, exit_reason) = match &termination_type {
+            let (termination_reason, termination_details, exit_reason): (
+                Option<String>,
+                Option<String>,
+                Option<&crate::terminal::model::terminal_model::ExitReason>,
+            ) = match &termination_type {
                 shell_terminated_banner::TerminationType::PtySpawnFailure { .. } => {
                     (Some("PtySpawnFailure".to_string()), None, None)
                 }
@@ -9093,61 +8980,6 @@ impl TerminalView {
             );
         }
 
-        ctx.notify();
-    }
-
-    /// Inserts telemetry policy banner into the blocklist.
-    pub fn insert_telemetry_banner(&mut self, is_onboarded: bool, ctx: &mut ViewContext<Self>) {
-        // Don't ever show telemetry banner for enterprise users.
-        if UserWorkspaces::as_ref(ctx)
-            .current_workspace()
-            .is_some_and(|w| matches!(w.billing_metadata.customer_type, CustomerType::Enterprise))
-        {
-            return;
-        }
-
-        if FeatureFlag::GlobalAIAnalyticsBanner.is_enabled()
-            && !GeneralSettings::as_ref(ctx)
-                .telemetry_banner_dismissed
-                .value()
-            // Do not insert telemetry banner if one is already showing
-            // (Happens in the case of a new user going from loginless to login
-            // without dismissing banner the first time)
-            && !self.rich_content_views.iter().any(|content| content.is_telemetry_banner())
-        {
-            let banner = ctx.add_view(|ctx| TelemetryBanner::new(is_onboarded, ctx));
-            self.insert_rich_content(
-                None,
-                banner.clone(),
-                Some(RichContentMetadata::TelemetryBanner {
-                    telemetry_banner_handle: banner,
-                }),
-                RichContentInsertionPosition::Append {
-                    insert_below_long_running_block: true,
-                },
-                ctx,
-            );
-            ctx.notify();
-        }
-    }
-
-    fn hide_telemetry_banner_permanently(&mut self, ctx: &mut ViewContext<Self>) {
-        GeneralSettings::handle(ctx).update(ctx, |general_settings, ctx| {
-            let _ = general_settings
-                .telemetry_banner_dismissed
-                .set_value(true, ctx);
-        });
-        for rich_content in self.rich_content_views.iter() {
-            if let Some(RichContentMetadata::TelemetryBanner {
-                telemetry_banner_handle,
-            }) = rich_content.metadata()
-            {
-                self.model
-                    .lock()
-                    .block_list_mut()
-                    .remove_rich_content(telemetry_banner_handle.id());
-            }
-        }
         ctx.notify();
     }
 
@@ -9297,15 +9129,6 @@ impl TerminalView {
                     ctx,
                 );
             });
-        }
-
-        // Hide telemetry banner forever after first block user executes.
-        if FeatureFlag::GlobalAIAnalyticsBanner.is_enabled()
-            && !GeneralSettings::as_ref(ctx)
-                .telemetry_banner_dismissed
-                .value()
-        {
-            self.hide_telemetry_banner_permanently(ctx);
         }
     }
 
@@ -11362,12 +11185,6 @@ impl TerminalView {
         self.is_login_shell_bootstrapped = true;
         self.hide_slow_bootstrap_banner(ctx);
 
-        if self.auth_state.is_anonymous_or_logged_out()
-            && !FeatureFlag::OpenWarpNewSettingsModes.is_enabled()
-        {
-            self.insert_anonymous_user_ai_sign_up_banner(ctx);
-        }
-
         if self.should_display_vim_banner(&session, ctx) {
             self.insert_vim_mode_banner(ctx);
         }
@@ -11409,6 +11226,8 @@ impl TerminalView {
         }
 
         let is_subshell_or_ssh = session.is_subshell_or_ssh();
+        let is_ssh_session = matches!(session.session_type(), SessionType::WarpifiedRemote { .. })
+            || session.is_legacy_ssh_session();
 
         // Make sure we decorate any text that is already in the input.  We
         // need to make sure external commands have finished loading before
@@ -11437,6 +11256,15 @@ impl TerminalView {
         self.any_session_contains_restored_remote_blocks = self.contains_restored_remote_blocks();
         self.any_session_contains_remote_blocks |= self.active_block_is_considered_remote(ctx);
         self.update_focused_terminal_info(ctx);
+
+        if self.enter_agent_view_after_ssh_bootstrap && is_ssh_session {
+            self.enter_agent_view_after_ssh_bootstrap = false;
+            self.enter_agent_view_for_new_conversation(
+                None,
+                AgentViewEntryOrigin::DefaultSessionMode,
+                ctx,
+            );
+        }
 
         // At the end of bootstrapping, set the title to the title of
         // the selected conversation. If there is no selected conversation,
@@ -13404,6 +13232,10 @@ impl TerminalView {
         self.enter_agent_view_after_pending_commands = false;
     }
 
+    pub fn set_enter_agent_view_after_ssh_bootstrap(&mut self) {
+        self.enter_agent_view_after_ssh_bootstrap = true;
+    }
+
     #[cfg(not(target_family = "wasm"))]
     pub(super) fn on_pty_spawn_failed(
         &mut self,
@@ -13897,7 +13729,7 @@ impl TerminalView {
             return;
         }
 
-        // Then check if there's selected text in the cloud mode error screen
+        // Then check if there's selected text in the ambient-agent error screen
         let error_selected_text = self
             .ambient_agent_view_model
             .as_ref(ctx)
@@ -14167,7 +13999,7 @@ impl TerminalView {
                                 ContextMenuAction::OpenWorkflowModal,
                             ))
                             .with_key_shortcut_label(keybinding_name_to_display_string(
-                                "terminal:toggle_teams_modal",
+                                "terminal:toggle_workflows_modal",
                                 ctx,
                             ))
                             .into_item(),
@@ -18442,24 +18274,6 @@ impl TerminalView {
                     ctx,
                 );
             }
-            InputEvent::SendAgentPrompt {
-                server_conversation_token,
-                prompt,
-                attachments,
-            } => {
-                ctx.emit(Event::SendAgentPrompt {
-                    server_conversation_token: *server_conversation_token,
-                    prompt: prompt.clone(),
-                    attachments: attachments.clone(),
-                });
-            }
-            InputEvent::CancelSharedSessionConversation {
-                server_conversation_token,
-            } => {
-                ctx.emit(Event::CancelSharedSessionConversation {
-                    server_conversation_token: *server_conversation_token,
-                });
-            }
             InputEvent::ClearSelectedBlock => self.clear_selected_blocks(ctx),
             InputEvent::SelectRecentBlocks { count } => {
                 let is_first_selection = self.selected_blocks.is_empty();
@@ -18552,7 +18366,7 @@ impl TerminalView {
                 }
                 self.create_and_push_docker_sandbox(ctx);
             }
-            InputEvent::ExitCloudModeAndStartLocalAgent { initial_prompt } => {
+            InputEvent::ExitAmbientAgentAndStartLocalAgent { initial_prompt } => {
                 let origin = AgentViewEntryOrigin::Input {
                     was_prompt_autodetected: false,
                 };
@@ -18572,7 +18386,7 @@ impl TerminalView {
                     // pane stack and has no parent terminal to host a local agent conversation.
                     if active_view.id() == self.id() {
                         log::warn!(
-                            "ExitCloudModeAndStartLocalAgent received but cloud-mode pane has no parent terminal"
+                            "ExitAmbientAgentAndStartLocalAgent received but ambient-agent pane has no parent terminal"
                         );
                     } else {
                         active_view.update(ctx, |view, ctx| {
@@ -18581,7 +18395,7 @@ impl TerminalView {
                     }
                 } else {
                     log::warn!(
-                        "ExitCloudModeAndStartLocalAgent received but no pane stack available; cannot start local agent without a parent terminal"
+                        "ExitAmbientAgentAndStartLocalAgent received but no pane stack available; cannot start local agent without a parent terminal"
                     );
                 }
 
@@ -18606,7 +18420,7 @@ impl TerminalView {
                         .block_list()
                         .active_block()
                         .is_active_and_long_running();
-                    if is_long_running && self.can_pop_nested_cloud_agent_view(ctx) {
+                    if is_long_running && self.can_pop_nested_ambient_agent_view(ctx) {
                         self.exit_agent_view(ctx);
                     } else if !is_long_running {
                         // During first-time setup, always exit directly without confirmation
@@ -18744,11 +18558,6 @@ impl TerminalView {
                 ctx.dispatch_typed_action(&PaneGroupAction::HandleFocusChange);
                 ctx.notify();
             }
-            InputEvent::SignupAnonymousUser { entrypoint } => {
-                ctx.emit(Event::SignupAnonymousUser {
-                    entrypoint: *entrypoint,
-                });
-            }
             InputEvent::OpenSettings(section) => {
                 ctx.emit(Event::OpenSettings(*section));
             }
@@ -18873,27 +18682,6 @@ impl TerminalView {
                 self.run_find(options, ctx)
             }
         }
-    }
-
-    pub(crate) fn enter_ambient_agent_setup(
-        &mut self,
-        initial_prompt: Option<String>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !false || !self.model.lock().shared_session_status().is_view_pending() {
-            // Ambient agent setup can only be done inside a shared session viewer; otherwise the backing terminal manager is incorrect.
-            return;
-        }
-
-        // Don't pass an initial prompt, which auto-sends the request.
-        self.enter_agent_view_for_new_conversation(None, AgentViewEntryOrigin::CloudAgent, ctx);
-
-        if let Some(prompt) = initial_prompt {
-            self.input.update(ctx, |input, ctx| {
-                input.replace_buffer_content(&prompt, ctx);
-            });
-        }
-        self.focus_input_box(ctx);
     }
 
     fn last_visible_item_is_agent_view_block_for_conversation(
@@ -20565,10 +20353,6 @@ impl TerminalView {
             );
         }
 
-        if let Some(banner_state) = &self.inline_banners_state.anonymous_user_ai_sign_up_banner {
-            inline_banners.insert(banner_state.id, banner_state.render(appearance));
-        }
-
         if let Some(banner_state) = &self.inline_banners_state.aws_bedrock_login_banner {
             inline_banners.insert(
                 banner_state.id,
@@ -21851,7 +21635,7 @@ impl TerminalView {
                     {
                         *request_outcome = Some(outcome.clone());
                     }
-                    // Log to sentry if unknown error
+                    // 未知错误写本地日志,便于排查通知权限问题。
                     if let RequestPermissionsOutcome::OtherError { error_message } = &outcome {
                         log::error!(
                             "Unknown error when requesting notification permissions. error_msg: {error_message}"
@@ -22972,9 +22756,7 @@ impl TypedActionView for TerminalView {
             | StartFileDropTarget
             | StopFileDropTarget
             | RunNativeShellCompletions { .. }
-            | OpenTeamSettingsPage
             | SelectAgenticSuggestion(_)
-            | HideTelemetryBannerPermanently
             | LoadAgentModeConversation
             | DeleteAttachment { .. }
             | ToggleAutoexecuteMode
@@ -22991,7 +22773,6 @@ impl TypedActionView for TerminalView {
             | OpenAddPromptPane
             | AddProjectAtCurrentDirectory
             | AgentModeSetupSpeedbumpBanner(_)
-            | AnonymousUserAISignUpBanner(_)
             | DismissCodeToolbeltTooltip
             | SummarizeConversation
             | ToggleLongRunningCommandControl
@@ -23617,9 +23398,6 @@ impl TypedActionView for TerminalView {
                     results_tx: results_tx.clone(),
                 });
             }
-            OpenTeamSettingsPage => {
-                ctx.emit(Event::OpenSettings(SettingsSection::Teams));
-            }
             SetMarkedText {
                 marked_text,
                 selected_range,
@@ -23632,7 +23410,6 @@ impl TypedActionView for TerminalView {
                     });
                 }
             }
-            HideTelemetryBannerPermanently => self.hide_telemetry_banner_permanently(ctx),
             ShowInitializationBlock => self.show_initialization_block(),
             LoadAgentModeConversation => {
                 self.load_agent_mode_conversation(ctx);
@@ -23664,9 +23441,6 @@ impl TypedActionView for TerminalView {
             }
             AgentModeSetupSpeedbumpBanner(action) => {
                 self.agent_mode_setup_speedbump_banner_action(*action, ctx)
-            }
-            AnonymousUserAISignUpBanner(action) => {
-                self.anonymous_user_ai_sign_up_banner_action(*action, ctx);
             }
             ResumeConversation => {
                 // With Agent View, we want to resume the conversation the user is currently viewing,
@@ -24083,16 +23857,14 @@ impl View for TerminalView {
             self.render_grid_tooltip(&mut stack, &model, appearance, app);
         }
 
-        if !false {
-            // Show progress steps while waiting for an ambient agent to start.
-            if self
-                .ambient_agent_view_model
-                .as_ref(app)
-                .agent_progress()
-                .is_some()
-            {
-                stack.add_child(self.render_ambient_agent_progress(appearance, app));
-            }
+        // Show progress steps while waiting for an ambient agent to start.
+        if self
+            .ambient_agent_view_model
+            .as_ref(app)
+            .agent_progress()
+            .is_some()
+        {
+            stack.add_child(self.render_ambient_agent_progress(appearance, app));
         }
 
         self.maybe_render_onboarding_callout(
@@ -24360,9 +24132,6 @@ impl View for TerminalView {
             }
         }
 
-        // First-time ambient-agent setup has been removed in OpenWarp.
-        if self.ambient_agent_view_model.as_ref(app).is_in_setup() {}
-
         if self.ssh_file_upload.as_ref(app).has_upload() {
             stack.add_child(
                 Align::new(ChildView::new(&self.ssh_file_upload).finish())
@@ -24511,7 +24280,7 @@ impl View for TerminalView {
         if ambient_agent_view_model.is_ambient_agent()
             && !ambient_agent_view_model.has_parent_terminal()
         {
-            context.set.insert(init::ROOT_CLOUD_MODE_PANE_KEY);
+            context.set.insert(init::ROOT_AMBIENT_AGENT_PANE_KEY);
         }
 
         if let Some(WithinBlockBanner::WarpifyBanner(state)) =
