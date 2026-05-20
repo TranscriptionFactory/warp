@@ -27,8 +27,12 @@ use crate::{
 use super::{AIAgentInput, MCPContext, MCPServer, RequestMetadata, RunningCommand, Suggestions};
 use crate::ai::blocklist::{BlocklistAIPermissions, RequestInput};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
+use crate::ai::facts::{AIFact, AIFactObjectModel};
 use crate::ai::mcp::templatable_manager::TemplatableMCPServerInfo;
 use crate::ai::mcp::TemplatableMCPServerManager;
+use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
+use crate::cloud_object::model::persistence::ObjectStoreModel;
+use crate::cloud_object::StoredObject;
 use crate::settings::AISettings;
 use crate::terminal::safe_mode_settings::get_secret_obfuscation_mode;
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -80,6 +84,13 @@ pub struct RequestParams {
     pub cli_agent_model: LLMId,
     pub computer_use_model: LLMId,
     pub is_memory_enabled: bool,
+    /// OpenWarp BYOP 专用:用户在 设置 → Agents → Rules 创建的全局 Rules
+    /// (`AIFact::Memory`)的快照,在 `new()` 中从 `ObjectStoreModel` 一次性拉取
+    /// 后随请求 plumb 到 `chat_stream::build_chat_request` → `prompt_renderer`,
+    /// 由 `partials/user_rules.j2` 渲染进 system prompt。
+    /// 仅在 `is_memory_enabled` 为 true 且未被 trash 时收集;为了 prompt cache
+    /// 稳定性,按 `(name, content)` 字典序排序。
+    pub user_rules: Vec<(Option<String>, String)>,
     pub warp_drive_context_enabled: bool,
     pub context_window_limit: Option<u32>,
     pub mcp_context: Option<MCPContext>,
@@ -130,6 +141,29 @@ pub struct RequestParams {
     pub byop_target_task_id: Option<String>,
 }
 
+/// 收集用户在 设置 → Agents → Rules 创建的全局 Rules(`AIFact::Memory`)快照,
+/// 用于注入 BYOP system prompt(Issue #116)。
+///
+/// - 过滤 trashed 条目
+/// - 按 `(name, content)` 字典序排序,避免 HashMap 迭代导致的请求间顺序漂移
+///   (否则会击穿上游 Anthropic / OpenAI 的 prompt cache)
+///
+/// 不在内部判断 `is_memory_enabled`,gate 由调用方控制;这样函数可作为纯
+/// 集合逻辑独立测试,不依赖 `AISettings` 等 singleton。
+pub(crate) fn collect_user_rules(
+    object_store_model: &ObjectStoreModel,
+) -> Vec<(Option<String>, String)> {
+    let mut rules: Vec<(Option<String>, String)> = object_store_model
+        .get_all_objects_of_type::<GenericStringObjectId, AIFactObjectModel>()
+        .filter(|ai_fact| !ai_fact.is_trashed(object_store_model))
+        .map(|ai_fact| match &ai_fact.model().string_model {
+            AIFact::Memory(memory) => (memory.name.clone(), memory.content.clone()),
+        })
+        .collect();
+    rules.sort();
+    rules
+}
+
 pub type Event = Result<warp_multi_agent_api::ResponseEvent, Arc<AIApiError>>;
 
 #[cfg(not(target_family = "wasm"))]
@@ -172,6 +206,7 @@ impl RequestParams {
             cli_agent_model: LLMId::from("byop:test"),
             computer_use_model: LLMId::from("byop:test"),
             is_memory_enabled: false,
+            user_rules: Vec::new(),
             warp_drive_context_enabled: false,
             context_window_limit: None,
             mcp_context: None,
@@ -209,6 +244,15 @@ impl RequestParams {
         let ai_settings = AISettings::as_ref(app);
         let is_memory_enabled = ai_settings.is_memory_enabled(app);
         let warp_drive_context_enabled = ai_settings.is_warp_drive_context_enabled(app);
+
+        // OpenWarp BYOP 修复 Issue #116:gate 在 `is_memory_enabled`,具体收集逻辑
+        // 抽到 `collect_user_rules` 纯函数,只接 `&ObjectStoreModel` 入参以便测试,
+        // 不依赖完整 AppContext singleton 集合。
+        let user_rules = if is_memory_enabled {
+            collect_user_rules(ObjectStoreModel::as_ref(app))
+        } else {
+            Vec::new()
+        };
 
         // Build MCP context - either grouped by server or flat lists based on feature flag
         let mcp_context = if FeatureFlag::MCPGroupedServerContext.is_enabled() {
@@ -363,6 +407,7 @@ impl RequestParams {
             cli_agent_model: request_input.cli_agent_model_id.clone(),
             computer_use_model: request_input.computer_use_model_id.clone(),
             is_memory_enabled,
+            user_rules,
             warp_drive_context_enabled,
             mcp_context,
             planning_enabled: true,
@@ -391,3 +436,7 @@ impl RequestParams {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "api_tests.rs"]
+mod tests;

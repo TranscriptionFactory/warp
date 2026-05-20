@@ -1184,8 +1184,13 @@ fn build_chat_request(
     let agent_ctx = latest_input_context(&params.input);
     let plan_mode = is_plan_mode_turn(&params.input);
     let tool_names = available_tool_names(params);
-    let mut system_text =
-        prompt_renderer::render_system(&params.model, agent_ctx, &tool_names, plan_mode);
+    let mut system_text = prompt_renderer::render_system(
+        &params.model,
+        agent_ctx,
+        &tool_names,
+        plan_mode,
+        &params.user_rules,
+    );
     // OpenWarp:legacy SSH 会话画像补丁。`render_system` 走 AIAgentContext,
     // 拿到的 OS/shell 是本地客户端;legacy SSH 下 PTY 实际在远端,
     // 追加一段 SSH 状态块矫正 LLM 推断。
