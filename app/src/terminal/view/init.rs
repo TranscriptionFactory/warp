@@ -325,7 +325,7 @@ pub fn init(app: &mut AppContext) {
     ]);
 
     app.register_editable_bindings([
-        // Ctrl-G: open rich input for CLI agents before the keystroke reaches the PTY.
+        // Ctrl-G: toggle CLI agent rich input.
         EditableBinding::new(
             OPEN_CLI_AGENT_RICH_INPUT_KEYBINDING,
             crate::t!("keybinding-desc-terminal-toggle-cli-agent-rich-input"),
@@ -333,11 +333,13 @@ pub fn init(app: &mut AppContext) {
         )
         .with_key_binding("ctrl-g")
         .with_context_predicate(
-            id!("Terminal")
+            (id!("Terminal")
                 & !id!("IMEOpen")
                 & (id!("LongRunningCommand") | id!("AltScreen"))
                 & id!(flags::CLI_AGENT_FOOTER_ENABLED)
-                & id!(flags::CLI_AGENT_RICH_INPUT_CHIP_ENABLED),
+                & id!(flags::CLI_AGENT_RICH_INPUT_CHIP_ENABLED))
+                | (id!("EditorView") & !id!("IMEOpen") & id!(flags::CLI_AGENT_RICH_INPUT_OPEN))
+                | (id!("Terminal") & !id!("IMEOpen") & id!(flags::CLI_AGENT_RICH_INPUT_OPEN)),
         ),
         EditableBinding::new(
             "terminal:warpify_subshell",
@@ -581,7 +583,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("Terminal") & id!("TerminalView_NonEmptyBlockList") & !id!("AltScreen"),
         ),
-        // OpenWarp:删除 terminal:open_share_block_modal keybinding(云端 share block)
+        // Zap:删除 terminal:open_share_block_modal keybinding(云端 share block)
         EditableBinding::new(
             "terminal:bookmark_selected_block",
             crate::t!("keybinding-desc-terminal-bookmark-selected-block"),
@@ -961,7 +963,7 @@ pub fn init(app: &mut AppContext) {
     )
     .with_context_predicate(id!("Terminal") & id!(flags::HAS_SETTINGS_TO_IMPORT_FLAG))]);
 
-    // OpenWarp:删除 terminal:share_current_session / terminal:stop_sharing_current_session keybindings(云端 shared session)
+    // Zap:删除 terminal:share_current_session / terminal:stop_sharing_current_session keybindings(云端 shared session)
 
     app.register_editable_bindings([EditableBinding::new(
         TOGGLE_BLOCK_FILTER_KEYBINDING,
@@ -1053,7 +1055,7 @@ fn register_input_mode_bindings(app: &mut AppContext) {
 
     // A context predicate that matches when the input mode bindings are
     // available for use. Disabled when a CLI agent session is active — the
-    // Warp agent should not be tagged into a CLI agent's command, and the
+    // Zap agent should not be tagged into a CLI agent's command, and the
     // `!` prefix is the only way to toggle shell mode in the rich input.
     let base_context = id!(flags::IS_ANY_AI_ENABLED)
         & (id!("Input") | id!("Terminal"))
