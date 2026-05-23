@@ -519,10 +519,10 @@ async fn scp_install_fallback(socket_path: &Path) -> Result<()> {
     }
 
     let tempdir = tempfile::tempdir()?;
-    let tarball_path = tempdir.path().join("zap.tar.gz");
+    let tarball_path = tempdir.path().join("openwarp.tar.gz");
     download_remote_server_tarball(&download_url, &tarball_path).await?;
 
-    let remote_tarball_path = format!("{remote_server_dir}/zap-upload.tar.gz");
+    let remote_tarball_path = format!("{remote_server_dir}/openwarp-upload.tar.gz");
     remote_server::ssh::scp_upload(
         socket_path,
         &tarball_path,
