@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 #include "environment.iss"
 
-#define MyAppPublisher "Zap"
+#define MyAppPublisher "OpenWarp"
 #define MyAppURL "https://zap.zerx.dev/"
 #ifndef MyAppName
   #define MyAppName "WarpDev"
