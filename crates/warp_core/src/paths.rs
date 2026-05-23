@@ -39,13 +39,13 @@ fn base_warp_config_dir_name() -> String {
         // Preview shares the same directory as Stable for backward
         // compatibility — existing users already have config in `.warp`.
         Channel::Stable | Channel::Preview => WARP_CONFIG_DIR.to_owned(),
-        Channel::Oss => ".zap".to_owned(),
+        Channel::Oss => ".openwarp".to_owned(),
         Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
         Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
         Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
     }
 }
-/// Returns the home-relative Zap config directory name for the current channel and data profile.
+/// Returns the home-relative OpenWarp config directory name for the current channel and data profile.
 ///
 /// This preserves the historical `.warp*` directory shape while still isolating dev, local,
 /// integration, oss, and optional development profiles.
@@ -88,7 +88,7 @@ fn macos_config_dir_name() -> String {
     match ChannelState::channel() {
         Channel::Stable => WARP_CONFIG_DIR.to_owned(),
         Channel::Preview => format!("{WARP_CONFIG_DIR}-preview"),
-        Channel::Oss => ".zap".to_owned(),
+        Channel::Oss => ".openwarp".to_owned(),
         Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
         Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
         Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
@@ -239,10 +239,10 @@ fn project_dirs_for_app_id(
     cfg_if::cfg_if! {
         if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             // Adjust the base application name so that we end up with
-            // a directory like "zap" matching our Linux package name.
+            // a directory like "openwarp" matching our Linux package name.
             let base_app_name = match app_id.application_name() {
-                "Zap" => "zap".to_owned(),
-                other if other.starts_with("Zap") => other.replace("Zap", "zap-"),
+                "OpenWarp" => "openwarp".to_owned(),
+                other if other.starts_with("OpenWarp") => other.replace("OpenWarp", "openwarp-"),
                 _ => app_id.application_name().to_owned(),
             };
         } else {

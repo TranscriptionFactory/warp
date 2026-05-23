@@ -22,7 +22,7 @@ pub struct RegistryBackedPreferences {
     cached_key: Mutex<Option<Key>>,
 }
 
-static WARP_REGISTRY_BASE_PATH: &str = "Software\\Zap\\";
+static WARP_REGISTRY_BASE_PATH: &str = "Software\\OpenWarp\\";
 pub const KEY_NOT_FOUND_ERR: HRESULT = HRESULT::from_win32(0x80070002);
 
 impl RegistryBackedPreferences {

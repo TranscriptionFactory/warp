@@ -1,6 +1,6 @@
 [package]
-authors = ["Zap Team"]
-default-run = "zap-oss"
+authors = ["OpenWarp Team"]
+default-run = "openwarp-oss"
 description = "The local-first agentic terminal"
 edition = "2021"
 autobins = false
@@ -13,12 +13,12 @@ license.workspace = true
 name = "warp"
 path = "src/lib.rs"
 
-# Zap 只保留两个 bin:打包用的 zap-oss,以及构建期工具 generate_settings_schema。
+# OpenWarp 只保留两个 bin:打包用的 openwarp-oss,以及构建期工具 generate_settings_schema。
 # 原 warp 多渠道发布的 dev/stable/preview/local bin 已删除。
 
 [[bin]]
-name = "zap-oss"
-path = "src/bin/zap_oss.rs"
+name = "openwarp-oss"
+path = "src/bin/openwarp_oss.rs"
 test = false
 
 [[bin]]
