@@ -257,13 +257,13 @@ fn installer_file_name() -> Result<String> {
 
 fn app_name_prefix(channel: Channel) -> &'static str {
     match channel {
-        Channel::Stable => "Zap",
+        Channel::Stable => "OpenWarp",
         Channel::Preview => "WarpPreview",
         Channel::Local => "warp",
         Channel::Integration => "integration",
         Channel::Dev => "WarpDev",
         // 与 script/windows/bundle.ps1 OSS 分支 INSTALLER_NAME=Zap+Setup 对齐,
         // 这样 GitHub Release 资产名 ZapSetup.exe 能被 installer_file_name() 正确生成。
-        Channel::Oss => "Zap",
+        Channel::Oss => "OpenWarp",
     }
 }

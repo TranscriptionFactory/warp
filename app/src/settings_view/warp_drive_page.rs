@@ -104,7 +104,7 @@ impl SettingsWidget for WarpDriveToggleWidget {
     type View = WarpDriveSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "zap drive tools panel command palette search workflows prompts notebooks environment variables"
+        "openwarp drive tools panel command palette search workflows prompts notebooks environment variables"
     }
 
     fn render(

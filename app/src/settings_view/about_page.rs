@@ -178,7 +178,7 @@ impl SettingsWidget for AboutPageWidget {
             )
             .with_child(
                 ui_builder
-                    .span("Zap")
+                    .span("OpenWarp")
                     .build()
                     .with_margin_top(12.)
                     .finish(),

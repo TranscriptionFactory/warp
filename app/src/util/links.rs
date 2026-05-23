@@ -13,7 +13,7 @@ pub fn feedback_form_url() -> String {
     let mut url = url::Url::parse("https://github.com/zerx-lab/warp/issues/new/choose")
         .expect("Should not fail to parse");
     if let Some(version) = ChannelState::app_version() {
-        url.query_pairs_mut().append_pair("zap-version", version);
+        url.query_pairs_mut().append_pair("openwarp-version", version);
     }
     url.query_pairs_mut()
         .append_pair("os-version", &os_info::get().version().to_string());

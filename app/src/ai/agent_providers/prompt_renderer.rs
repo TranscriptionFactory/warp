@@ -550,8 +550,8 @@ mod tests {
                 &[],
             );
             assert!(
-                out.contains("Zap"),
-                "id={id} should mention Zap, got: {out}"
+                out.contains("OpenWarp"),
+                "id={id} should mention OpenWarp, got: {out}"
             );
         }
     }
