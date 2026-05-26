@@ -147,7 +147,7 @@ fn render_lrc_request_context(params: &RequestParams) -> Option<String> {
         })
 }
 
-/// OpenWarp:渲染 SSH 会话状态块,append 到 system prompt 末尾。
+/// Zap:渲染 SSH 会话状态块,append 到 system prompt 末尾。
 ///
 /// 触发条件:`SessionContext.is_legacy_ssh()` 为 true(用户在本地 PTY 手敲
 /// `ssh xx@xx` 进入远端,远端没装 warp shell hook)。这种会话:
@@ -395,7 +395,7 @@ fn build_user_message_with_binaries(
     let mut error_replacements: Vec<(String, String)> = Vec::new();
     for bin in binaries {
         if !caps.supports_mime(&bin.content_type) {
-            // OpenWarp 对齐 opencode `unsupportedParts`(packages/opencode/src/provider/transform.ts:305-341):
+            // Zap 对齐 opencode `unsupportedParts`(packages/opencode/src/provider/transform.ts:305-341):
             // 模型不支持的 mime 不静默 drop,改成插入一条 ERROR 文本 part,让 LLM 自己告诉用户。
             // 文案严格照抄 opencode 的 `ERROR: Cannot read {name} (this model does not support
             // {modality} input). Inform the user.`,modality 由 mime 前缀映射,name 优先用文件名。
@@ -1191,7 +1191,7 @@ fn build_chat_request(
         plan_mode,
         &params.user_rules,
     );
-    // OpenWarp:legacy SSH 会话画像补丁。`render_system` 走 AIAgentContext,
+    // Zap:legacy SSH 会话画像补丁。`render_system` 走 AIAgentContext,
     // 拿到的 OS/shell 是本地客户端;legacy SSH 下 PTY 实际在远端,
     // 追加一段 SSH 状态块矫正 LLM 推断。
     if let Some(ssh_block) = render_ssh_session_block(&params.session_context) {
@@ -1212,7 +1212,7 @@ fn build_chat_request(
     // 末尾、或 LRC subagent 副本导致重复)。详见该函数文档。
     let all_msgs: Vec<&api::Message> = collect_linearized_task_messages(&params.tasks);
 
-    // OpenWarp BYOP 本地会话压缩:把 conversation.compaction_state 应用到 message 序列。
+    // Zap BYOP 本地会话压缩:把 conversation.compaction_state 应用到 message 序列。
     //   1. 过滤已被某次压缩覆盖的 (user, assistant) 对(`hidden_message_ids`)
     //   2. 在被隐去区间的位置插入一对合成的 (user "已压缩,以下为摘要" + assistant 摘要文本) message —
     //      这一步通过 `summary_inserts` 索引在主 loop 里就近 emit
@@ -1306,7 +1306,7 @@ fn build_chat_request(
     )?;
 
     let mut buf = AssistantBuffer::new(force_echo_reasoning);
-    // OpenWarp:历史里被 skip 掉的 subagent ToolCall 对应的 call_id —— 它们的
+    // Zap:历史里被 skip 掉的 subagent ToolCall 对应的 call_id —— 它们的
     // ToolCallResult 也必须 skip,否则会成为孤儿 tool_response,Anthropic 直接 400
     // `unexpected tool_use_id ... no corresponding tool_use block`。
     let mut skipped_subagent_call_ids: std::collections::HashSet<String> =
@@ -1335,7 +1335,7 @@ fn build_chat_request(
         match inner {
             api::message::Message::UserQuery(u) => {
                 flush_assistant_buffer(&mut buf, &mut messages, &mut outbound_tool_groups);
-                // OpenWarp:历史轮多模态保活。warp 自家路径靠云端 server 重注入 InputContext,
+                // Zap:历史轮多模态保活。warp 自家路径靠云端 server 重注入 InputContext,
                 // BYOP 直连没有那层,所以 `make_user_query_message` 持久化时把所有 binary
                 // (image / pdf / audio)塞进了 `UserQuery.context.images`,这里反向恢复成
                 // UserBinary 走 `build_user_message_with_binaries`,使后续轮模型仍能看到先前
@@ -1408,7 +1408,7 @@ fn build_chat_request(
                 buf.text = Some(a.text.clone());
             }
             api::message::Message::ToolCall(tc) => {
-                // OpenWarp BYOP:**虚拟 subagent tool_call 不发给上游模型**。
+                // Zap BYOP:**虚拟 subagent tool_call 不发给上游模型**。
                 // LRC tag-in 场景下,我们在 chat_stream 流头合成 `Tool::Subagent { metadata: Cli }`
                 // 写入 root.task.messages,只用于触发 conversation 创建 cli subtask + spawn 浮窗,
                 // 它不是模型实际产出的工具调用,模型看到会 confused(多余 tool call + 没法回应)。
@@ -1449,7 +1449,7 @@ fn build_chat_request(
             }
             api::message::Message::ToolCallResult(tcr) => {
                 flush_assistant_buffer(&mut buf, &mut messages, &mut outbound_tool_groups);
-                // OpenWarp:对应 ToolCall 已被 skip(subagent 虚拟 call)→ result 也 skip,
+                // Zap:对应 ToolCall 已被 skip(subagent 虚拟 call)→ result 也 skip,
                 // 否则留下孤儿 tool_response 导致上游 400。
                 if skipped_subagent_call_ids.contains(&tcr.tool_call_id) {
                     continue;
@@ -1495,7 +1495,7 @@ fn build_chat_request(
                 // 环境型 context(env / git / skills / ...)由 prompt_renderer 渲染进 system,
                 // 与本路径不重叠。
                 //
-                // OpenWarp：LRC tag-in 场景下，`running_command: Some(...)` 含完整 PTY 上下文
+                // Zap：LRC tag-in 场景下，`running_command: Some(...)` 含完整 PTY 上下文
                 // （alt-screen grid_contents + command + is_alt_screen_active 标志），用
                 // `render_running_command_context` 渲成 `<attached_running_command>` XML 块。
                 // 模型据此决定调 write_to_long_running_shell_command。
@@ -1610,7 +1610,7 @@ fn build_chat_request(
                 prompt,
                 overflow: _,
             } => {
-                // OpenWarp BYOP 本地会话压缩入口 — 1:1 对齐 opencode `compaction.ts processCompaction`。
+                // Zap BYOP 本地会话压缩入口 — 1:1 对齐 opencode `compaction.ts processCompaction`。
                 //
                 // 此前 messages loop 已根据 `summarize_head_end` 把序列切到 head(去掉 tail);
                 // 这里追加最后一条 user message:`build_prompt(previous_summary, plugin_context)`,
@@ -2621,7 +2621,7 @@ fn is_plan_mode_turn(input: &[AIAgentInput]) -> bool {
 /// 工具不在 tool list 里就调用不到(provider 协议层会直接拒绝 unknown function)。
 ///
 /// **没被 BLOCK 的写类工具**:`create_documents` / `edit_documents`。它们只动
-/// Warp Drive 本地文档存储(AIDocumentModel),不碰文件系统、不跑命令,语义上
+/// Zap Drive 本地文档存储(AIDocumentModel),不碰文件系统、不跑命令,语义上
 /// 恰好是 Plan Mode 的产出归档动作 —— 模型把最终 plan 沉淀为 Drive 文档,
 /// 用户后续可在 Drive UI 中查看 / 编辑 / 拖入自建的 PLAN 文件夹复用。
 ///
@@ -2675,7 +2675,7 @@ pub fn available_tool_names(params: &RequestParams) -> Vec<String> {
 }
 
 fn build_tools_array(params: &RequestParams) -> Vec<GenaiTool> {
-    // OpenWarp A2:LRC tag-in 场景剔除 `run_shell_command`,迫使模型选 PTY 操作类工具。
+    // Zap A2:LRC tag-in 场景剔除 `run_shell_command`,迫使模型选 PTY 操作类工具。
     //
     // 在 alt-screen 长命令(nvim/htop)+ 用户 tag-in 状态下,**模型最容易犯的错**是
     // 调 `run_shell_command` 跑 `taskkill nvim` / `Stop-Process nvim`(开新进程),
@@ -2692,7 +2692,7 @@ fn build_tools_array(params: &RequestParams) -> Vec<GenaiTool> {
     let is_lrc = params.lrc_command_id.is_some();
     let web_enabled = params.web_search_enabled;
     let plan_mode = is_plan_mode_turn(&params.input);
-    // OpenWarp BYOP:`suggest_prompt` chip UI 已通过 view 层订阅
+    // Zap BYOP:`suggest_prompt` chip UI 已通过 view 层订阅
     // PromptSuggestionExecutorEvent 恢复(见 `terminal/view.rs::
     // handle_suggest_prompt_executor_event`),可以暴露给模型。
     // `suggest_new_conversation` 仍 filter:UX 没有现成弹窗组件,executor 已改为
@@ -2715,7 +2715,7 @@ fn build_tools_array(params: &RequestParams) -> Vec<GenaiTool> {
             {
                 return false;
             }
-            // suggest_new_conversation:无 UI 实现,executor 在 OpenWarp 改为
+            // suggest_new_conversation:无 UI 实现,executor 在 Zap 改为
             // fast-fail Cancelled。这里 filter 掉避免模型调用产生无意义的
             // tool_call→cancelled 往返(纯 token 浪费)。
             if t.name == "suggest_new_conversation" {
@@ -2858,7 +2858,7 @@ pub(super) fn build_client(
         },
     );
 
-    // OpenWarp BYOP:SSE 流必须不带 gzip。`Accept-Encoding: gzip` 会让 nginx
+    // Zap BYOP:SSE 流必须不带 gzip。`Accept-Encoding: gzip` 会让 nginx
     // 类代理把响应压缩,server 必须 flush 完整 deflate frame 客户端才能解出
     // 明文,流式语义被破坏成 ~K 字节 burst,体感"几百毫秒一卡"。zed/opencode
     // 用 native fetch / std HTTP 不主动协商 gzip on SSE,所以同代理无问题。
@@ -2866,7 +2866,7 @@ pub(super) fn build_client(
     // 这里显式构造 `WebConfig` 即使 genai default 已经 `gzip=false`(fork 修改)。
     //
     // User-Agent 动态绑定当前应用名(取自 `ChannelState::app_id().application_name()`,
-    // 由入口 bin 注册:`bin/oss.rs` → "OpenWarp";其它 channel 自带各自名称)。
+    // 由入口 bin 注册:`bin/oss.rs` → "Zap";其它 channel 自带各自名称)。
     // 这样上游服务能识别请求来自哪个分支构建,后续若改名也会自动跟随。
     let mut headers = reqwest::header::HeaderMap::new();
     if let Ok(value) = build_user_agent_header() {
@@ -2884,11 +2884,11 @@ pub(super) fn build_client(
 }
 
 /// 构造 BYOP 出站请求的 `User-Agent` 头,值形如:
-/// - `OpenWarp/<git-tag>` —— release 构建有 `GIT_RELEASE_TAG` 注入时
-/// - `OpenWarp` —— Dev / 本地构建无版本时
+/// - `Zap/<git-tag>` —— release 构建有 `GIT_RELEASE_TAG` 注入时
+/// - `Zap` —— Dev / 本地构建无版本时
 ///
 /// 应用名一律从 `ChannelState::app_id().application_name()` 取,确保与入口 bin
-/// 注册的 `AppId` 一致(`bin/oss.rs` 注册 "OpenWarp")。
+/// 注册的 `AppId` 一致(`bin/oss.rs` 注册 "Zap")。
 fn build_user_agent_header(
 ) -> Result<reqwest::header::HeaderValue, reqwest::header::InvalidHeaderValue> {
     let app_name = warp_core::channel::ChannelState::app_id()
@@ -2945,35 +2945,38 @@ fn dashscope_needs_enable_thinking(
         || id.contains("qwen-plus")
 }
 
-/// 判断 OpenAI 某 model 是否支持 24h Extended Cache(`prompt_cache_retention="24h"`)。
+/// 按 base_url 反推上游 provider,**仅**用于决定是否下发 `prompt_cache_key`。
 ///
-/// 官方文档(2026-05):
-/// - GPT-5 系列 / GPT-5.x / GPT-5-codex / GPT-4.1 / o-series:支持 24h
-/// - GPT-5.5+:**不支持** `in_memory`,默认 24h(不传亦可,但显式下发体验更佳)
-/// - 旧型号(GPT-4o / GPT-3.5):`in_memory`(默认 5-10min)
+/// 对齐 opencode `packages/opencode/src/provider/transform.ts` 的
+/// `options()` 函数:opencode 用 `providerID` 维度决定是否设置
+/// `promptCacheKey`,只有 `openai` / `azure` / `openrouter` / `venice` /
+/// `opencode*` 这五个 provider 会下发。其余 provider(含所有 OpenAI 兼容
+/// 中转 / 本地服务 / 大部分国内云)一律不发。
 ///
-/// model_id 处理原则:
-/// 1. 以在上游官方文档明确点名的名称为准
-/// 2. 包含则走 24h(含 prefix 匹配:“gpt-5-mini” / "gpt-5.5-pro" 都命中 "gpt-5")
-/// 3. 不识别的 model 默认不含在列表里 → 走 in_memory(低风险默认)
+/// Zap 这边没有 `providerID` 这个维度,只有用户自由填写的 `base_url`。
+/// 因此通过 `base_url` 反推:
+/// - `api.openai.com`           → "openai"
+/// - `*.openai.azure.com`       → "azure"
+/// - `openrouter.ai/api`        → "openrouter"
+/// - `api.venice.ai/api`        → "venice"
+/// - `opencode.ai/zen`          → "opencode"
 ///
-/// **跨云厂商使用同一 OpenAI 兼容 endpoint** 的情况(OpenRouter / vLLM / lm-studio /
-/// Azure OpenAI 等):model_id 可能被重命名,这里仅能以字面匹配推断,
-/// 未命中时走 in_memory 默认。后续可考虑提供设置项手动覆盖。
-fn openai_supports_extended_cache(model_id: &str) -> bool {
-    let m = model_id.to_ascii_lowercase();
-    // 官方文档明确点名支持 24h 的型号前缀集合。
-    // 顺序不重要(any),但要避免跨型号误匹配。
-    const PREFIXES: &[&str] = &[
-        "gpt-5",   // gpt-5, gpt-5-mini, gpt-5.5, gpt-5.5-pro, gpt-5-codex 均命中
-        "gpt-4.1", // gpt-4.1, gpt-4.1-mini, gpt-4.1-nano
-        "o3",      // o3, o3-mini, o3-pro
-        "o4",      // o4, o4-mini
-        "o1",      // o1, o1-mini, o1-preview
-    ];
-    PREFIXES
-        .iter()
-        .any(|p| m.starts_with(p) || m.contains(&format!("/{p}")))
+/// 其余一律返回 `None`(等价于 opencode 里未命中任何分支)。
+///
+/// 数据源:[models.dev](https://models.dev/api.json) provider 表的 `api`
+/// 字段。openai / azure / venice 在 models.dev 里没有 `api`(由 SDK 烤进去),
+/// 这里按各 SDK 默认 endpoint 硬编码。
+///
+/// 故意只覆盖这 5 个 \u{2014} 这是 opencode 的真实白名单,不要因为"看起来还有
+/// 其他兼容 cache 的 provider"自行扩大。OpenRouter 文档原生支持
+/// `prompt_cache_key`(snake_case),其余四家走 OpenAI Chat Completions 路径。
+fn opencode_compatible_cache_provider(base_url: &str) -> bool {
+    let u = base_url.to_ascii_lowercase();
+    u.contains("api.openai.com")
+        || u.contains(".openai.azure.com")
+        || u.contains("openrouter.ai/api")
+        || u.contains("api.venice.ai/api")
+        || u.contains("opencode.ai/zen")
 }
 
 fn build_chat_options(
@@ -2993,42 +2996,36 @@ fn build_chat_options(
         // 段抽出来归到 reasoning chunk,UI 显示更干净。仅对支持该格式的 adapter 生效。
         .with_normalize_reasoning_content(true);
 
-    // Prompt caching(对应 opencode `applyCaching` OpenAI 兼容路径)。
-    // genai 的 OpenAI / OpenAiResp adapter 不读 per-message cache_control,
-    // 只认 `ChatOptions::prompt_cache_key` 与 `ChatOptions::cache_control`:
-    //   - prompt_cache_key:OpenAI 把同 key 的请求路由到同一缓存分片,提升命中
-    //     (`prompt_cache_key` field,见 `adapter_shared.rs:194` /
-    //     `openai_resp/adapter_impl.rs:238`);用 conversation_id 作为稳定 key。
-    //   - cache_control → 序列化为 `prompt_cache_retention` 字段(genai
-    //     `adapter_shared.rs:197-205`):
-    //       * Memory / Ephemeral → "in_memory"(旧型号默认 5-10min)
-    //       * Ephemeral24h         → "24h"(GPT-5 / 4.1 / o-series Extended Cache)
-    //       * Ephemeral5m / 1h     → None(不下发字段)
+    // Prompt caching(1:1 对齐 opencode `packages/opencode/src/provider/transform.ts`
+    // 的 `options()` 函数)。要点:
     //
-    // **P0-5**:按 model_id 推断 TTL
-    // - 官方点名支持 24h 的型号(GPT-5/5.x/5-codex / GPT-4.1 / o-series) → 24h
-    // - 旧型号 / 未识别 model → in_memory(保证代理 / 本地服务不报错)
-    // - 官方明确点名:GPT-5.5+ 不支持 in_memory,仅 24h。不识别时 fallback in_memory
-    //   在 GPT-5.5+ 上反而会被拒;但另一面,上面的 prefix 匹配 "gpt-5" 会提前
-    //   拦截该型号走 24h,逻辑上不会遗漏。
+    // 1. **`prompt_cache_retention` 字段(genai `ChatOptions::cache_control`)从不下发**。
+    //    opencode 整个仓库不使用这个字段;严格 schema 校验的 BYOP 中转
+    //    (OpenCode Go / vLLM / lm-studio / 大部分国内代理)会以 HTTP 400
+    //    `Extra inputs are not permitted, field: 'prompt_cache_retention'` 拒绝
+    //    (issue #126)。即使是 OpenAI 官方,默认也有 5min 隐式缓存,不必显式声明。
     //
-    // Anthropic 走 per-message cache_control(在 build_chat_request 里),不在此处。
-    // DeepSeek / Gemini / Ollama 服务端隐式缓存,跳过。
+    // 2. **`prompt_cache_key` 仅在 opencode 已知的 5 个 provider 上下发**:
+    //    `openai` / `azure` / `openrouter` / `venice` / `opencode`。其余 provider
+    //    (含所有 OpenAI 兼容中转 / 国内云 / 本地服务)一律不发。
+    //
+    //    opencode 用 `providerID`(用户 config 选的字符串)做判定;Zap 这边没有
+    //    `providerID`,只能用 `base_url` 反推 → 见 `opencode_compatible_cache_provider`。
+    //    这是 base_url 唯一的语义用途,不要扩展到决定 cache 之外的行为。
+    //
+    // 3. Anthropic 走 per-message cache_control(在 `build_chat_request` 里),
+    //    不在此处。
+    // 4. DeepSeek / Gemini / Ollama 服务端隐式缓存,跳过。
     if matches!(
         api_type,
         AgentProviderApiType::OpenAi | AgentProviderApiType::OpenAiResp
-    ) {
+    ) && opencode_compatible_cache_provider(base_url)
+    {
         if let Some(cid) = conversation_id {
             if !cid.is_empty() {
                 opts = opts.with_prompt_cache_key(cid.to_owned());
             }
         }
-        let cc = if openai_supports_extended_cache(model_id) {
-            CacheControl::Ephemeral24h
-        } else {
-            CacheControl::Ephemeral
-        };
-        opts = opts.with_cache_control(cc);
     }
 
     // **思考深度档位下发**(对齐 Zed `LanguageModelRequest::thinking_allowed` 各
@@ -3044,7 +3041,7 @@ fn build_chat_options(
     //   (`lib/rust-genai/src/adapter/adapters/anthropic/adapter_impl.rs:121-135`
     //   不读 effort 是否为 `None`)。
     // - **Off + DeepSeek**:服务端 `thinking_mode` 默认开启(deepseek-v4-flash 等),
-    //   需要显式 `extra_body.thinking.type=disabled` 才能关闭。OpenWarp 本地 fork
+    //   需要显式 `extra_body.thinking.type=disabled` 才能关闭。Zap 本地 fork
     //   的 genai 已支持 `ChatOptions::extra_body` 顶层合并。
     // - **Off + OpenAI / OpenAiResp**:走 `reasoning_effort: "none"` 路径
     //   (GPT-5 / codex 接受 `none` 档;o-series 由能力表过滤)。
@@ -3242,7 +3239,7 @@ pub async fn generate_byop_output(
     //
     // emit 时机必须在 CreateTask 之后(任务已升级为 Server 状态),
     // 在模型响应开始之前(UI 顺序:user 显示 → thinking/answer)。
-    // OpenWarp:历史轮多模态保活。除 query 文本外,把当前轮 UserQuery.context 里的所有
+    // Zap:历史轮多模态保活。除 query 文本外,把当前轮 UserQuery.context 里的所有
     // multimodal binary(image / pdf / audio / ...)一并打包进 `UserQuery.context.images`
     // 持久化(proto 字段叫 images,语义上是通用 BinaryFile —— `bytes data + mime_type`,
     // 跟 opencode FilePart 等价),使 build_chat_request 下一轮重建 messages 时能从历史
@@ -3498,7 +3495,7 @@ pub async fn generate_byop_output(
             //    走 `Task::new_subtask` 路径,自动绑定 SubagentParams。
             yield Ok(create_subtask_event(&subtask_id, &task_id));
 
-            // c) OpenWarp A1:把当前轮的 UserQuery 也复制一份到 subtask,初始化 subtask 的
+            // c) Zap A1:把当前轮的 UserQuery 也复制一份到 subtask,初始化 subtask 的
             //    exchange.output.messages。否则 CLISubagentView 渲染时 subtask 的 exchanges
             //    output 为空,浮窗永远只显示 49.6 高度的空对话框,看不到任何内容。
             //    上游云端在 cli subagent 任务上有完整 ClientAction 序列填 exchange.output,
@@ -3912,7 +3909,7 @@ pub async fn generate_byop_output(
                 );
             }
 
-            // OpenWarp BYOP todowrite 拦截:不映射到 protobuf executor,合成
+            // Zap BYOP todowrite 拦截:不映射到 protobuf executor,合成
             // `Message::UpdateTodos` 直接写 conversation.todo_lists 触发 chip + popup
             // UI(对齐 server-side ClientAction::AddMessagesToTask::UpdateTodos 路径)。
             // 然后追加 carrier ToolCall + ToolCallResult 给模型 unblock。
@@ -4002,7 +3999,7 @@ pub async fn generate_byop_output(
                 continue;
             }
 
-            // OpenWarp BYOP web 工具拦截:webfetch / websearch 不映射到 protobuf
+            // Zap BYOP web 工具拦截:webfetch / websearch 不映射到 protobuf
             // executor variant,在这里直接跑本地 HTTP,合成 (carrier ToolCall,
             // ToolCallResult) 一对消息,绕开 parse_incoming_tool_call。
             //
@@ -4603,7 +4600,7 @@ fn make_user_query_message(
     query: String,
     binaries: &[user_context::UserBinary],
 ) -> api::Message {
-    // OpenWarp:把 multimodal binary(image / pdf / audio 等)写进 `UserQuery.context.images`
+    // Zap:把 multimodal binary(image / pdf / audio 等)写进 `UserQuery.context.images`
     // (InputContext 字段,proto Image 实际是 `bytes data + string mime_type` 通用容器,
     // 字段名叫 images 历史原因)。UserBinary.data 是 base64 字符串,proto.data 是 raw bytes,
     // 这里 decode 一次;decode 失败的条目跳过,不阻塞模型流(decode 失败本来就意味着这条
@@ -5353,71 +5350,6 @@ mod build_chat_options_off_tests {
     }
 }
 
-/// `openai_supports_extended_cache` 的单元测试。
-///
-/// 官方 2026-05 点名支持 24h Extended Cache 的型号:GPT-5 系列 / GPT-5.x /
-/// GPT-5-codex / GPT-4.1 / o-series。其他一律走 in_memory 低风险默认。
-#[cfg(test)]
-mod openai_extended_cache_tests {
-    use super::*;
-
-    #[test]
-    fn gpt5_family_supports_24h() {
-        assert!(openai_supports_extended_cache("gpt-5"));
-        assert!(openai_supports_extended_cache("gpt-5-mini"));
-        assert!(openai_supports_extended_cache("gpt-5-codex"));
-        assert!(openai_supports_extended_cache("gpt-5.5"));
-        assert!(openai_supports_extended_cache("gpt-5.5-pro"));
-    }
-
-    #[test]
-    fn gpt41_family_supports_24h() {
-        assert!(openai_supports_extended_cache("gpt-4.1"));
-        assert!(openai_supports_extended_cache("gpt-4.1-mini"));
-        assert!(openai_supports_extended_cache("gpt-4.1-nano"));
-    }
-
-    #[test]
-    fn o_series_supports_24h() {
-        assert!(openai_supports_extended_cache("o3"));
-        assert!(openai_supports_extended_cache("o3-mini"));
-        assert!(openai_supports_extended_cache("o4-mini"));
-        assert!(openai_supports_extended_cache("o1-preview"));
-    }
-
-    #[test]
-    fn legacy_models_default_in_memory() {
-        assert!(!openai_supports_extended_cache("gpt-4o"));
-        assert!(!openai_supports_extended_cache("gpt-4o-mini"));
-        assert!(!openai_supports_extended_cache("gpt-4-turbo"));
-        assert!(!openai_supports_extended_cache("gpt-3.5-turbo"));
-    }
-
-    #[test]
-    fn case_insensitive() {
-        assert!(openai_supports_extended_cache("GPT-5"));
-        assert!(openai_supports_extended_cache("GPT-4.1-Mini"));
-    }
-
-    /// OpenRouter 等代理会把型号写成 "openai/gpt-5";`/<prefix>` 包含判定仅
-    /// 在路径路由型型号上生效。
-    #[test]
-    fn openrouter_style_path_matches() {
-        assert!(openai_supports_extended_cache("openai/gpt-5"));
-        assert!(openai_supports_extended_cache("openai/gpt-4.1-mini"));
-        assert!(openai_supports_extended_cache("vendor/o3-mini"));
-    }
-
-    /// 未识别 / 本地服务 → 不走 24h(低风险默认)。
-    #[test]
-    fn unknown_models_default_false() {
-        assert!(!openai_supports_extended_cache("qwen-max"));
-        assert!(!openai_supports_extended_cache("deepseek-chat"));
-        assert!(!openai_supports_extended_cache("llama-3.1-70b"));
-        assert!(!openai_supports_extended_cache(""));
-    }
-}
-
 /// **端到端 cache 边界稳定性测试**:验证多轮对话模拟下,prompt cache
 /// 需要的“前缀字节级一致”保证。这些测试并不调用上游 API,仅检查
 /// `apply_caching_anthropic` 与 `build_chat_options` 输出的确定性。
@@ -5435,7 +5367,7 @@ mod cache_boundary_stability_tests {
     fn build_three_turn_conversation() -> Vec<ChatMessage> {
         vec![
             ChatMessage::system(
-                "You are a helpful coding assistant for OpenWarp BYOP.\n\
+                "You are a helpful coding assistant for Zap BYOP.\n\
                  Guidelines: be concise, prefer code over prose.",
             ),
             ChatMessage::user("What is rust borrow checker?"),
@@ -5551,8 +5483,8 @@ mod cache_boundary_stability_tests {
         );
     }
 
-    /// **P0-5 主要验收**:OpenAI build_chat_options 下发的 cache_control
-    /// 在同输入上跨调用一致(prompt_cache_key + cache_control 两个字段)。
+    /// **build_chat_options 输出确定性**(同输入跨调用结果一致)。
+    /// prompt cache 命中的最低门槛 \u{2014} 哈希位级一致。
     #[test]
     fn openai_chat_options_is_deterministic() {
         use crate::settings::ReasoningEffortSetting as R;
@@ -5572,50 +5504,113 @@ mod cache_boundary_stability_tests {
         assert_eq!(a.cache_control, b.cache_control);
     }
 
-    /// **P0-5 GPT-5 走 24h 最终路径验收**。
+    /// **opencode 兼容白名单 provider**(api.openai.com / *.openai.azure.com /
+    /// openrouter.ai / api.venice.ai / opencode.ai/zen)→ 下发 prompt_cache_key,
+    /// 且 **永远不下发 cache_control**(对应 prompt_cache_retention 字段;
+    /// opencode 仓库不使用该字段)。
     #[test]
-    fn openai_gpt5_path_lands_24h_cache_control() {
+    fn whitelisted_provider_emits_prompt_cache_key_only() {
         use crate::settings::ReasoningEffortSetting as R;
-        let opts = build_chat_options(
-            AgentProviderApiType::OpenAi,
+        // 选 5 个白名单代表 URL,每个都覆盖到 api_type=OpenAi 的判定分支。
+        let whitelisted = [
             "https://api.openai.com/v1/",
-            "gpt-5-mini",
-            R::Auto,
-            vec![],
-            Some("conv-1"),
-        );
-        assert_eq!(
-            opts.cache_control,
-            Some(CacheControl::Ephemeral24h),
-            "GPT-5 系列必须下发 Ephemeral24h"
-        );
-        assert_eq!(
-            opts.prompt_cache_key.as_deref(),
-            Some("conv-1"),
-            "prompt_cache_key 必须 = conversation_id"
-        );
+            "https://my-resource.openai.azure.com/openai/v1/",
+            "https://openrouter.ai/api/v1/",
+            "https://api.venice.ai/api/v1/",
+            "https://opencode.ai/zen/v1/",
+        ];
+        for url in whitelisted {
+            let opts = build_chat_options(
+                AgentProviderApiType::OpenAi,
+                url,
+                "gpt-5-mini",
+                R::Auto,
+                vec![],
+                Some("conv-1"),
+            );
+            assert_eq!(
+                opts.prompt_cache_key.as_deref(),
+                Some("conv-1"),
+                "{url}: 白名单 provider 应下发 prompt_cache_key=conversation_id"
+            );
+            assert!(
+                opts.cache_control.is_none(),
+                "{url}: cache_control 永远不发(opencode 不使用 prompt_cache_retention)"
+            );
+        }
     }
 
-    /// **P0-5 旧型号 fallback in_memory 路径验收**。
+    /// **#126 回归**:OpenAi api_type 但 base_url 不在白名单(OpenCode Go
+    /// 中转 Kimi / GLM、vLLM、lm-studio、DashScope、Moonshot、智谱原生 等)
+    /// → 既不下发 cache_control,也不下发 prompt_cache_key。
+    ///
+    /// 对齐 opencode `options()` 函数:除 openai/azure/openrouter/venice/opencode
+    /// 五个 providerID 之外,任何 provider 都不设 promptCacheKey。
     #[test]
-    fn openai_legacy_path_lands_in_memory_cache_control() {
+    fn non_whitelisted_provider_emits_nothing() {
         use crate::settings::ReasoningEffortSetting as R;
-        let opts = build_chat_options(
-            AgentProviderApiType::OpenAi,
-            "https://api.openai.com/v1/",
-            "gpt-4o-mini",
-            R::Auto,
-            vec![],
-            Some("conv-2"),
-        );
-        assert_eq!(
-            opts.cache_control,
-            Some(CacheControl::Ephemeral),
-            "旧型号 fallback Ephemeral(in_memory)"
-        );
+        // issue #126 正文 + 用户后续 comment 的两个具体例子,加上其他主流
+        // OpenAI 兼容中转。每个 URL 都不应下发任何 cache 字段。
+        let byop_urls = [
+            ("https://opencode.go/v1/", "kimi-k2.6"),
+            ("https://opencode.go/v1/", "glm-5.1"),
+            ("https://api.moonshot.cn/v1/", "kimi-k2"),
+            ("https://open.bigmodel.cn/api/paas/v4/", "glm-4.6"),
+            (
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+                "qwen-max",
+            ),
+            ("http://localhost:1234/v1/", "local-model"),
+        ];
+        for (url, model) in byop_urls {
+            let opts = build_chat_options(
+                AgentProviderApiType::OpenAi,
+                url,
+                model,
+                R::Auto,
+                vec![],
+                Some("conv-byop"),
+            );
+            assert!(
+                opts.cache_control.is_none(),
+                "{url}: 非白名单不应下发 cache_control"
+            );
+            assert!(
+                opts.prompt_cache_key.is_none(),
+                "{url}: 非白名单不应下发 prompt_cache_key"
+            );
+        }
     }
 
-    /// **conversation_id 为空不下发 prompt_cache_key**(避免跨会话误挂路由)。
+    /// OpenAiResp api_type 走同一份判定逻辑(genai openai_resp adapter 序列化
+    /// 同样的字段),白名单内下发 / 非白名单屏蔽。
+    #[test]
+    fn openai_resp_follows_same_whitelist() {
+        use crate::settings::ReasoningEffortSetting as R;
+        let on_whitelist = build_chat_options(
+            AgentProviderApiType::OpenAiResp,
+            "https://api.openai.com/v1/",
+            "gpt-5",
+            R::Auto,
+            vec![],
+            Some("conv-resp"),
+        );
+        assert_eq!(on_whitelist.prompt_cache_key.as_deref(), Some("conv-resp"));
+        assert!(on_whitelist.cache_control.is_none());
+
+        let off_whitelist = build_chat_options(
+            AgentProviderApiType::OpenAiResp,
+            "https://custom.relay/v1/",
+            "gpt-5",
+            R::Auto,
+            vec![],
+            Some("conv-resp"),
+        );
+        assert!(off_whitelist.prompt_cache_key.is_none());
+        assert!(off_whitelist.cache_control.is_none());
+    }
+
+    /// **conversation_id 为空跳过 prompt_cache_key**(避免跨会话误挂路由)。
     #[test]
     fn openai_empty_conversation_id_skips_cache_key() {
         use crate::settings::ReasoningEffortSetting as R;
@@ -5631,8 +5626,7 @@ mod cache_boundary_stability_tests {
             opts.prompt_cache_key.is_none(),
             "空 conversation_id 应跳过 prompt_cache_key"
         );
-        // 但 cache_control 仍然走(只是没有路由哈希辅助)
-        assert_eq!(opts.cache_control, Some(CacheControl::Ephemeral24h));
+        assert!(opts.cache_control.is_none(), "cache_control 永远不发");
     }
 
     /// **Anthropic 路径 build_chat_options 不下发 cache_control**
@@ -5677,8 +5671,7 @@ mod cache_boundary_stability_tests {
             );
             assert!(
                 opts.cache_control.is_none(),
-                "{:?} 不应下发 cache_control",
-                api
+                "{api:?} 不应下发 cache_control"
             );
         }
     }
