@@ -230,9 +230,9 @@ jobs:
 
       - name: Package CLI tarball
         run: |
-          cp "${{ steps.bundle_cli.outputs.binary_path }}" zap-oss
-          tar czf zap-macos-${{ matrix.arch }}.tar.gz \
-            zap-oss \
+          cp "${{ steps.bundle_cli.outputs.binary_path }}" openwarp-oss
+          tar czf openwarp-macos-${{ matrix.arch }}.tar.gz \
+            openwarp-oss \
             -C "$(dirname "${{ steps.bundle_cli.outputs.bundled_resources_dir }}")" resources
         shell: bash
 
@@ -240,7 +240,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: zap-cli-macos-${{ matrix.arch }}
-          path: zap-macos-${{ matrix.arch }}.tar.gz
+          path: openwarp-macos-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -476,9 +476,9 @@ jobs:
 
       - name: Package CLI tarball
         run: |
-          cp "${{ steps.bundle_cli.outputs.executable_path }}" zap-oss
-          tar czf zap-linux-x86_64.tar.gz \
-            zap-oss \
+          cp "${{ steps.bundle_cli.outputs.executable_path }}" openwarp-oss
+          tar czf openwarp-linux-x86_64.tar.gz \
+            openwarp-oss \
             -C "$(dirname "${{ steps.bundle_cli.outputs.bundled_resources_dir }}")" resources
         shell: bash
 
@@ -486,7 +486,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: zap-cli-linux-x86_64
-          path: zap-linux-x86_64.tar.gz
+          path: openwarp-linux-x86_64.tar.gz
           if-no-files-found: error
           retention-days: 7
 
