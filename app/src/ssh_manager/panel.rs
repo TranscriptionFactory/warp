@@ -1120,6 +1120,7 @@ impl SshManagerPanel {
         };
 
         // 整行:chevron + 标签(吃中间空间)+ count + Refresh 按钮。
+        // 使用 MainAxisSize::Max 让整行填满面板宽度,消除右侧留白。
         let row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(ITEM_ICON_TEXT_SPACING)
@@ -1132,7 +1133,7 @@ impl SshManagerPanel {
                     .finish(),
             )
             .with_child(refresh_btn)
-            .with_main_axis_size(MainAxisSize::Min)
+            .with_main_axis_size(MainAxisSize::Max)
             .with_main_axis_alignment(MainAxisAlignment::Start)
             .finish();
 
@@ -1316,6 +1317,7 @@ impl SshManagerPanel {
             .finish()
         };
 
+        // 使用 MainAxisSize::Max 让候选行填满面板宽度,消除右侧留白。
         let row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(ITEM_ICON_TEXT_SPACING)
@@ -1332,7 +1334,7 @@ impl SshManagerPanel {
                     .finish(),
             )
             .with_child(trailing)
-            .with_main_axis_size(MainAxisSize::Min)
+            .with_main_axis_size(MainAxisSize::Max)
             .finish();
 
         let row_state = self
@@ -1490,6 +1492,7 @@ impl SshManagerPanel {
             .finish()
         };
 
+        // 使用 MainAxisSize::Max 让树节点行填满面板宽度,消除右侧留白。
         let row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(ITEM_ICON_TEXT_SPACING)
@@ -1501,7 +1504,7 @@ impl SshManagerPanel {
             .with_child(chevron_el)
             .with_child(icon_el)
             .with_child(label_or_editor)
-            .with_main_axis_size(MainAxisSize::Min)
+            .with_main_axis_size(MainAxisSize::Max)
             .finish();
 
         let state = self.row_states.get(&node.id).cloned().unwrap_or_default();

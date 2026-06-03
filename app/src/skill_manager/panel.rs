@@ -288,8 +288,9 @@ impl SkillManagerPanel {
     ) -> Box<dyn Element> {
         let active_filter = self.provider_filter;
 
+        // 使用 MainAxisSize::Max 让过滤标签行填满面板宽度,消除右侧留白。
         let mut filter_buttons = Flex::row()
-            .with_main_axis_size(MainAxisSize::Min)
+            .with_main_axis_size(MainAxisSize::Max)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(4.0)
             .with_child(self.render_filter_button(
@@ -389,21 +390,28 @@ impl SkillManagerPanel {
             } else {
                 None
             };
-            let mut row = Container::new(
-                Flex::column()
-                    .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .with_spacing(2.0)
-                    .with_child(title)
-                    .with_child(description)
-                    .with_child(meta)
-                    .with_child(path)
-                    .finish(),
-            )
-            .with_padding_top(ROW_PADDING_VERTICAL)
-            .with_padding_bottom(ROW_PADDING_VERTICAL)
-            .with_padding_left(ROW_PADDING_HORIZONTAL)
-            .with_padding_right(ROW_PADDING_HORIZONTAL)
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.0)));
+            // 外层 Flex::row 使用 MainAxisSize::Max 填满面板宽度,
+            // 避免 Container 收缩到内容自然宽度导致高亮区域右侧留白。
+            let content = Flex::row()
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                .with_child(
+                    Flex::column()
+                        .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+                        .with_spacing(2.0)
+                        .with_child(title)
+                        .with_child(description)
+                        .with_child(meta)
+                        .with_child(path)
+                        .finish(),
+                )
+                .finish();
+            let mut row = Container::new(content)
+                .with_padding_top(ROW_PADDING_VERTICAL)
+                .with_padding_bottom(ROW_PADDING_VERTICAL)
+                .with_padding_left(ROW_PADDING_HORIZONTAL)
+                .with_padding_right(ROW_PADDING_HORIZONTAL)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.0)));
             if let Some(background) = background {
                 row = row.with_background(background);
             }
