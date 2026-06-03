@@ -8,6 +8,7 @@ pub(crate) mod left_panel;
 pub(crate) mod onboarding;
 pub(crate) mod zap_launch_modal;
 pub(crate) mod right_panel;
+pub(crate) mod server_file_browser;
 mod startup_directory;
 #[cfg(test)]
 #[path = "view_test.rs"]
@@ -101,6 +102,7 @@ use crate::ai::blocklist::FORK_PREFIX;
 #[cfg(not(target_family = "wasm"))]
 use crate::terminal::cli_agent_sessions::plugin_manager::{plugin_manager_for, PluginModalKind};
 use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
+use crate::terminal::CLIAgent;
 use crate::workspace::header_toolbar_editor::{HeaderToolbarEditorEvent, HeaderToolbarEditorModal};
 use crate::workspace::header_toolbar_item::HeaderToolbarItemKind;
 use crate::workspace::tab_settings::TabCloseButtonPosition;
@@ -349,6 +351,7 @@ use std::time::Duration;
 #[cfg(target_os = "macos")]
 use std::time::{SystemTime, UNIX_EPOCH};
 use warp_core::context_flag::ContextFlag;
+use warp_core::HostId;
 use warp_core::semantic_selection::SemanticSelection;
 use warp_util::path::{user_friendly_path, LineAndColumnArg};
 use warpui::fonts::Weight;
@@ -3516,6 +3519,7 @@ impl Workspace {
                 LeftPanelDisplayedTab::ZapDrive => ToolPanelView::ZapDrive,
                 LeftPanelDisplayedTab::ConversationListView => ToolPanelView::ConversationListView,
                 LeftPanelDisplayedTab::SshManager => ToolPanelView::SshManager,
+                LeftPanelDisplayedTab::ServerFileBrowser => ToolPanelView::ServerFileBrowser,
                 LeftPanelDisplayedTab::SkillManager => ToolPanelView::SkillManager,
             };
             lp.restore_active_view_from_snapshot(active_view, ctx);
@@ -3849,6 +3853,18 @@ impl Workspace {
                         AgentViewEntryOrigin::ConversationListView,
                         ctx,
                     );
+                });
+            }
+        });
+    }
+
+    /// 新建默认终端标签页，然后执行指定 CLI agent 的启动命令。
+    fn add_tab_with_specific_agent(&mut self, agent: CLIAgent, ctx: &mut ViewContext<Self>) {
+        self.add_terminal_tab(false, ctx);
+        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+            if let Some(terminal_view) = pane_group.active_session_view(ctx) {
+                terminal_view.update(ctx, |view, ctx| {
+                    view.execute_command_or_set_pending(agent.command_prefix(), ctx);
                 });
             }
         });
@@ -5201,6 +5217,21 @@ impl Workspace {
             LeftPanelEvent::ZapDrive(drive_event) => {
                 self.handle_warp_drive_event(drive_event, ctx);
             }
+            LeftPanelEvent::ServerFileBrowser(event) => match event {
+                crate::workspace::view::server_file_browser::ServerFileBrowserEvent::OpenRemoteFile {
+                    remote_path,
+                } => {
+                    #[cfg(feature = "local_tty")]
+                    self.open_remote_file(remote_path.clone(), ctx);
+                    #[cfg(not(feature = "local_tty"))]
+                    let _ = remote_path;
+                }
+                crate::workspace::view::server_file_browser::ServerFileBrowserEvent::CdToDirectory {
+                    path,
+                } => {
+                    self.cd_to_remote_directory(path, ctx);
+                }
+            },
             LeftPanelEvent::OpenFileWithTarget {
                 path,
                 target,
@@ -5264,6 +5295,9 @@ impl Workspace {
             LeftPanelEvent::OpenSshTerminal { node_id, server } => {
                 self.open_ssh_terminal(node_id.clone(), server.clone(), ctx);
             }
+            LeftPanelEvent::OpenSftpPane { node_id, server: _ } => {
+                self.open_sftp_pane(node_id.clone(), ctx);
+            }
         }
     }
 
@@ -5274,6 +5308,22 @@ impl Workspace {
         use crate::pane_group::pane::ssh_server_pane::SshServerPane;
         self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
             let pane = SshServerPane::new(node_id, ctx);
+            let smart_split_direction =
+                pane_group.smart_split_direction(ctx, WORKFLOW_AND_ENV_VAR_SPLIT_RATIO);
+            pane_group.add_pane_with_direction(
+                smart_split_direction,
+                pane,
+                true, /* focus_new_pane */
+                ctx,
+            );
+        });
+    }
+
+    /// 在中央区域打开给定 SSH 节点的 SFTP 文件浏览器 pane。
+    pub fn open_sftp_pane(&mut self, node_id: String, ctx: &mut ViewContext<Self>) {
+        use crate::pane_group::pane::sftp_pane::SftpPane;
+        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+            let pane = SftpPane::new(node_id, ctx);
             let smart_split_direction =
                 pane_group.smart_split_direction(ctx, WORKFLOW_AND_ENV_VAR_SPLIT_RATIO);
             pane_group.add_pane_with_direction(
@@ -5404,6 +5454,35 @@ impl Workspace {
             secret,
             ctx,
         );
+
+        // 启动命令注入器 — 等待 shell ready 后自动执行 startup_command
+        if let Some(ref startup_cmd) = server.startup_command {
+            if !startup_cmd.is_empty() {
+                crate::ssh_manager::startup_command_injector::spawn_startup_command_injector(
+                    terminal_view.read(ctx, |v, c| v.inactive_pty_reads_rx(c)),
+                    terminal_view.downgrade(),
+                    startup_cmd.clone(),
+                    ctx,
+                );
+            }
+        }
+
+        // su 密码注入器 — 监听 su 密码提示,自动输入 root 密码
+        let root_secret = match KeychainSecretStore.get(&node_id, SecretKind::RootPassword) {
+            Ok(opt) => opt,
+            Err(e) => {
+                log::debug!("ssh root password keychain read failed: {e}");
+                None
+            }
+        };
+        if let Some(root_pw) = root_secret {
+            crate::ssh_manager::su_password_injector::spawn_su_password_injector(
+                terminal_view.read(ctx, |v, c| v.inactive_pty_reads_rx(c)),
+                terminal_view.downgrade(),
+                root_pw,
+                ctx,
+            );
+        }
 
         // 3. 排队 ssh 命令,等 bootstrap 完成自动 flush。
         terminal_view.update(ctx, |view, ctx| {
@@ -5747,7 +5826,7 @@ impl Workspace {
     /// Builds the unified new-session menu items
     /// tab bar chevron and the vertical tab bar `+` button.
     ///
-    /// Order: Agent → Terminal (sidecar) → Ambient Agent → [tab configs] → separator → New worktree config (sidecar) → New tab config → separator → Reopen closed session.
+    /// Order: Terminal → User tab configs → separator → Agent → Coding Agents → separator → Docker → Worktree config → New tab config → separator → Reopen closed session.
     fn unified_new_session_menu_items(
         &self,
         ctx: &mut ViewContext<Self>,
@@ -5762,18 +5841,7 @@ impl Workspace {
         let reopen_closed_session_shortcut_label =
             keybinding_name_to_display_string("app:reopen_closed_session", ctx);
 
-        // 1. Agent (if AI enabled)
-        if is_any_ai_enabled {
-            let mut agent_item = MenuItemFields::new(crate::t!("workspace-new-session-agent"))
-                .with_on_select_action(WorkspaceAction::AddAgentTab)
-                .with_icon(icons::Icon::LayoutAlt01);
-            if effective_default == DefaultSessionMode::Agent {
-                agent_item = agent_item.with_key_shortcut_label(shortcut_label.clone());
-            }
-            menu_items.push(agent_item.into_item());
-        }
-
-        // 2. Terminal (+ individual shells on Windows)
+        // 1. Terminal (+ individual shells on Windows)
         {
             // On Windows, list the default terminal and each available shell as
             // individual top-level items (no submenu) so each gets a sidecar.
@@ -5831,24 +5899,10 @@ impl Workspace {
             }
         }
 
-        // 3. Local Docker Sandbox
-        if FeatureFlag::LocalDockerSandbox.is_enabled() {
-            let mut docker_item =
-                MenuItemFields::new(crate::t!("workspace-new-session-local-docker-sandbox"))
-                    .with_on_select_action(WorkspaceAction::AddDockerSandboxTab)
-                    .with_icon(icons::Icon::Docker);
-            if effective_default == DefaultSessionMode::DockerSandbox {
-                docker_item = docker_item.with_key_shortcut_label(shortcut_label.clone());
-            }
-            menu_items.push(docker_item.into_item());
-        }
-
-        // 4. User tab configs
+        // 2. User tab configs
         if FeatureFlag::TabConfigs.is_enabled() {
             let tab_configs = WarpConfig::as_ref(ctx).tab_configs().to_vec();
 
-            // Count occurrences of each config name so we can disambiguate
-            // duplicates in the menu (e.g. "My Tab Config", "My Tab Config (1)").
             let mut name_totals: HashMap<String, usize> = HashMap::new();
             for config in &tab_configs {
                 *name_totals.entry(config.name.clone()).or_default() += 1;
@@ -5890,7 +5944,60 @@ impl Workspace {
             }
         }
 
-        // 5. Separator + worktree config entry + new tab config
+        // 3. Separator — 仅在后面有 Agent 或 Coding Agent 时才显示
+        if is_any_ai_enabled {
+            menu_items.push(MenuItem::Separator);
+        }
+
+        // 4. Agent (if AI enabled)
+        if is_any_ai_enabled {
+            let mut agent_item = MenuItemFields::new(crate::t!("workspace-new-session-agent"))
+                .with_on_select_action(WorkspaceAction::AddAgentTab)
+                .with_icon(icons::Icon::LayoutAlt01);
+            if effective_default == DefaultSessionMode::Agent {
+                agent_item = agent_item.with_key_shortcut_label(shortcut_label.clone());
+            }
+            menu_items.push(agent_item.into_item());
+        }
+
+        // 5. Coding Agents — 仅已安装的出现在菜单中
+        let coding_agent_count = {
+            let start_len = menu_items.len();
+            for agent in enum_iterator::all::<CLIAgent>() {
+                if matches!(agent, CLIAgent::Unknown) {
+                    continue;
+                }
+                if !agent.is_installed() {
+                    continue;
+                }
+                let icon = agent.icon().unwrap_or(icons::Icon::LayoutAlt01);
+                let item = MenuItemFields::new(agent.display_name())
+                    .with_on_select_action(WorkspaceAction::AddSpecificAgentTab(agent))
+                    .with_icon(icon);
+                menu_items.push(item.into_item());
+            }
+            menu_items.len() - start_len
+        };
+
+        // 6. Separator — 仅当 coding agent 有内容且 Docker 启用时才显示
+        // TabConfigs 区域在 step 8 自带分隔线，无需这里重复
+        if coding_agent_count > 0 && FeatureFlag::LocalDockerSandbox.is_enabled() {
+            menu_items.push(MenuItem::Separator);
+        }
+
+        // 7. Local Docker Sandbox
+        if FeatureFlag::LocalDockerSandbox.is_enabled() {
+            let mut docker_item =
+                MenuItemFields::new(crate::t!("workspace-new-session-local-docker-sandbox"))
+                    .with_on_select_action(WorkspaceAction::AddDockerSandboxTab)
+                    .with_icon(icons::Icon::Docker);
+            if effective_default == DefaultSessionMode::DockerSandbox {
+                docker_item = docker_item.with_key_shortcut_label(shortcut_label.clone());
+            }
+            menu_items.push(docker_item.into_item());
+        }
+
+        // 8. Separator + worktree config entry + new tab config
         if FeatureFlag::TabConfigs.is_enabled() {
             menu_items.push(MenuItem::Separator);
             menu_items.push(
@@ -5899,7 +6006,6 @@ impl Workspace {
                     .into_item(),
             );
 
-            // 6. New tab config — V0: opens the TOML template.
             menu_items.push(
                 MenuItemFields::new(crate::t!("workspace-new-tab-config"))
                     .with_on_select_action(WorkspaceAction::SelectNewSessionMenuItem(
@@ -6863,6 +6969,21 @@ impl Workspace {
         let cd_command = format!("cd {}", shell_words::quote(path_str));
         input_handle.update(ctx, |input_view, ctx| {
             input_view.replace_buffer_content(&cd_command, ctx);
+        });
+    }
+
+    // 远端文件浏览器的 cd:与本地 cd_to_directory 不同,这里直接执行命令而不是
+    // 填入输入框。原因是远端会话切换工作目录后需要立即反馈到会话状态,且面板
+    // 是右键菜单触发的明确意图,不需要再让用户二次确认。
+    fn cd_to_remote_directory(&mut self, path: &str, ctx: &mut ViewContext<Self>) {
+        let Some(input_handle) = self.get_active_input_view_handle(ctx) else {
+            log::warn!("No active input view when trying to cd to remote directory");
+            return;
+        };
+
+        let cd_command = format!("cd -- {}", shell_words::quote(path));
+        input_handle.update(ctx, |input_view, ctx| {
+            input_view.try_execute_command(&cd_command, ctx);
         });
     }
 
@@ -8266,6 +8387,11 @@ impl Workspace {
             Some(WorkspaceAction::AddDockerSandboxTab) => SidecarItemKind::BuiltIn {
                 name: label.to_string(),
                 default_mode: DefaultSessionMode::DockerSandbox,
+                shell: None,
+            },
+            Some(WorkspaceAction::AddSpecificAgentTab(agent)) => SidecarItemKind::BuiltIn {
+                name: agent.display_name().to_string(),
+                default_mode: DefaultSessionMode::Agent,
                 shell: None,
             },
             _ => {
@@ -12594,6 +12720,13 @@ impl Workspace {
                 if let Ok(std_path) = StandardizedPath::try_new(indexed_path) {
                     let remote_id = RemoteRepositoryIdentifier::new(host_id.clone(), std_path);
                     let pane_group_id = pane_group.id();
+                    self.left_panel_view.update(ctx, |left_panel, ctx| {
+                        left_panel.navigate_server_file_browser(
+                            host_id.clone(),
+                            indexed_path.to_string(),
+                            ctx,
+                        );
+                    });
                     if let Some(file_tree_view) = self
                         .working_directories_model
                         .as_ref(ctx)
@@ -13450,6 +13583,7 @@ impl Workspace {
 
             let window_id = ctx.window_id();
             let path_if_local_clone = path_if_local.clone();
+            let server_file_browser_session = session.clone();
             ActiveSession::handle(ctx).update(ctx, |active_session, ctx| {
                 active_session.set_session_state(
                     window_id,
@@ -13477,9 +13611,39 @@ impl Workspace {
             // directory so it can start indexing and push repo metadata back.
             #[cfg(feature = "local_fs")]
             if has_remote_server {
-                if let (Some(sid), Some(cwd)) = (session_id, pwd) {
+                if let (Some(sid), Some(cwd)) = (session_id, pwd.clone()) {
                     RemoteServerManager::handle(ctx).update(ctx, |mgr, ctx| {
-                        mgr.navigate_to_directory(sid, cwd, ctx);
+                        mgr.navigate_to_directory(sid, cwd.clone(), ctx);
+                    });
+                }
+            }
+
+            // Bind the server file browser to the active remote session.
+            // When the remote server is connected, the client path is fast
+            // and feature-complete. Otherwise fall back to
+            // `Session::execute_command` for basic directory browsing.
+            #[cfg(feature = "local_fs")]
+            if let (Some(sid), Some(cwd), Some(s)) =
+                (session_id, pwd.clone(), server_file_browser_session)
+            {
+                // 加上 `ServerFileBrowser` 守卫,确保该功能被 `ZAP_UNSTABLE_FEATURES`
+                // 关闭时不要在 SSH 会话激活后偷偷拉取远程目录,避免任何相关后台活动。
+                if is_remote
+                    && FeatureFlag::ServerFileBrowser.is_enabled()
+                    && FeatureFlag::SshRemoteServer.is_enabled()
+                {
+                    let host_id = RemoteServerManager::as_ref(ctx)
+                        .host_id_for_session(sid)
+                        .cloned()
+                        .unwrap_or_else(|| HostId::new(format!("ssh-{sid:?}")));
+                    self.left_panel_view.update(ctx, |left_panel, ctx| {
+                        left_panel.set_server_file_browser_root(
+                            host_id,
+                            cwd,
+                            Some(sid),
+                            Some(s),
+                            ctx,
+                        );
                     });
                 }
             }
@@ -15513,6 +15677,9 @@ impl Workspace {
                         ToolPanelView::SshManager => {
                             crate::t!("workspace-left-panel-ssh-manager")
                         }
+                        ToolPanelView::ServerFileBrowser => {
+                            crate::t!("workspace-left-panel-server-file-browser")
+                        }
                         ToolPanelView::SkillManager => {
                             crate::t!("workspace-left-panel-skill-manager")
                         }
@@ -15578,6 +15745,9 @@ impl Workspace {
                 }
                 ToolPanelView::SshManager => {
                     crate::t!("workspace-left-panel-ssh-manager")
+                }
+                ToolPanelView::ServerFileBrowser => {
+                    crate::t!("workspace-left-panel-server-file-browser")
                 }
                 ToolPanelView::SkillManager => {
                     crate::t!("workspace-left-panel-skill-manager")
@@ -17848,6 +18018,10 @@ impl Workspace {
             context.set.insert(flags::LEGACY_SSH_WRAPPER_CONTEXT_FLAG);
         }
 
+        if *ssh_settings.enable_ssh_auto_discovery.value() {
+            context.set.insert(flags::SSH_AUTO_DISCOVERY_CONTEXT_FLAG);
+        }
+
         if *warpify_settings.use_ssh_tmux_wrapper.value() {
             context.set.insert(flags::SSH_TMUX_WRAPPER_CONTEXT_FLAG);
         }
@@ -18252,6 +18426,9 @@ impl Workspace {
         }
         // openWarp 独有:SSH 管理器,无 feature flag,默认始终显示。
         views.push(ToolPanelView::SshManager);
+        if FeatureFlag::ServerFileBrowser.is_enabled() && FeatureFlag::SshRemoteServer.is_enabled() {
+            views.push(ToolPanelView::ServerFileBrowser);
+        }
         // openWarp 独有:Skill 管理器,无 feature flag,local_fs 构建下默认显示。
         if cfg!(feature = "local_fs") {
             views.push(ToolPanelView::SkillManager);
@@ -18440,6 +18617,7 @@ impl TypedActionView for Workspace {
             }
             AddGetStartedTab => self.add_get_started_tab(ctx),
             AddAgentTab => self.add_terminal_tab_with_new_agent_view(ctx),
+            AddSpecificAgentTab(agent) => self.add_tab_with_specific_agent(*agent, ctx),
             AddDockerSandboxTab => self.add_docker_sandbox_tab(ctx),
             StartAgentOnboardingTutorial(tutorial) => {
                 self.start_agent_onboarding_tutorial(tutorial.clone(), ctx)

@@ -377,6 +377,9 @@ pub enum FeatureFlag {
     /// Enables the file tree (with an entrypoint through code mode).
     FileTree,
 
+    /// Enables the current SSH session server file browser in the left panel.
+    ServerFileBrowser,
+
     /// Enables ignoring input suggestions.
     AllowIgnoringInputSuggestions,
 
@@ -741,12 +744,12 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::VerticalTabsSummaryMode,
     FeatureFlag::ConfigurableContextWindow,
     FeatureFlag::DragTabsToWindows,
+    FeatureFlag::ServerFileBrowser,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Zap).
 /// All PREVIEW_FLAGS are also automatically added to dogfood builds (WarpDev).
 pub const PREVIEW_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::BlocklistMarkdownTableRendering,
     FeatureFlag::MarkdownTables,
     FeatureFlag::GitOperationsInCodeReview,
 ];
@@ -763,6 +766,7 @@ pub const RELEASE_FLAGS: &[FeatureFlag] = &[
     // 否则只能看到 OS 的候选窗,Zap 会把 marked text 更新整体丢弃。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     FeatureFlag::ImeMarkedText,
+    FeatureFlag::BlocklistMarkdownTableRendering,
     // Remote server binary is not yet supported on Windows.
     #[cfg(not(windows))]
     FeatureFlag::SshRemoteServer,

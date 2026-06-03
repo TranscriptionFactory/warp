@@ -64,6 +64,11 @@ fn build_env() -> Environment<'static> {
     )
     .expect("footer partial parses");
     env.add_template(
+        "partials/thinking_language.j2",
+        include_str!("prompts/partials/thinking_language.j2"),
+    )
+    .expect("thinking_language partial parses");
+    env.add_template(
         "partials/plan_mode.j2",
         include_str!("prompts/partials/plan_mode.j2"),
     )
@@ -191,6 +196,11 @@ struct GitCtx {
 struct SkillCtx {
     name: String,
     description: String,
+    /// Absolute path to SKILL.md for filesystem skills; `None` for bundled skills.
+    /// Bundled skills are loaded via `AIAgentInput::InvokeSkill`, not `read_skill`,
+    /// so exposing `@warp-skill:<id>` here would mislead the model into calling a
+    /// path that always fails the BYOP `skill_by_reference` lookup.
+    path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -297,9 +307,19 @@ fn collect_prompt_context(model_id: &str, ctx: &[AIAgentContext]) -> PromptConte
             }
             AIAgentContext::Skills { skills } => {
                 for s in skills {
+                    let path = match &s.reference {
+                        ai::skills::SkillReference::Path(p) => {
+                            Some(p.to_string_lossy().into_owned())
+                        }
+                        // Bundled skills load via InvokeSkill, not read_skill.
+                        // Omit skill_path to avoid guiding the model toward a
+                        // value that will always fail BYOP's skill_by_reference.
+                        ai::skills::SkillReference::BundledSkillId(_) => None,
+                    };
                     out.skills.push(SkillCtx {
                         name: s.name.clone(),
                         description: s.description.clone(),
+                        path,
                     });
                 }
             }
@@ -566,6 +586,67 @@ mod tests {
         );
     }
 
+    /// Issue #169 回归:系统 prompt 中的 skill 区块必须包含 skill_path(绝对路径),
+    /// 而非仅 name/description,否则模型无法正确调用 read_skill 工具。
+    #[test]
+    fn render_includes_skill_path_for_read_skill_tool() {
+        use crate::ai::skills::SkillDescriptor;
+        use ai::skills::{SkillProvider, SkillReference, SkillScope};
+
+        let skill_path = "/home/user/.agents/skills/open-browser-use/SKILL.md";
+        let skill = SkillDescriptor {
+            reference: SkillReference::Path(skill_path.into()),
+            name: "open-browser-use".into(),
+            description: "Automates Chrome browser operations.".into(),
+            scope: SkillScope::Project,
+            provider: SkillProvider::Agents,
+            icon_override: None,
+        };
+        let ctx = vec![AIAgentContext::Skills {
+            skills: vec![skill],
+        }];
+        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &ctx, &[], false, &[]);
+        assert!(
+            out.contains(skill_path),
+            "system prompt must expose the skill_path so the model can pass it to read_skill; got: {out}"
+        );
+    }
+
+    /// Issue #169 后续:bundled skill 的 BundledSkillId 变体在 BYOP 路径下不可通过
+    /// read_skill 加载(走 InvokeSkill),因此 system prompt 中不应输出 <skill_path>
+    /// 以避免模型使用必然失败的 @warp-skill:{id} 值。
+    #[test]
+    fn render_omits_skill_path_for_bundled_skill() {
+        use crate::ai::skills::SkillDescriptor;
+        use ai::skills::{SkillProvider, SkillReference, SkillScope};
+        use warp_core::ui::icons::Icon;
+
+        let skill = SkillDescriptor {
+            reference: SkillReference::BundledSkillId("find-skills".into()),
+            name: "find-skills".into(),
+            description: "Help discover and install new agent skills.".into(),
+            scope: SkillScope::Bundled,
+            provider: SkillProvider::Zap,
+            icon_override: Some(Icon::WarpLogoLight),
+        };
+        let ctx = vec![AIAgentContext::Skills {
+            skills: vec![skill],
+        }];
+        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &ctx, &[], false, &[]);
+        assert!(
+            out.contains("find-skills"),
+            "bundled skill name should still appear in prompt: {out}"
+        );
+        assert!(
+            !out.contains("@warp-skill:"),
+            "bundled skill must NOT emit <skill_path> to avoid misleading the model: {out}"
+        );
+        assert!(
+            !out.contains("<skill_path>"),
+            "no <skill_path> tag should be rendered for bundled skills: {out}"
+        );
+    }
+
     #[test]
     fn fallback_does_not_panic() {
         // render_system 永远不会 panic,失败也走 fallback_system
@@ -757,6 +838,64 @@ mod tests {
         assert!(
             !out.contains("## \n"),
             "无 name 时不应渲染空的 '## ' 标题: {out}"
+        );
+    }
+
+    #[test]
+    fn render_includes_thinking_language_across_all_template_families() {
+        // thinking_language.j2 经 footer.j2 注入,所有 system 模板族都引用了 footer。
+        // 回归用例确保 8 族模板都会渲染 thinking_language,不会因为某条家族没拉 footer
+        // 而漏注入,导致 LLM 在中文用户提问时仍用英文思考。
+        // 8 族对应: anthropic / gpt / beast / codex / gemini / kimi / trinity / default
+        for id in [
+            "claude-sonnet-4-5",
+            "gpt-3.5-turbo",
+            "gpt-4o",
+            "gpt-5-codex",
+            "gemini-2.5-pro",
+            "kimi-k2",
+            "trinity-v1",
+            "weird-model",
+        ] {
+            let out = render_system(
+                &LLMId::from(format!("byop:p:{id}").as_str()),
+                &[],
+                &[],
+                false,
+                &[],
+            );
+            assert!(
+                out.contains("# Thinking language"),
+                "id={id} 应渲染 thinking_language 区块: {out}"
+            );
+            assert!(
+                out.contains("internal reasoning"),
+                "id={id} 应包含 thinking_language 锚点: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_thinking_language_precedes_tool_aliases() {
+        // meta-rule 应在工具列表之前,不被 user_rules / project_rules 覆盖。
+        // 需要传一个非空 tool 列表,否则 tool_aliases.j2 整个块被 {% if available_tools %} 跳过。
+        let tools = vec!["read_files".to_string()];
+        let out = render_system(
+            &LLMId::from("byop:p:claude-sonnet-4-5"),
+            &[],
+            &tools,
+            false,
+            &[],
+        );
+        let pos_thinking = out
+            .find("# Thinking language")
+            .expect("应包含 thinking_language");
+        let pos_tools = out
+            .find("# Available Tools")
+            .expect("应包含 tool_aliases");
+        assert!(
+            pos_thinking < pos_tools,
+            "thinking_language 应在 tool_aliases 之前: thinking={pos_thinking}, tools={pos_tools}\n{out}"
         );
     }
 }

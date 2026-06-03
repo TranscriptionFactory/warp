@@ -524,6 +524,7 @@ settings-section-shared-blocks = 共有ブロック
 settings-section-warp-drive = OpenWarp Drive
 settings-section-warpify = Warpify
 settings-section-network = ネットワーク
+settings-section-cloud-sync = クラウド同期
 settings-section-ai = AI
 settings-section-warp-agent = OpenWarp エージェント
 settings-section-agent-profiles = プロファイル
@@ -797,6 +798,53 @@ settings-network-test-success-http = ✅ インターネット到達可能 ({$la
 settings-network-test-failed-tcp = ❌ プロキシに到達できません: {$error}
 settings-network-test-failed-http = ❌ 接続失敗: {$error}
 
+# --- ANCHOR-SUB-CLOUD-SYNC (agent-settings-cloud-sync) ---
+# クラウド同期設定ページ
+settings-cloud-sync-description = GitHub Gist または Gitee Gist を介してクラウド同期を設定します。設定は暗号化され、シークレット Gist として保存されます。
+settings-cloud-sync-scope-note = 現在、SSH管理サーバーの設定データのみ同期しています。
+settings-cloud-sync-platform-label = 同期プラットフォーム
+settings-cloud-sync-platform-description = 同期に使用するクラウドサービスを選択
+settings-cloud-sync-token-label = アクセストークン
+settings-cloud-sync-token-description = gist 権限のある個人アクセストークン
+settings-cloud-sync-token-placeholder = アクセストークンを入力...
+settings-cloud-sync-operations-header = 同期操作
+settings-cloud-sync-upload-label = アップロード
+settings-cloud-sync-download-label = ダウンロード
+settings-cloud-sync-status-header = 同期ステータス
+settings-cloud-sync-local-version-label = ローカルバージョン
+settings-cloud-sync-last-time-label = 最終同期時刻
+settings-cloud-sync-last-platform-label = 最終同期プラットフォーム
+settings-cloud-sync-local-version = ローカルバージョン: {$version}
+settings-cloud-sync-last-time = 最終同期時刻: {$time}
+settings-cloud-sync-last-platform = 最終同期プラットフォーム: {$platform}
+settings-cloud-sync-na = N/A
+settings-cloud-sync-never = 未同期
+settings-cloud-sync-syncing-upload = {$platform} にアップロード中...
+settings-cloud-sync-syncing-download = {$platform} からダウンロード中...
+settings-cloud-sync-success-upload = {$platform} へのアップロード成功（バージョン v{$version}）
+settings-cloud-sync-success-download = {$platform} からのダウンロード成功（バージョン v{$version}）
+settings-cloud-sync-already-up-to-date = 最新バージョンです（v{$version}）、同期不要
+settings-cloud-sync-failed = 失敗: {$error}
+settings-cloud-sync-conflict-status = 競合: ローカル v{$local} vs リモート v{$remote}
+settings-cloud-sync-conflict-status-equal = バージョンが一致: ローカル v{$local} = リモート v{$remote}
+settings-cloud-sync-token-not-configured = {$platform} Token が設定されていません
+settings-cloud-sync-conflict-title = バージョン競合
+settings-cloud-sync-conflict-description = リモートバージョン（v{$remote}）がローカル（v{$local}）より新しいです。強制アップロードするとリモートデータが上書きされます。
+settings-cloud-sync-conflict-description-equal = リモートバージョンとローカルバージョンが同一です。強制アップロードするとリモートデータが上書きされます。
+settings-cloud-sync-force-upload = 強制アップロード
+settings-cloud-sync-download-confirm-title = ダウンロードの確認
+settings-cloud-sync-download-confirm-description = ダウンロードすると、ローカルのすべてのSSHサーバー設定がリモートバージョンに置き換えられます。この操作は元に戻せません。
+settings-cloud-sync-download-confirm-button = ダウンロードを確認
+settings-cloud-sync-upload-confirm-title = アップロードの確認
+settings-cloud-sync-upload-confirm-description = アップロードすると、リモートのすべての SSH サーバー設定がローカルバージョンで上書きされます。Gist は履歴を保持しないため、この操作は元に戻せません。
+settings-cloud-sync-upload-confirm-button = アップロードを確認
+settings-cloud-sync-clear = クリア
+settings-cloud-sync-validating = トークンを検証中...
+settings-cloud-sync-token-valid = トークン有効（{$username}）
+settings-cloud-sync-token-invalid = 無効なトークン：{$error}
+settings-cloud-sync-auto-sync-label = 自動同期
+settings-cloud-sync-auto-sync-description = 設定変更時に自動アップロード、アプリ起動時に自動ダウンロード
+
 # --- ANCHOR-SUB-AI-PAGE (agent-settings-ai-page) ---
 # Section / sub-headers
 settings-ai-warp-agent-header = OpenWarp エージェント
@@ -960,6 +1008,7 @@ settings-features-mouse-scroll-multiplier = マウスホイール 1 回でスク
 settings-features-auto-open-code-review = コードレビューパネルを自動で開く
 settings-features-max-rows-per-block = ブロック内の最大行数
 settings-features-ssh-wrapper = OpenWarp SSH ラッパー
+settings-features-ssh-auto-discovery = SSH ホストの自動検出
 settings-features-receive-desktop-notifications = OpenWarp からのデスクトップ通知を受信
 settings-features-show-in-app-agent-notifications = アプリ内エージェント通知を表示
 settings-features-confirm-close-shared-session = 読み取り専用セッションを閉じる前に確認
@@ -1273,6 +1322,7 @@ settings-appearance-block-show-dividers-label = ブロックの区切り線を�
 # Text / Fonts
 settings-appearance-font-agent-label = エージェントフォント
 settings-appearance-font-match-terminal = ターミナルに合わせる
+settings-appearance-font-ui-label = UI フォント
 settings-appearance-font-terminal-label = ターミナルフォント
 settings-appearance-font-view-all-system = 利用可能なシステムフォントをすべて表示
 settings-appearance-font-weight-label = フォントの太さ
@@ -2107,6 +2157,7 @@ toggle-suffix-audible-bell = ターミナル音響ベル
 toggle-suffix-autosuggestions = オートサジェスト
 toggle-suffix-autosuggestion-keybinding-hint = オートサジェストキーバインドヒント
 toggle-suffix-ssh-wrapper = OpenWarp SSH ラッパー
+toggle-suffix-ssh-auto-discovery = SSH ホストの自動検出
 toggle-suffix-link-tooltip = リンククリック時のツールチップ表示
 toggle-suffix-quit-warning = 終了警告モーダル
 toggle-suffix-alias-expansion = エイリアス展開
@@ -2586,11 +2637,15 @@ workspace-left-panel-ssh-manager-menu-new-folder = 新しいフォルダ
 workspace-left-panel-ssh-manager-menu-new-server = 新しい SSH サーバー
 workspace-left-panel-ssh-manager-menu-edit = 編集
 workspace-left-panel-ssh-manager-menu-connect = 接続
+workspace-left-panel-ssh-manager-menu-sftp = ファイル管理
+workspace-left-panel-ssh-manager-menu-clone = 複製
 workspace-left-panel-ssh-manager-menu-delete = 削除
 workspace-left-panel-ssh-manager-pane-hint = フィールドの編集と「接続」は次のイテレーションで提供されます。現状このペインは保存済み設定を表示するだけです。SQLite ストアか、まもなく登場するエディタで調整してください。
 workspace-left-panel-ssh-manager-pane-folder-body = フォルダ。フォルダ内のサーバーを選択すると詳細が表示されます。フォルダを右クリックすると作成/削除アクションが利用できます。
 workspace-left-panel-ssh-manager-server-missing = サーバーが見つかりません。別のウィンドウから削除された可能性があります。
 workspace-left-panel-ssh-manager-field-name = 名前
+workspace-left-panel-ssh-manager-field-group = グループ
+workspace-left-panel-ssh-manager-group-root = ルート
 workspace-left-panel-ssh-manager-passphrase = パスフレーズ
 workspace-left-panel-ssh-manager-save = 保存
 workspace-left-panel-ssh-manager-status-saved = 保存しました。
@@ -2598,10 +2653,38 @@ workspace-left-panel-ssh-manager-error-name-required = 名前は空にできま�
 workspace-left-panel-ssh-manager-error-port-invalid = ポートは 1〜65535 の数値を指定してください。
 workspace-left-panel-ssh-manager-error-host-required = ホストは空にできません。
 workspace-left-panel-ssh-manager-connect = 接続
+workspace-left-panel-ssh-manager-test = テスト
+workspace-left-panel-ssh-manager-testing = テスト中...
+workspace-left-panel-ssh-manager-status-online = オンライン
+workspace-left-panel-ssh-manager-status-offline = オフライン
+workspace-left-panel-ssh-manager-status-unknown = 不明
 search-filter-placeholder-ssh-servers = SSH サーバーを検索...
 search-filter-display-ssh-servers = SSH サーバー
 workspace-left-panel-ssh-manager-menu-rename = 名前変更
 workspace-left-panel-ssh-manager-tree-empty = SSH サーバーがまだありません。📁 でフォルダ追加、+ でサーバー追加。
+workspace-left-panel-ssh-manager-root-password = Root パスワード
+workspace-left-panel-ssh-manager-root-password-placeholder = root 切り替え時のパスワード
+workspace-left-panel-ssh-manager-startup-command = 起動コマンド
+workspace-left-panel-ssh-manager-startup-command-placeholder = 接続成功後に自動実行するコマンド
+workspace-left-panel-ssh-manager-notes = メモ
+workspace-left-panel-ssh-manager-notes-placeholder = メモ情報
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-header = { $path } から
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-empty = { $path } にインポート可能なホストがありません
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-not-found = SSH 設定ファイルが見つかりません: { $path }
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-error = SSH 設定の読み込みに失敗しました { $path }: { $error }
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-add = SSH マネージャーに追加
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-added = 追加済み
+# TODO: review
+workspace-left-panel-ssh-manager-candidates-refresh = ~/.ssh/config から再読み込み
+terminal-su-root-password-confirm = Root パスワードを自動入力
+terminal-su-root-password-confirm-subtitle = クリックして保存された Root パスワードを入力
+terminal-su-root-password-cancel = キャンセル
 workspace-left-panel-close-panel = パネルを閉じる
 workspace-tabs-panel-tooltip = タブパネル
 workspace-tools-panel-tooltip = ツールパネル

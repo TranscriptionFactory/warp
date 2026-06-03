@@ -24,7 +24,7 @@ use super::settings_page::{
 };
 use super::settings_page::{
     render_body_item, render_dropdown_item, AdditionalInfo, SettingsPageMeta,
-    SettingsPageViewHandle, ToggleState, CONTENT_FONT_SIZE, HEADER_PADDING,
+    SettingsPageViewHandle, ToggleState, HEADER_PADDING,
 };
 use super::{features, SettingsAction};
 use super::{flags, DisplayCount};
@@ -45,7 +45,8 @@ use crate::settings::{
     AliasExpansionEnabled, AliasExpansionSettings, AppEditorSettings, AtContextMenuInTerminalMode,
     AutocompleteSymbols, AutosuggestionKeybindingHint, CodeSettings, CommandCorrections,
     CompletionsOpenWhileTyping, CopyOnSelect, CtrlTabBehavior, DefaultSessionMode,
-    EnableSlashCommandsInTerminal, EnableSshWrapper, ErrorUnderliningEnabled, ExtraMetaKeys,
+    EnableSshAutoDiscovery, EnableSlashCommandsInTerminal, EnableSshWrapper,
+    ErrorUnderliningEnabled, ExtraMetaKeys,
     GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
     LinuxSelectionClipboard, MiddleClickPasteEnabled, MouseScrollMultiplier, PreferLowPowerGPU,
     PreferencesSettings, PreferredGraphicsBackend, QuakeModeSettings, ScrollSettings,
@@ -371,6 +372,15 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     }
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        &crate::t!("toggle-suffix-ssh-auto-discovery"),
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleSshAutoDiscovery,
+        )),
+        context,
+        flags::SSH_AUTO_DISCOVERY_CONTEXT_FLAG,
+    ));
+
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
         &crate::t!("toggle-suffix-link-tooltip"),
         builder(SettingsAction::FeaturesPageToggle(
             FeaturesPageAction::ToggleLinkTooltip,
@@ -633,6 +643,7 @@ pub enum FeaturesPageAction {
     ToggleOpenLinksInDesktopApp,
     #[deprecated]
     ToggleSshWrapper,
+    ToggleSshAutoDiscovery,
     ToggleSnackbar,
     ToggleLinkTooltip,
     ToggleCompletionsOpenWhileTyping,
@@ -825,6 +836,10 @@ impl FeaturesPageAction {
             Self::ToggleSshWrapper => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleSshWrapper".to_string(),
                 value: to_string(*ssh_settings.enable_legacy_ssh_wrapper.value()),
+            },
+            Self::ToggleSshAutoDiscovery => TelemetryEvent::FeaturesPageAction {
+                action: "ToggleSshAutoDiscovery".to_string(),
+                value: to_string(*ssh_settings.enable_ssh_auto_discovery.value()),
             },
             Self::SetGlobalHotkeyMode(mode) => TelemetryEvent::FeaturesPageAction {
                 action: "SetGlobalHotkeyMode".to_string(),
@@ -1383,6 +1398,13 @@ impl TypedActionView for FeaturesPageView {
                 SshSettings::handle(ctx).update(ctx, |ssh_settings, ctx| {
                     report_if_error!(ssh_settings
                         .enable_legacy_ssh_wrapper
+                        .toggle_and_save_value(ctx));
+                });
+            }
+            ToggleSshAutoDiscovery => {
+                SshSettings::handle(ctx).update(ctx, |ssh_settings, ctx| {
+                    report_if_error!(ssh_settings
+                        .enable_ssh_auto_discovery
                         .toggle_and_save_value(ctx));
                 });
             }
@@ -2334,7 +2356,7 @@ impl FeaturesPageView {
             ctx.add_typed_action_view(|ctx| {
                 let options = SingleLineEditorOptions {
                     text: TextOptions {
-                        font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_size() - 2.),
+                        font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_footnote()),
                         ..Default::default()
                     },
                     ..Default::default()
@@ -2360,7 +2382,7 @@ impl FeaturesPageView {
         let notification_toast_duration_editor = ctx.add_typed_action_view(|ctx| {
             let options = SingleLineEditorOptions {
                 text: TextOptions {
-                    font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_size() - 2.),
+                    font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_footnote()),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -2544,6 +2566,13 @@ impl FeaturesPageView {
                 .is_supported_on_current_platform()
         {
             session_widgets.push(Box::new(SSHWrapperWidget::default()));
+        }
+
+        if SshSettings::as_ref(ctx)
+            .enable_ssh_auto_discovery
+            .is_supported_on_current_platform()
+        {
+            session_widgets.push(Box::new(SSHAutoDiscoveryWidget::default()));
         }
 
         let session_settings = SessionSettings::as_ref(ctx);
@@ -3656,7 +3685,7 @@ impl FeaturesPageView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let theme = appearance.theme();
-        let font_size = appearance.ui_font_size() - 2.;
+        let font_size = appearance.ui_font_footnote();
         let font_color = if notification_settings.is_long_running_enabled {
             theme.active_ui_text_color()
         } else {
@@ -3762,7 +3791,7 @@ impl FeaturesPageView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let text = text.to_string();
-        let font_size = appearance.ui_font_size() - 2.;
+        let font_size = appearance.ui_font_footnote();
         let font_color = if is_enabled {
             appearance.theme().active_ui_text_color()
         } else {
@@ -4309,7 +4338,7 @@ impl SettingsWidget for SessionRestorationWidget {
             let message = Text::new_inline(
                 crate::t!("settings-features-wayland-window-restore-warning"),
                 appearance.ui_font_family(),
-                CONTENT_FONT_SIZE,
+                appearance.ui_font_body(),
             )
             .with_color(appearance.theme().disabled_ui_text_color().into())
             .finish();
@@ -4911,6 +4940,52 @@ impl SettingsWidget for SSHWrapperWidget {
 }
 
 #[derive(Default)]
+struct SSHAutoDiscoveryWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for SSHAutoDiscoveryWidget {
+    type View = FeaturesPageView;
+
+    fn search_terms(&self) -> &str {
+        "ssh auto discovery"
+    }
+
+    fn render(
+        &self,
+        view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let ui_builder = appearance.ui_builder();
+        render_body_item::<FeaturesPageAction>(
+            crate::t!("settings-features-ssh-auto-discovery"),
+            None,
+            LocalOnlyIconState::for_setting(
+                EnableSshAutoDiscovery::storage_key(),
+                EnableSshAutoDiscovery::sync_to_cloud(),
+                &mut view
+                    .button_mouse_states
+                    .local_only_icon_tooltip_states
+                    .borrow_mut(),
+                app,
+            ),
+            ToggleState::Enabled,
+            appearance,
+            ui_builder
+                .switch(self.switch_state.clone())
+                .check(*SshSettings::as_ref(app).enable_ssh_auto_discovery.value())
+                .build()
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleSshAutoDiscovery);
+                })
+                .finish(),
+            None,
+        )
+    }
+}
+
+#[derive(Default)]
 struct DesktopNotificationsWidget {
     additional_info_link: MouseStateHandle,
     switch_state: SwitchStateHandle,
@@ -5038,7 +5113,7 @@ impl SettingsWidget for DesktopNotificationsWidget {
 
             if show_agent_notifications {
                 let theme = appearance.theme();
-                let font_size = appearance.ui_font_size() - 2.;
+                let font_size = appearance.ui_font_footnote();
                 let font_color = theme.active_ui_text_color();
 
                 let editor_style = UiComponentStyles {
@@ -6228,7 +6303,7 @@ impl SettingsWidget for TabKeyBehaviorWidget {
                     .ui_builder()
                     .span(crate::t!("settings-features-tab-key-behavior"))
                     .with_style(UiComponentStyles {
-                        font_size: Some(CONTENT_FONT_SIZE + 1.),
+                        font_size: Some(appearance.ui_font_body_large()),
                         ..Default::default()
                     })
                     .build()
