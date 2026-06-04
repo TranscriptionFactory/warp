@@ -868,7 +868,7 @@ fn update_url(channel: Channel, version: &str) -> String {
             );
         }
         return format!(
-            "https://github.com/zerx-lab/warp/releases/download/v{version}/{asset}"
+            "https://github.com/TranscriptionFactory/warp/releases/download/v{version}/{asset}"
         );
     }
     format!(

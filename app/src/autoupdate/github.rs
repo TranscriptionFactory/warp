@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 
-const REPO_OWNER: &str = "zerx-lab";
+const REPO_OWNER: &str = "TranscriptionFactory";
 const REPO_NAME: &str = "warp";
 
 // GitHub 强制要求 User-Agent;同时显式声明 API 版本避免未来 default 漂移。
