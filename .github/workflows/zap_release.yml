@@ -2,9 +2,10 @@
 #
 # 与上游 create_release.yml 的差异:
 # - 仅 macOS arm64 + macOS Intel + Windows x64 + Linux x86_64,
-#   Web/CLI/Universal/Win-arm64 全砍
+#   Web/Universal/Win-arm64 全砍
 #   (macOS 双架构分别产单架构 DMG 与 CLI tarball;Linux 产 AppImage/deb/rpm
-#    以及尽力而为的 Arch 包,不发布上游 Zap 仓库源或签名 key)
+#    以及尽力而为的 Arch 包,不发布上游 Zap 仓库源或签名 key;
+#    Linux CLI tarball 额外产 aarch64 musl 静态版本,供 ARM 远端 SSH 安装)
 # - 单 channel: preview(由 release_configurations.json 提供配置)
 # - 不签名:不传 --read-passwords-from-env(macOS) / 不设 SIGN_TOOL_CMD(Windows)
 # - 不上传 GCS / 第三方 crash 平台 / Slack / changelog,不调 channel-versions repository_dispatch
@@ -442,6 +443,10 @@ jobs:
         run: |
           set -euo pipefail
           rustup target add x86_64-unknown-linux-musl
+          # 同时装 aarch64 musl 目标:zigbuild 在 x86_64 runner 上交叉编译出
+          # 静态 aarch64 CLI tarball,给 ARM Linux 远端(Graviton/Ampere/RPi 等)
+          # 用于 SSH remote-server 安装。原仅有 x86_64,所有 ARM 远端 404。
+          rustup target add aarch64-unknown-linux-musl
           # zig:用官方预编译 tarball,固定版本以保证构建可复现。
           # 0.13.0 与 cargo-zigbuild >= 0.19 兼容。
           ZIG_VERSION="0.13.0"
@@ -487,6 +492,38 @@ jobs:
         with:
           name: zap-cli-linux-x86_64
           path: openwarp-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+      # aarch64 CLI:同一台 x86_64 runner 上用 zigbuild 交叉编译,
+      # 复用上面装好的 zig + cargo-zigbuild。产出 openwarp-linux-aarch64.tar.gz,
+      # SSH remote-server 安装到 ARM Linux 远端(Graviton/Ampere/RPi 等)时
+      # ssh_transport.rs 会按 uname -m=aarch64 拼出这个文件名。
+      - name: Build CLI aarch64 (static musl via zigbuild)
+        id: bundle_cli_aarch64
+        run: |
+          script/bundle --channel "$CHANNEL" --arch aarch64 --artifact cli --packages none \
+            --target aarch64-unknown-linux-musl
+        shell: bash
+        env:
+          GIT_RELEASE_TAG: ${{ needs.prepare_metadata.outputs.release_tag }}
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          USE_ZIGBUILD: "true"
+          PKG_CONFIG_ALLOW_CROSS: 1
+
+      - name: Package CLI tarball aarch64
+        run: |
+          cp "${{ steps.bundle_cli_aarch64.outputs.executable_path }}" openwarp-oss
+          tar czf openwarp-linux-aarch64.tar.gz \
+            openwarp-oss \
+            -C "$(dirname "${{ steps.bundle_cli_aarch64.outputs.bundled_resources_dir }}")" resources
+        shell: bash
+
+      - name: Upload CLI artifact aarch64
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: zap-cli-linux-aarch64
+          path: openwarp-linux-aarch64.tar.gz
           if-no-files-found: error
           retention-days: 7
 
