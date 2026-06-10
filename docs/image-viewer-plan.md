@@ -101,7 +101,40 @@ spinner; tab persists/restores. Commit.
 
 ---
 
-## STAGE 2 — Remote images (the actual gap)
+## STAGE 2 — Remote images (the actual gap)  ✅ DONE
+
+**Status (2026-06-10):** ✅ Complete. Implemented across three commits:
+- `cb1f391f` — client fetch: `RemoteServerClient::read_file_bytes` (loops
+  `ReadFileChunk` @ 4 MiB/chunk until `eof`; maps server `FileOperationError` →
+  `ClientError::FileOperationFailed`). No proto change.
+- `91ed7a67` — render: `ImageViewerView::open_remote` inserts fetched bytes via
+  `insert_raw_asset_bytes::<ImageType>` (stable `host_id:path` asset id) +
+  `AssetSource::Raw`; `set_loading_remote` + a render branch show a spinner with
+  the filename before bytes arrive; `ImagePane::new_remote` builds the spinner-
+  first pane; title falls back to `remote_name` for remote images.
+- `9a7d161b` — routing/plumbing: remote file-tree click forks on
+  `is_supported_image_file` → `OpenRemoteImage` (else the existing
+  `OpenRemoteFile` text path); event plumbed `file_tree → left_panel →
+  workspace` behind `local_tty`; `Workspace::open_remote_image` creates the pane,
+  spawns the byte fetch, and fills the view on completion (load failure →
+  `log::warn!`, no blank pane). `open_image` refactored to share
+  `insert_image_pane`.
+
+**Build verification note:** This environment lacks full Xcode, so the `metal`
+shader compiler is unavailable and `warpui`'s build script cannot run — `cargo
+check`/`build` of `openwarp-oss` could not be executed here. Verification was
+done via rust-analyzer (clean diagnostics; cross-crate symbol/type resolution of
+`read_file_bytes` and `insert_raw_asset_bytes::<ImageType>` confirmed) and the
+`remote_server` crate change is self-contained. A full `cargo build` should be
+re-run in an environment with Xcode before shipping.
+
+**Snapshot decision (Task 6):** No code change needed. `ImagePane::snapshot`
+already calls `local_path()`, which returns `self.path` — an `Option<PathBuf>`
+that stays `None` for remote images. So it yields `LeafContents::Image { path:
+None }` with no panic, and since `is_persisted()` returns `false` for `Image`,
+it is never serialized. Consistent with the Stage 1 "image tabs are not
+persisted" decision; remote tabs are not restored (no `RemotePath` added to
+`LeafContents`).
 
 7. **Route remote images** — `app/src/code/file_tree/view.rs` (~line 2206, the `is_remote` branch)
    ```rust
@@ -122,6 +155,8 @@ spinner; tab persists/restores. Commit.
    (small enum), so remote image tabs restore by re-fetching.
 
 **Stage 2 done when:** clicking a remote PNG in the SSH file browser opens it in a tab.
+✅ Implemented (commits above); pending an interactive click-test in an
+Xcode-equipped build environment.
 
 ---
 
