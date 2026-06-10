@@ -5191,6 +5191,10 @@ impl Workspace {
                 let open_as_preview = false;
                 self.open_code(code_source, layout, line_col, open_as_preview, &[], ctx);
             }
+            FileTarget::ImageViewer(_layout) => {
+                // Temporary fallback until ImagePane dispatch is wired up (Stage 1, step 4).
+                ctx.open_file_path(&path);
+            }
             FileTarget::ExternalEditor(editor) => {
                 crate::util::file::open_file_path_with_editor(
                     line_col,
