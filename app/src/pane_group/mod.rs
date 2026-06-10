@@ -1816,6 +1816,13 @@ impl PaneGroup {
                     "SFTP pane should not have been persisted, as it cannot be restored"
                 ))
             }
+            LeafContents::Image { .. } => {
+                // Image viewer panes are intentionally not persisted (see
+                // `LeafContents::is_persisted`), so this should be unreachable.
+                Err(anyhow::anyhow!(
+                    "Image pane should not have been persisted, as it is not restorable"
+                ))
+            }
             LeafContents::GetStarted => {
                 if !FeatureFlag::GetStartedTab.is_enabled() {
                     Err(anyhow::anyhow!("GetStarted pane not supported"))
