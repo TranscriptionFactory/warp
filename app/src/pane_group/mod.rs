@@ -160,6 +160,7 @@ pub use pane::env_var_collection_pane::EnvVarCollectionPane;
 // Zap Wave 7-3:`EnvironmentManagementPane` 随 ambient-agent UI 子系统物理删。
 pub use pane::execution_profile_editor_pane::ExecutionProfileEditorPane;
 pub use pane::file_pane::FilePane;
+pub use pane::image_pane::ImagePane;
 pub use pane::notebook_pane::NotebookPane;
 pub use pane::settings_pane::SettingsPane;
 pub use pane::terminal_pane::TerminalPane;
