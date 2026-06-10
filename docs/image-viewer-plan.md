@@ -46,9 +46,9 @@ Both arms converge on one `ImageViewerView`; only the `AssetSource` differs.
 
 ## STAGE 1 — Local images (no protocol work)  ✅ DONE
 
-**Status (2026-06-10):** Implemented and compiling (`cargo check`/`build` + app binary
-`openwarp-oss` all green; routing unit test added). Commits `281cf3c6`..`09f56557`.
-Remaining: interactive click-test (open a local PNG from the Project Explorer).
+**Status (2026-06-10):** ✅ Complete. Implemented and compiling (`cargo check`/`build` + app
+binary `openwarp-oss` all green; routing unit test added). Commits `281cf3c6`..`09f56557`.
+Interactive click-test on a local PNG verified — opens fit-to-pane in a tab.
 
 **Persistence decision:** Image tabs are **not** persisted across restart (per user) —
 `LeafContents::Image { path }` exists for the in-session snapshot but
