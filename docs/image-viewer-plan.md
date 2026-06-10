@@ -44,7 +44,19 @@ Both arms converge on one `ImageViewerView`; only the `AssetSource` differs.
 
 ---
 
-## STAGE 1 — Local images (no protocol work)
+## STAGE 1 — Local images (no protocol work)  ✅ DONE
+
+**Status (2026-06-10):** Implemented and compiling (`cargo check`/`build` + app binary
+`openwarp-oss` all green; routing unit test added). Commits `281cf3c6`..`09f56557`.
+Remaining: interactive click-test (open a local PNG from the Project Explorer).
+
+**Persistence decision:** Image tabs are **not** persisted across restart (per user) —
+`LeafContents::Image { path }` exists for the in-session snapshot but
+`is_persisted()` returns `false` (like `SshServer`/`Sftp`). The snapshot/restore/
+launch-config/sqlite match arms are unreachable stubs only to keep matches exhaustive.
+No new SQLite table/migration was added. Steps 5+6 below were folded into the step-3
+commit as a result.
+
 
 1. **Route images to a viewer** — `app/src/util/openable_file_type.rs`
    - Add `FileTarget::ImageViewer(EditorLayout)` variant.
