@@ -9,13 +9,15 @@ use std::{
 
 use warpui::{
     accessibility::{AccessibilityContent, WarpA11yRole},
-    assets::asset_cache::AssetSource,
+    assets::asset_cache::{AssetCache, AssetSource},
     elements::{Align, CacheOption, DispatchEventResult, Empty, EventHandler, Image, Text},
+    image_cache::ImageType,
     AppContext, Element, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
 };
 
 use crate::{
     appearance::Appearance,
+    code::buffer_location::RemotePath,
     pane_group::{focus_state::PaneFocusHandle, pane::view, BackingView, PaneConfiguration, PaneEvent},
     terminal::model::session::Session,
 };
@@ -23,7 +25,14 @@ use crate::{
 /// View for a read-only image backed by a file.
 pub struct ImageViewerView {
     /// The path of the open image, cached for the title and snapshot/restore.
+    /// Only set for local images; remote images keep their name in `remote_name`.
     path: Option<PathBuf>,
+    /// Title for a remote image (its filename). `None` for local images, which
+    /// derive their title from `path`.
+    remote_name: Option<String>,
+    /// True while a remote image's bytes are being fetched, so `render` shows a
+    /// loading indicator before any `source` exists.
+    loading: bool,
     /// The asset source to render. `None` until an image has been opened.
     source: Option<AssetSource>,
     pane_configuration: ModelHandle<PaneConfiguration>,
@@ -55,6 +64,8 @@ impl ImageViewerView {
         let pane_configuration = ctx.add_model(|_ctx| PaneConfiguration::new(""));
         Self {
             path: None,
+            remote_name: None,
+            loading: false,
             source: None,
             pane_configuration,
             focus_handle: None,
@@ -82,6 +93,46 @@ impl ImageViewerView {
         ctx.emit(ImageViewerEvent::Opened);
     }
 
+    /// Set the title and loading state for a remote image whose bytes are still
+    /// being fetched, so the pane shows its filename and a spinner up front.
+    #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
+    pub fn set_loading_remote(&mut self, remote_path: &RemotePath, ctx: &mut ViewContext<Self>) {
+        let name = remote_path.file_name().to_string();
+        self.pane_configuration.update(ctx, |pane_config, ctx| {
+            pane_config.set_title(name.clone(), ctx);
+        });
+        self.remote_name = Some(name);
+        self.loading = true;
+        ctx.notify();
+    }
+
+    /// Open a remote image from already-fetched bytes, rendering via
+    /// `AssetSource::Raw` (the same path the terminal uses for inline images).
+    #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
+    pub fn open_remote(
+        &mut self,
+        remote_path: &RemotePath,
+        bytes: &[u8],
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let name = remote_path.file_name().to_string();
+        self.pane_configuration.update(ctx, |pane_config, ctx| {
+            pane_config.set_title(name.clone(), ctx);
+        });
+
+        // 用 host_id:path 作为稳定 asset id —— 同一远端图片复用缓存,不同主机/路径不碰撞。
+        let asset_id = format!("{}:{}", remote_path.host_id, remote_path.path.as_str());
+        AssetCache::handle(ctx).update(ctx, |cache, ctx| {
+            cache.insert_raw_asset_bytes::<ImageType>(asset_id.clone(), bytes, ctx);
+        });
+
+        self.remote_name = Some(name);
+        self.loading = false;
+        self.source = Some(AssetSource::Raw { id: asset_id });
+        ctx.notify();
+        ctx.emit(ImageViewerEvent::Opened);
+    }
+
     /// The path to the currently-open image, if it is local.
     pub fn local_path(&self) -> Option<PathBuf> {
         self.path.clone()
@@ -102,6 +153,7 @@ impl ImageViewerView {
         self.path
             .as_deref()
             .map(Self::title_for)
+            .or_else(|| self.remote_name.clone())
             .unwrap_or_else(|| "Untitled".to_string())
     }
 
@@ -131,27 +183,33 @@ impl View for ImageViewerView {
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
 
+        // A loading indicator, shown while remote bytes are fetched (no `source` yet)
+        // and as the `Image` element's `before_load` placeholder while bytes decode.
+        let loading_element = || {
+            Align::new(
+                Text::new(
+                    crate::t!("notebook-file-loading", name = self.title()),
+                    appearance.ui_font_family(),
+                    appearance.ui_font_size(),
+                )
+                .with_color(appearance.theme().foreground().into_solid())
+                .finish(),
+            )
+            .finish()
+        };
+
         let body: Box<dyn Element> = match &self.source {
             Some(source) => {
                 // Model the Image-element usage on `ui_components/src/lightbox.rs`: contain to
                 // fit-to-pane (preserving aspect ratio), with a loading element shown until the
                 // bytes decode. The pane wraps us in a `Shrinkable`, so `contain` fills the pane.
-                let loading = Align::new(
-                    Text::new(
-                        crate::t!("notebook-file-loading", name = self.title()),
-                        appearance.ui_font_family(),
-                        appearance.ui_font_size(),
-                    )
-                    .with_color(appearance.theme().foreground().into_solid())
-                    .finish(),
-                )
-                .finish();
-
                 Image::new(source.clone(), CacheOption::Original)
                     .contain()
-                    .before_load(loading)
+                    .before_load(loading_element())
                     .finish()
             }
+            // 远端图片在抓取字节期间还没有 source —— 先显示 loading 占位。
+            None if self.loading => loading_element(),
             None => Empty::new().finish(),
         };
 

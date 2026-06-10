@@ -65,6 +65,22 @@ impl ImagePane {
         Self::from_view(view, ctx)
     }
 
+    /// Create an image pane for a remote image. The pane starts in a loading state
+    /// (showing a spinner with the remote filename); the caller fetches the bytes
+    /// asynchronously and fills them in via [`ImageViewerView::open_remote`].
+    #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
+    pub fn new_remote<V: View>(
+        remote_path: crate::code::buffer_location::RemotePath,
+        ctx: &mut ViewContext<V>,
+    ) -> Self {
+        let view = ctx.add_typed_action_view(move |ctx| {
+            let mut view = ImageViewerView::new(ctx);
+            view.set_loading_remote(&remote_path, ctx);
+            view
+        });
+        Self::from_view(view, ctx)
+    }
+
     pub fn image_view(&self, ctx: &AppContext) -> ViewHandle<ImageViewerView> {
         self.view.as_ref(ctx).child(ctx)
     }
