@@ -20,12 +20,14 @@ else
     APP="target/aarch64-apple-darwin/release-lto/bundle/osx/OpenWarp.app"
 fi
 
-# Copy to /Applications
+# Copy to ~/Applications (user-writable, no admin/sudo required)
 if [ -d "$APP" ]; then
-    echo "Installing to /Applications..."
-    rm -rf /Applications/OpenWarp.app
-    cp -R "$APP" /Applications/
-    echo "Done! OpenWarp is now in /Applications."
+    DEST="$HOME/Applications"
+    echo "Installing to $DEST..."
+    mkdir -p "$DEST"
+    rm -rf "$DEST/OpenWarp.app"
+    cp -R "$APP" "$DEST/"
+    echo "Done! OpenWarp is now in $DEST."
 else
     echo "Build failed — .app not found at $APP"
     exit 1
