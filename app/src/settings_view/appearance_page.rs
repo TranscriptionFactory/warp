@@ -2878,8 +2878,12 @@ impl SettingsWidget for CreateCustomThemeWidget {
                 .ui_builder()
                 .link(
                     crate::t!("settings-appearance-theme-create-custom"),
-                    Some("".to_string()),
                     None,
+                    Some(Box::new(|ctx| {
+                        ctx.dispatch_typed_action(
+                            WorkspaceAction::ShowThemeChooserForActiveTheme,
+                        );
+                    })),
                     self.mouse_state.clone(),
                 )
                 .soft_wrap(false)
