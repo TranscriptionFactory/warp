@@ -171,6 +171,7 @@ fn build_appearance(
         ai_font_family,
         password_font_family,
         DEFAULT_UI_FONT_SIZE,
+        Default::default(),
     );
 
     appearance.set_ui_font_family(ui_font_family, ctx);
