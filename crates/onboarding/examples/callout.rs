@@ -6,7 +6,7 @@ use onboarding::components::onboarding_callout::{
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 use ui_components::Component as _;
-use warp_core::ui::appearance::Appearance;
+use warp_core::ui::appearance::{Appearance, DEFAULT_UI_FONT_SIZE};
 use warp_core::ui::theme::{AnsiColor, AnsiColors, Details, Fill, TerminalColors, WarpTheme};
 use warpui::color::ColorU;
 use warpui::elements::{Rect, Stack};
@@ -169,6 +169,7 @@ fn build_appearance(
         1.4,
         ai_font_family,
         password_font_family,
+        DEFAULT_UI_FONT_SIZE,
     );
 
     appearance.set_ui_font_family(ui_font_family, ctx);

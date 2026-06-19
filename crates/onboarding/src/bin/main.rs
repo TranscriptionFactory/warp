@@ -9,7 +9,10 @@ use rust_embed::RustEmbed;
 use std::borrow::Cow;
 use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::{AnsiColor, AnsiColors, Details, Fill, Image, TerminalColors};
-use warp_core::ui::{appearance::Appearance, theme::WarpTheme};
+use warp_core::ui::{
+    appearance::{Appearance, DEFAULT_UI_FONT_SIZE},
+    theme::WarpTheme,
+};
 use warpui::assets::asset_cache::AssetSource;
 use warpui::platform;
 use warpui::{
@@ -439,6 +442,7 @@ fn build_appearance(theme: WarpTheme, ctx: &mut AppContext) -> Appearance {
         1.2,
         ui_font_family,
         ui_font_family,
+        DEFAULT_UI_FONT_SIZE,
     )
 }
 
