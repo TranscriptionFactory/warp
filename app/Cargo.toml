@@ -574,6 +574,8 @@ default = [
     "settings_file",
     "ssh_tmux_wrapper",
     "onekey_prompt",
+    "directory_tab_colors",
+    "configurable_context_window",
 ]
 # Enable this feature to automatically perform heap profiling.  NOTE: This will
 # substantially slow down program execution.

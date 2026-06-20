@@ -49,6 +49,7 @@ path retarget, test-module split).
 git credential refresh, cloud-mode input v2, multi-harness, orchestration viewer
 streamer. Plus tab/group pinning, custom inference endpoints for 3rd-party APIs,
 format-on-save, configurable line numbers.
+(NB: multi-harness already exists locally — see Phase 2 correction.)
 
 ## Path 2 — re-baseline the fork (stop being 1138 behind forever)
 
@@ -120,7 +121,21 @@ Screened-open candidates remain to port: tab/group pinning (`ae7f6574a` +3),
 format-on-save (`3f83932cd`), configurable line numbers (`ce73fe07b`); verify-only:
 `ConfigurableContextWindow`/`DirectoryTabColors` (likely promotion-only), BYOP
 (needs-decision: fork already ships its own). Excluded (cloud/account-gated): git
-credential refresh, cloud-mode input v2, multi-harness, orchestration viewer streamer.
+credential refresh, cloud-mode input v2, cloud orchestration viewer streamer.
+
+**Correction (multi-harness is NOT cloud-gated):** multi-harness is already present
+and local in this fork — `AgentHarness` lives in `DOGFOOD_FLAGS`
+(`crates/warp_features/src/lib.rs:742`), with `HarnessKind { Oz, Claude, Gemini }`
+(`app/src/ai/agent_sdk/driver/harness/`) and the fork's own `warp_multi_agent_api`
+proto (zerx-lab). No upstream port needed. Only the *cloud-managed* orchestration
+viewer/streamer stays excluded, because the cloud backend is hardcoded off
+(`warp_features/src/lib.rs:785-793`, `app/src/uri/mod.rs:105`).
+
+**Promotion-only (verified, flipping now):** `ConfigurableContextWindow` and
+`DirectoryTabColors` are fully implemented and sit in `DOGFOOD_FLAGS` only. Promote by
+adding `configurable_context_window` + `directory_tab_colors` to `default` in
+`app/Cargo.toml` and removing them from `DOGFOOD_FLAGS`. Promotion-only — runtime
+`is_enabled()` gates unchanged.
 
 ## Corrections to the original Path-1 plan discovered during execution
 
