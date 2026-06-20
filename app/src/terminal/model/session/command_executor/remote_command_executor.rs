@@ -9,6 +9,7 @@ use itertools::Itertools as _;
 use crate::env_vars::{serialize_variables_for_shell, EnvVarValue};
 use crate::terminal::shell::Shell;
 
+use super::shared::shell_escape_single_quotes;
 use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions};
 
 /// `CommandExecutor` implementation that executes the given `command` in a forked process
@@ -57,7 +58,11 @@ impl CommandExecutor for RemoteCommandExecutor {
             command_str.push(';');
         }
         if let Some(current_directory_path) = current_directory_path {
-            command_str.push_str(&format!("cd '{current_directory_path}' && "));
+            // Escape embedded single quotes from the remote host's serialized block so a
+            // malicious path can't break out of the quotes and inject shell commands.
+            let escaped_path =
+                shell_escape_single_quotes(current_directory_path, shell.shell_type());
+            command_str.push_str(&format!("cd '{escaped_path}' && "));
         }
         command_str.push_str(command);
 

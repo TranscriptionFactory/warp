@@ -1367,9 +1367,10 @@ impl Session {
             .as_deref()
             .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
 
+        let command = Self::build_read_history_command(history_file, self.info.shell.shell_type());
         let output_in_bytes = self
             .execute_command(
-                format!("cat {history_file}").as_str(),
+                command.as_str(),
                 None,
                 env_vars,
                 ExecuteCommandOptions::default(),
@@ -1392,6 +1393,16 @@ impl Session {
                 None
             }
         }
+    }
+
+    /// Builds the shell command that reads a remote history file's contents,
+    /// quoting the path so a malicious history-file path can't break out of the
+    /// quotes and inject shell commands.
+    fn build_read_history_command(history_file: &str, shell_type: ShellType) -> String {
+        format!(
+            "cat '{}'",
+            shell_escape_single_quotes(history_file, shell_type)
+        )
     }
 
     pub async fn read_history(&self, is_kaspersky_running: bool) -> Vec<String> {

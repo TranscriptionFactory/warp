@@ -100,3 +100,38 @@ fn test_set_env_var_emits_no_event_when_no_change() {
         });
     });
 }
+
+mod read_history_command_quoting {
+    use super::super::Session;
+    use crate::terminal::shell::ShellType;
+
+    #[test]
+    fn quotes_history_file_as_single_argument() {
+        let command =
+            Session::build_read_history_command("/home/user/.zsh_history", ShellType::Zsh);
+        assert_eq!(command, "cat '/home/user/.zsh_history'");
+    }
+
+    #[test]
+    fn neutralizes_embedded_quote_injection() {
+        // A malicious histfile path that tries to break out of the single-quoted
+        // `cat '...'` context and run an injected command must stay inert.
+        let command = Session::build_read_history_command(
+            "/tmp/x'; touch /tmp/warp-poc; echo '",
+            ShellType::Bash,
+        );
+        assert_eq!(
+            command,
+            r#"cat '/tmp/x'"'"'; touch /tmp/warp-poc; echo '"'"''"#
+        );
+    }
+
+    #[test]
+    fn neutralizes_command_substitution() {
+        let command = Session::build_read_history_command(
+            "/tmp/x$(touch /tmp/warp-poc)`id`",
+            ShellType::Bash,
+        );
+        assert_eq!(command, "cat '/tmp/x$(touch /tmp/warp-poc)`id`'");
+    }
+}
