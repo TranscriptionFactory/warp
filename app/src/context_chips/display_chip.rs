@@ -556,7 +556,9 @@ impl DisplayChip {
                         };
 
                         ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(
-                            format_git_branch_command(&git_branch.name()),
+                            PromptChipShellCommand::GitCheckout {
+                                branch_name: git_branch.name(),
+                            },
                         ));
                         me.close_git_branch_menu(ctx);
                         ctx.notify();
@@ -644,7 +646,9 @@ impl DisplayChip {
                             DirectoryType::Directory => {
                                 // For directories, navigate action is change directory
                                 ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(
-                                    format_change_directory_command(&directory_item.name),
+                                    PromptChipShellCommand::ChangeDirectory {
+                                        dir_name: directory_item.name.clone(),
+                                    },
                                 ));
                                 me.close_working_directory_menu(ctx);
                                 ctx.notify();
@@ -667,7 +671,9 @@ impl DisplayChip {
                             }
                             DirectoryType::NavigateToParent => {
                                 ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(
-                                    format_change_directory_command(".."),
+                                    PromptChipShellCommand::ChangeDirectory {
+                                        dir_name: "..".to_string(),
+                                    },
                                 ));
                                 me.close_working_directory_menu(ctx);
                                 ctx.notify();
@@ -705,9 +711,11 @@ impl DisplayChip {
                         ctx.focus_self();
                     }
                     NodeVersionPopupEvent::SelectVersion { version } => {
-                        ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(format!(
-                            "nvm use {version}"
-                        )));
+                        ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(
+                            PromptChipShellCommand::NvmUse {
+                                version: version.clone(),
+                            },
+                        ));
                         me.close_node_version_popup(ctx);
                         ctx.focus_self();
                     }
@@ -725,7 +733,7 @@ impl DisplayChip {
                     }
                     NodeVersionPopupEvent::InstallLatestNodeVersion => {
                         ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(
-                            "nvm install node".to_string(),
+                            PromptChipShellCommand::NvmInstallLatestNode,
                         ));
                         me.close_node_version_popup(ctx);
                     }
@@ -1534,6 +1542,18 @@ impl View for DisplayChip {
     }
 }
 
+/// A shell command intent emitted by a prompt chip. Rendering to a concrete
+/// shell command string is deferred to the point of execution (in `Input`),
+/// where the active session's shell type is known, so every interpolated
+/// argument can be quoted shell-awarely instead of pasted in raw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromptChipShellCommand {
+    GitCheckout { branch_name: String },
+    ChangeDirectory { dir_name: String },
+    NvmUse { version: String },
+    NvmInstallLatestNode,
+}
+
 pub enum PromptDisplayChipEvent {
     OpenFile(String),
     OpenTextFileInCodeEditor(String),
@@ -1543,7 +1563,7 @@ pub enum PromptDisplayChipEvent {
     OpenCodeReview,
     OpenConversationHistory,
     OpenCommandPaletteFiles,
-    TryExecuteCommand(String),
+    TryExecuteCommand(PromptChipShellCommand),
     RunAgentQuery(String),
     OpenAIDocument {
         document_id: AIDocumentId,
@@ -1771,14 +1791,6 @@ impl ActionButtonTheme for EnterAgentViewButton {
     fn should_opt_out_of_contrast_adjustment(&self) -> bool {
         true
     }
-}
-
-fn format_change_directory_command(dir_name: &str) -> String {
-    format!("cd '{}'", dir_name.replace("'", "'\\'''"))
-}
-
-pub fn format_git_branch_command(branch_name: &str) -> String {
-    format!("git checkout {branch_name}")
 }
 
 pub(crate) fn chip_container(
