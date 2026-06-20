@@ -128,14 +128,37 @@ and local in this fork — `AgentHarness` lives in `DOGFOOD_FLAGS`
 (`crates/warp_features/src/lib.rs:742`), with `HarnessKind { Oz, Claude, Gemini }`
 (`app/src/ai/agent_sdk/driver/harness/`) and the fork's own `warp_multi_agent_api`
 proto (zerx-lab). No upstream port needed. Only the *cloud-managed* orchestration
-viewer/streamer stays excluded, because the cloud backend is hardcoded off
-(`warp_features/src/lib.rs:785-793`, `app/src/uri/mod.rs:105`).
+viewer/streamer stays excluded — and it is not merely gated but **being actively
+removed** from the fork (`app/src/terminal/view/shared_session/view_impl.rs`:
+`TODO(zap-cloud-removal Phase 5)`, `// Zap Phase 2a: removed set_shareable_object
+(cloud sharing UI gone)`), since the cloud backend is hardcoded off
+(`warp_features/src/lib.rs:785-793`, plus `:788` `HOARemoteControl`,
+`app/src/uri/mod.rs:105`). **Do not port — it re-adds code the fork is deleting.**
 
 **Promotion-only (verified, flipping now):** `ConfigurableContextWindow` and
 `DirectoryTabColors` are fully implemented and sit in `DOGFOOD_FLAGS` only. Promote by
 adding `configurable_context_window` + `directory_tab_colors` to `default` in
 `app/Cargo.toml` and removing them from `DOGFOOD_FLAGS`. Promotion-only — runtime
 `is_enabled()` gates unchanged.
+
+**Existence audit (verified against code, 2026-06-20).** Every Phase 2 item checked
+against the fork's actual source before committing port effort:
+
+| Item | Status | Evidence |
+|---|---|---|
+| multi-harness | **present (local)** | `AgentHarness` flag; `HarnessKind` drivers (`app/src/ai/agent_sdk/driver/harness/`); `warp_multi_agent_api` git dep (`zerx-lab/warp-proto-apis`, `Cargo.toml:341`). No port. |
+| BYOP | **present (fork's own)** | Needs-decision only, not a port. |
+| cloud orchestration viewer/streamer | **present but DEAD — fork is removing it** | `app/src/terminal/view/shared_session/{viewer.rs, sharer/, view_impl.rs}` carries `TODO(zap-cloud-removal Phase 5)` + "cloud sharing UI gone"; `HOARemoteControl` hardcoded off (`warp_features/src/lib.rs:788`). **Do not port.** |
+| git credential refresh | **absent (cloud-tied)** | Only AWS-Bedrock cred refresh exists (`settings_view/ai_page.rs: RefreshAwsBedrockCredentials`); no git path. |
+| cloud-mode input v2 | **absent (cloud-gated)** | No flag; depends on cloud-mode (off). |
+| tab/group pinning | **absent — real port candidate** | No pin flag; `workspace/view.rs` "pinned" = popup/callout positioning, not pinnable tabs. |
+| format-on-save | **absent — real port candidate** | Zero matches in `app/src` / `crates`. |
+| configurable line numbers | **absent — real port candidate** | No gutter line-number toggle/setting; only vim `JumpToLine` + line-*height*. |
+
+**Net port queue:** only three items are genuinely portable, non-cloud, and absent
+locally — tab/group pinning (`ae7f6574a` +3), format-on-save (`3f83932cd`), configurable
+line numbers (`ce73fe07b`). Everything else is already local (multi-harness, BYOP) or
+cloud-dead (viewer/streamer, git credential refresh, cloud-mode input v2).
 
 ## Corrections to the original Path-1 plan discovered during execution
 
