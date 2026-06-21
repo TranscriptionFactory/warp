@@ -5202,8 +5202,8 @@ impl Workspace {
                 self.open_code(code_source, layout, line_col, open_as_preview, &[], ctx);
             }
             FileTarget::ImageViewer(_layout) => {
-                // Images always open in a new tab; see `insert_image_pane`. The layout
-                // carried by the target is intentionally ignored.
+                // 图片始终在新标签页打开,见 `insert_image_pane`。target 携带的
+                // layout 在此被故意忽略。
                 self.open_image(path.clone(), self.get_active_session(ctx), ctx);
             }
             FileTarget::ExternalEditor(editor) => {
