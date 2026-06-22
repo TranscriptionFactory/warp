@@ -31,6 +31,7 @@ impl AssetProvider for Assets {
 fn new_asset_cache() -> AssetCache {
     AssetCache::new(
         Box::new(Assets),
+        ImageCache::new(),
         Foreground::test().into(),
         Background::default().into(),
     )
@@ -135,6 +136,42 @@ fn test_passes_through_asset_cache_original_when_target_size_matches_source_size
     // in the asset cache point to the same underlying data (i.e.: there were
     // no copies made).
     assert!(image_asset_weak.ptr_eq(&Arc::downgrade(image)));
+}
+
+#[test]
+fn cloned_image_cache_evicts_shared_rendered_images() {
+    let image_cache = ImageCache::new();
+    let evicting_image_cache = image_cache.clone();
+    let asset_cache = AssetCache::new(
+        Box::new(Assets),
+        image_cache.clone(),
+        Foreground::test().into(),
+        Background::default().into(),
+    );
+    let source = AssetSource::Bundled {
+        path: "local.png",
+    };
+    let bounds = Vector2I::new(20, 10);
+    let image = load_bundled_image(
+        &image_cache,
+        &asset_cache,
+        "local.png",
+        bounds,
+        FitType::Contain,
+        AnimatedImageBehavior::FullAnimation,
+    );
+
+    evicting_image_cache.evict_image(&source);
+
+    let image_after_eviction = load_bundled_image(
+        &image_cache,
+        &asset_cache,
+        "local.png",
+        bounds,
+        FitType::Contain,
+        AnimatedImageBehavior::FullAnimation,
+    );
+    assert!(!Rc::ptr_eq(&image, &image_after_eviction));
 }
 
 #[test]
