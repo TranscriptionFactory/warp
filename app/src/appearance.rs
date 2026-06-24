@@ -1,7 +1,7 @@
 use settings::Setting as _;
 use warpui::{
     fonts::FamilyId, AddSingletonModel, AppContext, AssetProvider, Entity, ModelContext,
-    SingletonEntity,
+    SingletonEntity, WindowId,
 };
 
 #[cfg(target_os = "macos")]
@@ -200,6 +200,29 @@ impl AppearanceManager {
     pub fn set_transient_theme(&mut self, theme: ThemeKind, ctx: &mut ModelContext<Self>) {
         self.transient_theme = Some(Settings::theme_for_theme_kind(&theme, ctx));
         self.refresh_theme_state(ctx);
+    }
+
+    /// Applies a per-window theme override, affecting only `window_id`. Windows
+    /// without an override continue to follow the global theme (including
+    /// system-theme follow via `refresh_theme_state`).
+    pub fn set_window_theme(
+        &mut self,
+        window_id: WindowId,
+        theme_kind: ThemeKind,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let theme = Settings::theme_for_theme_kind(&theme_kind, ctx);
+        Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+            appearance.set_window_theme(window_id, theme, ctx);
+        });
+    }
+
+    /// Clears a per-window theme override, returning `window_id` to the global
+    /// theme. No-op if the window has no override.
+    pub fn clear_window_theme(&mut self, window_id: WindowId, ctx: &mut ModelContext<Self>) {
+        Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+            appearance.clear_window_theme(window_id, ctx);
+        });
     }
 
     #[cfg(target_os = "macos")]

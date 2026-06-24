@@ -887,6 +887,11 @@ pub struct Workspace {
     import_modal: ViewHandle<ImportModal>,
     theme_chooser_view: ViewHandle<ThemeChooser>,
     previous_theme: Option<ThemeKind>,
+    /// The per-window theme override selected for this window via the theme
+    /// chooser's "This window" scope, if any. Source of truth that feeds
+    /// `WindowSnapshot` at save time and is re-applied on restore. `None` when
+    /// the window follows the global theme.
+    theme_override: Option<ThemeKind>,
     pub(crate) current_workspace_state: WorkspaceState,
     previous_workspace_state: Option<WorkspaceState>,
     welcome_tips_view_state: WelcomeTipsViewState,
@@ -2873,6 +2878,7 @@ impl Workspace {
             ctrl_tab_palette,
             mouse_states: Default::default(),
             previous_theme: None,
+            theme_override: None,
             settings_pane,
             theme_chooser_view,
             current_workspace_state: Default::default(),
@@ -3291,6 +3297,16 @@ impl Workspace {
             } => {
                 let active_tab_index = window_snapshot.active_tab_index;
                 let restored_left_panel_open = window_snapshot.left_panel_open;
+
+                // Re-apply this window's per-window theme override, if it had one,
+                // and record it so subsequent snapshots keep it.
+                self.theme_override = window_snapshot.theme_override.clone();
+                if let Some(theme_kind) = window_snapshot.theme_override.clone() {
+                    let window_id = ctx.window_id();
+                    AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
+                        appearance_manager.set_window_theme(window_id, theme_kind, ctx);
+                    });
+                }
 
                 window_snapshot
                     .tabs
@@ -9655,6 +9671,7 @@ impl Workspace {
             left_panel_width,
             right_panel_width,
             agent_management_filters: None,
+            theme_override: self.theme_override.clone(),
         }
     }
 
@@ -13478,6 +13495,11 @@ impl Workspace {
             }
             ThemeChooserEvent::OpenThemeDeletionModal(theme_kind) => {
                 self.open_theme_deletion_modal(theme_kind.clone(), ctx);
+            }
+            ThemeChooserEvent::WindowThemeOverride(theme_kind) => {
+                // Record (or clear) this window's per-window theme override so it
+                // is persisted in the window snapshot and re-applied on restart.
+                self.theme_override = theme_kind.clone();
             }
         };
     }
@@ -21721,6 +21743,12 @@ impl View for Workspace {
         }
 
         let window_id = ctx.window_id();
+
+        // Drop any per-window theme override so the override maps don't leak as
+        // windows come and go. No-op if this window had no override.
+        AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
+            appearance_manager.clear_window_theme(window_id, ctx);
+        });
 
         WorkspaceRegistry::handle(ctx).update(ctx, |registry, _| {
             registry.unregister(window_id);

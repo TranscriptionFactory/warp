@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use warpui::{
+    current_render_window,
     elements::HeadingFontSizeMultipliers,
     fonts::{FamilyId, Weight},
-    Entity, ModelContext, SingletonEntity,
+    Entity, ModelContext, SingletonEntity, WindowId,
 };
 
 use super::{builder::UiBuilder, theme::WarpTheme};
@@ -40,6 +43,14 @@ pub struct Appearance {
     password_font_family: FamilyId,
     ui_font_size: f32,
     heading_font_size_multipliers: HeadingFontSizeMultipliers,
+
+    /// Per-window theme overrides. When a window has an entry here, its rendering
+    /// uses this theme instead of the global `theme`. Empty in the common case,
+    /// which keeps `theme()` on a zero-cost fast path.
+    theme_overrides: HashMap<WindowId, WarpTheme>,
+    /// Per-window `UiBuilder`s, kept in lockstep with `theme_overrides` (a
+    /// `UiBuilder` bakes the theme into its styles, so each override needs its own).
+    ui_builder_overrides: HashMap<WindowId, UiBuilder>,
 }
 
 /// Defines appearance change events.
@@ -121,6 +132,8 @@ impl Appearance {
             password_font_family,
             ui_font_size,
             heading_font_size_multipliers,
+            theme_overrides: HashMap::new(),
+            ui_builder_overrides: HashMap::new(),
         }
     }
 
@@ -163,6 +176,8 @@ impl Appearance {
             password_font_family: FamilyId(0),
             ui_font_size: DEFAULT_UI_FONT_SIZE,
             heading_font_size_multipliers: HeadingFontSizeMultipliers::default(),
+            theme_overrides: HashMap::new(),
+            ui_builder_overrides: HashMap::new(),
         }
     }
 
@@ -352,11 +367,62 @@ impl Appearance {
     }
 
     pub fn ui_builder(&self) -> &UiBuilder {
-        &self.ui_builder
+        if self.ui_builder_overrides.is_empty() {
+            return &self.ui_builder;
+        }
+        match current_render_window() {
+            Some(w) => self.ui_builder_overrides.get(&w).unwrap_or(&self.ui_builder),
+            None => &self.ui_builder,
+        }
     }
 
     pub fn theme(&self) -> &WarpTheme {
-        &self.theme
+        if self.theme_overrides.is_empty() {
+            return &self.theme;
+        }
+        match current_render_window() {
+            Some(w) => self.theme_overrides.get(&w).unwrap_or(&self.theme),
+            None => &self.theme,
+        }
+    }
+
+    /// Sets a per-window theme override, invalidating only that window.
+    pub fn set_window_theme(
+        &mut self,
+        window_id: WindowId,
+        theme: WarpTheme,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let ui_builder = UiBuilder::new(
+            theme.clone(),
+            self.ui_font_family,
+            self.ui_font_size(),
+            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
+            self.line_height_ratio,
+        );
+        self.theme_overrides.insert(window_id, theme);
+        self.ui_builder_overrides.insert(window_id, ui_builder);
+
+        // Only redraw the affected window; other windows keep their theme.
+        ctx.invalidate_all_views_for_window(window_id);
+
+        ctx.emit(AppearanceEvent::ThemeChanged);
+        ctx.notify();
+    }
+
+    /// Clears a per-window theme override, returning the window to the global
+    /// theme and invalidating only that window.
+    pub fn clear_window_theme(&mut self, window_id: WindowId, ctx: &mut ModelContext<Self>) {
+        let had_override = self.theme_overrides.remove(&window_id).is_some();
+        self.ui_builder_overrides.remove(&window_id);
+        if !had_override {
+            return;
+        }
+
+        ctx.invalidate_all_views_for_window(window_id);
+
+        ctx.emit(AppearanceEvent::ThemeChanged);
+        ctx.notify();
     }
 
     pub fn monospace_font_family(&self) -> FamilyId {
