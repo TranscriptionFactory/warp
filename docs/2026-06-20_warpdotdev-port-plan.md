@@ -172,3 +172,54 @@ cloud-dead (viewer/streamer, git credential refresh, cloud-mode input v2).
 3. **#4's protected surface doesn't exist here** — exclude, don't port.
 4. **`shell_quote_arg` was introduced upstream before #25354**, not by #25398 — it had to
    be added as a foundation commit; #25398 and #26138 both depend on it.
+
+---
+
+# 2026-06-24 — zerx-lab (direct upstream) sync check
+
+Re-fetched both remotes. Today's deltas, and what's actually portable.
+
+## Method correction: this branch tracks zerx-lab by **cherry-pick**, so raw counts lie
+
+`HEAD` looked **64 behind `upstream/main` (zerx-lab/zap)** and **1175 behind
+`warpdotdev/master`** — but the fork lands upstream work as **new SHAs**, so behind-counts
+overstate the gap. `git cherry HEAD upstream/main` is the right tool: **51 of the 64 are
+already present by content; only 12 are genuinely missing.** Always use `git cherry`, not
+`rev-list --count`, to size this fork's gap. Merge-base with zerx-lab is `e3d20a2236`
+(2026-05-26); with warpdotdev still frozen at `c325d146a` (2026-04-28). Merge is still wrong
+(fork rebrands Zap→OpenWarp and removes cloud) — cherry-pick remains the model.
+
+## The 12 true-missing zerx-lab commits, triaged
+
+| Commit | Item | Verdict |
+|---|---|---|
+| `35d745f0f` | `#252` macOS GUI CLI-agent detection (PATH scan) | **PORTED** → `042bdcc7b` (check + 2 tests green) |
+| `371d20459` | `#257` SSH manager left-panel scroll | **PORTED** → `d8b2c7891` (check + 20 tests green) |
+| `09c71477f` | `#179` SSH auto-discovery toggle | **DROPPED — gap doesn't exist.** Fork already ships it in *fuller* form: `EnableSshAutoDiscovery` setting (`settings/ssh.rs`), `SSHAutoDiscoveryWidget` + `ToggleSshAutoDiscovery` + telemetry + context flag (`features_page.rs`), `auto_discover` gate (`panel.rs:1816`). git-cherry flagged it only on patch-id. Porting would duplicate/conflict. |
+| `c1c00f520` `9f7d9c7c9` | `#229`/`#256` image-viewer (+ open-in-new-tab) | **SKIP** — fork has its own image-viewer impl in `main` (parallel). |
+| `92c77b89a` `0d474c3b3` | `#172` markdown heading scale; `#230` GPU DX12 | **SKIP** — fork has adapted variants (same PR, different patch-id). |
+| `ec71988cb` | `#161` SSH config **cloud** sync (28 files, +1244-line `cloud_sync_page.rs`) | **EXCLUDE (needs-decision)** — re-adds cloud the fork is deleting (`zap-cloud-removal`, backend hardcoded off). |
+| `d4e9f9e44` | autoupdate local-cache rewrite (`autoupdate/{mac,linux,windows}.rs`) | **EXCLUDE (needs-decision)** — collides with fork's autoupdate-to-fork plumbing. High conflict risk. |
+| `f4b04d586` | `#255` winit bump (Windows dark-mode) + `.vscode/launch.json` | **DEFER (minor)** — mostly a `Cargo.toml` winit version bump; verify against our lockfile before taking. |
+| `05c38ed4a` `d02f86716` | zerx-lab website-deploy CI workflows | **N/A** — not applicable to this fork. |
+
+Net: of 12, **2 ported**, 1 already-present (fuller), 4 already-covered variants/parallel,
+2 cloud-direction conflicts (decide), 1 minor deferred, 2 N/A.
+
+## warpdotdev status (unchanged queue)
+
+1175 behind; **+37 commits since 2026-06-19**, **none security-flagged**. Existing port
+queue stands: Phase-1 leftover `#6` OSC 52 clipboard UI (needs prereq `#25339`); Phase-2
+candidates tab/group pinning (`ae7f6574a`), format-on-save (`3f83932cd`), configurable line
+numbers (`ce73fe07b`). New robustness item worth a look: `b9cc454ca` OSC 1337 panic fix
+(`#12817`). Pinning is maturing upstream (`0f457ba0a`, `3cdccdc81`) if the Phase-2 pinning
+port is taken.
+
+## Sandbox verification note (supersedes the 2026-06-20 "Metal present" note)
+
+No Xcode this session (only CommandLineTools → `xcrun` lacks `metal`); `crates/warpui/build.rs`
+has **no skip hatch** and panics. Worked around with a throwaway `xcrun` shim
+(`.tmpfiles/2026-06-24_metal-stub/`, git-ignored) that fakes the `.air`/`.metallib` outputs
+so `cargo check`/`cargo test` type-check the Rust — our changes don't touch shaders, so this
+is sound for build-verification. Use `GIT_SSH_COMMAND='ssh -o ControlMaster=no -o
+ControlPath=none'` to fetch (sandbox blocks the SSH control socket).
