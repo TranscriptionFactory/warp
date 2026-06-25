@@ -187,3 +187,20 @@ runs:
       if: ${{ inputs.target_os == 'macos' && inputs.is_self_hosted != 'true' }}
       with:
         xcode-version: '26'
+
+    - name: Ensure Metal Toolchain is available (macOS)
+      if: ${{ inputs.target_os == 'macos' && inputs.is_self_hosted != 'true' }}
+      shell: bash
+      # warpui 的 build script 用 `metal` 把 shaders.metal 编译成 .air。Xcode 26 把
+      # Metal Toolchain 拆成需单独下载的组件,macos-26 runner 镜像默认不预装,且
+      # 编译走 MD_APPLE_SDK_ROOT 指向的 Xcode(可能与 setup-xcode 选定的不同),
+      # 故对该 Xcode 显式下载组件。-downloadComponent 幂等,已存在则快速返回。
+      run: |
+        if [ -n "$MD_APPLE_SDK_ROOT" ]; then
+          DEVELOPER_DIR="$MD_APPLE_SDK_ROOT/Contents/Developer"
+        else
+          DEVELOPER_DIR="$(xcode-select -p)"
+        fi
+        export DEVELOPER_DIR
+        echo "Using DEVELOPER_DIR=$DEVELOPER_DIR"
+        xcodebuild -downloadComponent MetalToolchain
