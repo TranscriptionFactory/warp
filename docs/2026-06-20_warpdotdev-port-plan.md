@@ -223,3 +223,23 @@ has **no skip hatch** and panics. Worked around with a throwaway `xcrun` shim
 so `cargo check`/`cargo test` type-check the Rust — our changes don't touch shaders, so this
 is sound for build-verification. Use `GIT_SSH_COMMAND='ssh -o ControlMaster=no -o
 ControlPath=none'` to fetch (sandbox blocks the SSH control socket).
+
+---
+
+# 2026-06-24 — outbound PRs to zerx-lab (contributing fork features upstream)
+
+Direction is **outbound** here (fork → zerx-lab), opposite the rest of this doc.
+
+| Feature | Branch | PR | Notes |
+|---|---|---|---|
+| per-window themes (`80f5c59ac`) | `pr/per-window-themes` | [zerx-lab/zap#279](https://github.com/zerx-lab/zap/pull/279) | clean cherry-pick onto `upstream/main`; `cargo check -p warp` green |
+| remote (SSH) markdown preview toggle (`afb91f587`) | `pr/remote-markdown-preview` | [zerx-lab/zap#280](https://github.com/zerx-lab/zap/pull/280) | clean cherry-pick; builds on `#109` SSH-remote-file infra which zerx-lab has; green |
+
+**Image-viewer correction (supersedes the "parallel impl" SKIP note above, line ~199):**
+the fork's image-viewer files (`app/src/notebooks/image/mod.rs`, `pane/image_pane.rs`,
+`crates/remote_server/src/client/mod.rs`, `util/openable_file_type.rs`) are **byte-identical**
+to zerx-lab's `#229`/`#256` — the only `workspace/view.rs` delta is per-window-theme code
+(now in #279) plus one CN→EN comment. There is **nothing to contribute** for the image viewer;
+do not open a PR for it. (Both commits clean of `zap`/`openwarp` branding tokens — verified.)
+
+PRs target `zerx-lab/zap:main` (fork parent; the `upstream` remote URL `…/warp` redirects to it).
