@@ -892,6 +892,11 @@ pub struct Workspace {
     /// `WindowSnapshot` at save time and is re-applied on restore. `None` when
     /// the window follows the global theme.
     theme_override: Option<ThemeKind>,
+    /// The per-window theme override that was active when the theme chooser was
+    /// opened. Lets a cancelled preview (the `revert_theme` path) restore this
+    /// window's override, mirroring how `clear_transient_theme` reverts the
+    /// global preview. `None` means the window had no override at open time.
+    previous_theme_override: Option<ThemeKind>,
     pub(crate) current_workspace_state: WorkspaceState,
     previous_workspace_state: Option<WorkspaceState>,
     welcome_tips_view_state: WelcomeTipsViewState,
@@ -2879,6 +2884,7 @@ impl Workspace {
             mouse_states: Default::default(),
             previous_theme: None,
             theme_override: None,
+            previous_theme_override: None,
             settings_pane,
             theme_chooser_view,
             current_workspace_state: Default::default(),
@@ -14724,9 +14730,22 @@ impl Workspace {
     }
 
     fn revert_theme(&mut self, ctx: &mut ViewContext<Self>) {
+        // Mirror the transient revert for the per-window override: a "This
+        // window" preview writes directly into the override map (there is no
+        // transient layer for it), so restore this window to whatever override
+        // it had when the chooser opened instead of leaving the preview behind.
+        let window_id = ctx.window_id();
+        let restored = self.previous_theme_override.take();
         AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| {
             appearance_manager.clear_transient_theme(ctx);
+            match &restored {
+                Some(theme_kind) => {
+                    appearance_manager.set_window_theme(window_id, theme_kind.clone(), ctx)
+                }
+                None => appearance_manager.clear_window_theme(window_id, ctx),
+            }
         });
+        self.theme_override = restored;
         self.current_workspace_state.is_theme_chooser_open = false;
         self.previous_theme = None;
         ctx.notify();
@@ -14735,6 +14754,7 @@ impl Workspace {
     fn keep_theme(&mut self, ctx: &mut ViewContext<Self>) {
         self.current_workspace_state.is_theme_chooser_open = false;
         self.previous_theme = None;
+        self.previous_theme_override = None;
         ctx.notify();
     }
 
@@ -14928,6 +14948,7 @@ impl Workspace {
         self.current_workspace_state.is_theme_chooser_open = true;
 
         self.previous_theme = Some(current_theme);
+        self.previous_theme_override = self.theme_override.clone();
 
         self.theme_chooser_view.update(ctx, |view, ctx| {
             view.record_open_theme(ctx);
