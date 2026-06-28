@@ -1,11 +1,182 @@
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+
+#[cfg(feature = "local_fs")]
+use std::collections::HashMap;
+#[cfg(feature = "local_fs")]
+use std::sync::Arc;
+
+#[cfg(feature = "local_fs")]
+use crate::remote_server::client::RemoteServerClient;
+#[cfg(feature = "local_fs")]
+use warp_core::SessionId;
 
 #[cfg(test)]
 #[path = "git_tests.rs"]
 mod tests;
+
+/// Target a git command runs against: a local working copy (subprocess) or a
+/// remote SSH session (commands shipped over the `remote_server` channel).
+///
+/// This is the single transport-agnostic chokepoint for the code-review diff
+/// engine. All diff/parse/format logic above it is string-based and identical
+/// for both transports. The `Remote` arm only exists on desktop builds where
+/// the remote client is available (`local_fs`, i.e. `not(target_family =
+/// "wasm")`); the `Local` arm exists everywhere.
+#[derive(Clone)]
+pub enum GitExecTarget {
+    Local {
+        repo_path: PathBuf,
+    },
+    #[cfg(feature = "local_fs")]
+    Remote {
+        client: Arc<RemoteServerClient>,
+        session_id: SessionId,
+        /// Remote repository root, rendered as a path string for the remote shell.
+        repo_path: String,
+    },
+}
+
+impl GitExecTarget {
+    /// Convenience constructor for a local target.
+    pub fn local(repo_path: PathBuf) -> Self {
+        Self::Local { repo_path }
+    }
+
+    /// The local repository path, or `None` for a remote target. Used by the
+    /// few diff operations that touch the filesystem directly (e.g. counting
+    /// lines in untracked files) rather than shelling out to git.
+    pub fn local_repo_path(&self) -> Option<&Path> {
+        match self {
+            Self::Local { repo_path } => Some(repo_path.as_path()),
+            #[cfg(feature = "local_fs")]
+            Self::Remote { .. } => None,
+        }
+    }
+
+    /// A stable path used to identify the repository this target points at.
+    /// For local targets this is the working-copy path; for remote targets it
+    /// is the remote root rendered as a `PathBuf` (used only for equality
+    /// checks, never the local filesystem).
+    pub fn identity_path(&self) -> PathBuf {
+        match self {
+            Self::Local { repo_path } => repo_path.clone(),
+            #[cfg(feature = "local_fs")]
+            Self::Remote { repo_path, .. } => PathBuf::from(repo_path),
+        }
+    }
+
+    /// Runs `git <args>` against this target and returns stdout as a (lossy)
+    /// String. Identical contract to [`run_git_command`]: exit code 0 is ok,
+    /// exit code 1 with non-empty stdout is ok (diff "differences found"),
+    /// anything else is an error.
+    pub async fn run_git(&self, args: &[&str]) -> Result<String> {
+        match self {
+            Self::Local { repo_path } => run_git_command(repo_path, args).await,
+            #[cfg(feature = "local_fs")]
+            Self::Remote {
+                client,
+                session_id,
+                repo_path,
+            } => run_git_remote(client, *session_id, repo_path, args).await,
+        }
+    }
+}
+
+/// Builds the shell command string for a remote git invocation:
+/// `git -c diff.autoRefreshIndex=false <quoted args...>`. Each arg is
+/// POSIX-shell-quoted so paths / branch names with spaces or special characters
+/// survive transport to the remote shell intact.
+#[cfg(feature = "local_fs")]
+fn build_remote_git_command(args: &[&str]) -> String {
+    let mut cmd = String::from("git -c diff.autoRefreshIndex=false");
+    for arg in args {
+        cmd.push(' ');
+        cmd.push_str(&shell_quote(arg));
+    }
+    cmd
+}
+
+/// Maps a remote `RunCommandSuccess` payload to the same `Result<String>`
+/// contract as the local subprocess path. Extracted as a pure function so the
+/// exit-code / stdout rules can be unit-tested against canned bytes (binary
+/// diff, `-z` null-delimited status) without a live client.
+#[cfg(feature = "local_fs")]
+fn map_remote_git_output(stdout: &[u8], stderr: &[u8], exit_code: Option<i32>) -> Result<String> {
+    let stdout = String::from_utf8_lossy(stdout).to_string();
+    // Mirror the local arm: exit 0 => ok; exit 1 with non-empty stdout => ok
+    // (git diff "differences found"); anything else (including death by signal,
+    // where exit_code is None) => error.
+    if exit_code == Some(0) || (exit_code == Some(1) && !stdout.is_empty()) {
+        Ok(stdout)
+    } else {
+        let stderr = String::from_utf8_lossy(stderr);
+        Err(anyhow!("Git command failed: {}, {}", stderr, stdout))
+    }
+}
+
+/// Runs a git command on the remote host via [`RemoteServerClient::run_command`].
+/// `working_directory` replaces a local `cd`, and `GIT_OPTIONAL_LOCKS=0` is
+/// passed through the environment map to match the local arm.
+#[cfg(feature = "local_fs")]
+async fn run_git_remote(
+    client: &RemoteServerClient,
+    session_id: SessionId,
+    repo_path: &str,
+    args: &[&str],
+) -> Result<String> {
+    use crate::remote_server::proto::run_command_response;
+
+    let command = build_remote_git_command(args);
+    log::debug!("[GIT OPERATION] git.rs run_git_remote {command}");
+
+    let mut env = HashMap::new();
+    env.insert("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string());
+
+    let response = client
+        .run_command(session_id, command, Some(repo_path.to_string()), env)
+        .await
+        .map_err(|e| anyhow!("Failed to execute remote git command: {e}"))?;
+
+    match response.result {
+        Some(run_command_response::Result::Success(success)) => {
+            map_remote_git_output(&success.stdout, &success.stderr, success.exit_code)
+        }
+        Some(run_command_response::Result::Error(err)) => {
+            Err(anyhow!("Remote git command error: {}", err.message))
+        }
+        None => Err(anyhow!("Remote git command returned an empty response")),
+    }
+}
+
+/// POSIX single-quote escaping for one shell argument. An argument made up
+/// entirely of "safe" characters is passed through unquoted; everything else
+/// (spaces, `--`-prefixed args containing specials, unicode, etc.) is wrapped
+/// in single quotes with embedded `'` replaced by the `'\''` sequence.
+#[cfg(feature = "local_fs")]
+fn shell_quote(arg: &str) -> String {
+    fn is_safe(b: u8) -> bool {
+        matches!(b,
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9'
+            | b'-' | b'_' | b'/' | b'.' | b',' | b'=' | b':' | b'@' | b'+' | b'%')
+    }
+    if !arg.is_empty() && arg.bytes().all(is_safe) {
+        return arg.to_string();
+    }
+    let mut out = String::with_capacity(arg.len() + 2);
+    out.push('\'');
+    for ch in arg.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
 
 /// Runs a git command and returns the output as a string.
 /// Thin wrapper over [`run_git_command_with_env`] with no `PATH` override.
@@ -104,21 +275,14 @@ pub fn list_local_branches_sync(_repo_path: &Path) -> HashSet<String> {
 }
 
 /// Fetches the current git branch.
-#[cfg(not(feature = "local_fs"))]
-pub async fn detect_current_branch(_repo_path: &Path) -> Result<String> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
-/// Fetches the current git branch.
 /// In detached HEAD state this returns the literal string "HEAD".
-#[cfg(feature = "local_fs")]
-pub async fn detect_current_branch(repo_path: &Path) -> Result<String> {
+pub async fn detect_current_branch(target: &GitExecTarget) -> Result<String> {
     log::debug!("[GIT OPERATION] git.rs detect_current_branch git rev-parse --abbrev-ref HEAD");
-    let result = run_git_command(repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).await;
+    let result = target.run_git(&["rev-parse", "--abbrev-ref", "HEAD"]).await;
 
     if result.is_err() {
         log::debug!("[GIT OPERATION] git.rs detect_current_branch git branch --show-current");
-        run_git_command(repo_path, &["branch", "--show-current"]).await
+        target.run_git(&["branch", "--show-current"]).await
     } else {
         result
     }
@@ -130,7 +294,7 @@ pub async fn detect_current_branch(repo_path: &Path) -> Result<String> {
 /// (Matches the shell command `git symbolic-ref --short HEAD || git rev-parse --short HEAD`.)
 #[cfg(feature = "local_fs")]
 pub async fn detect_current_branch_display(repo_path: &Path) -> Result<String> {
-    let branch = detect_current_branch(repo_path).await?;
+    let branch = detect_current_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     if branch == "HEAD" {
         run_git_command(repo_path, &["rev-parse", "--short", "HEAD"])
             .await
@@ -146,19 +310,12 @@ pub async fn detect_current_branch_display(_repo_path: &Path) -> Result<String> 
 }
 
 /// Detects the main branch using git-branchless style heuristics.
-#[cfg(not(feature = "local_fs"))]
-pub async fn detect_main_branch(_repo_path: &Path) -> Result<String> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
-/// Detects the main branch using git-branchless style heuristics.
-#[cfg(feature = "local_fs")]
-pub async fn detect_main_branch(repo_path: &Path) -> Result<String> {
+pub async fn detect_main_branch(target: &GitExecTarget) -> Result<String> {
     // First try to get the default branch from origin
     log::debug!(
         "[GIT OPERATION] git.rs detect_main_branch git symbolic-ref refs/remotes/origin/HEAD"
     );
-    match run_git_command(repo_path, &["symbolic-ref", "refs/remotes/origin/HEAD"]).await {
+    match target.run_git(&["symbolic-ref", "refs/remotes/origin/HEAD"]).await {
         Ok(output) => {
             let branch_ref = output.trim();
             if let Some(branch_name) = branch_ref.strip_prefix("refs/remotes/") {
@@ -177,11 +334,9 @@ pub async fn detect_main_branch(repo_path: &Path) -> Result<String> {
         log::debug!(
             "[GIT OPERATION] git.rs detect_main_branch git rev-parse --verify {candidate}^{{}}"
         );
-        let result = run_git_command(
-            repo_path,
-            &["rev-parse", "--verify", &format!("{candidate}^{{}}")],
-        )
-        .await;
+        let result = target
+            .run_git(&["rev-parse", "--verify", &format!("{candidate}^{{}}")])
+            .await;
 
         if result.is_ok() {
             return Ok(candidate.to_string());
@@ -190,23 +345,13 @@ pub async fn detect_main_branch(repo_path: &Path) -> Result<String> {
 
     // Final fallback if all else fails.
     log::debug!("[GIT OPERATION] git.rs detect_main_branch git branch --show-current");
-    run_git_command(repo_path, &["branch", "--show-current"]).await
+    target.run_git(&["branch", "--show-current"]).await
 }
 
 /// Returns the SHA where `HEAD` forked from any other ref. Use
 /// `<fork>..HEAD` for "commits unique to this branch".
-#[cfg(not(feature = "local_fs"))]
 pub async fn detect_fork_point(
-    _repo_path: &Path,
-    _current_branch_name: Option<&str>,
-) -> Result<Option<String>> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
-/// See the no-`local_fs` stub above for documentation.
-#[cfg(feature = "local_fs")]
-pub async fn detect_fork_point(
-    repo_path: &Path,
+    target: &GitExecTarget,
     current_branch_name: Option<&str>,
 ) -> Result<Option<String>> {
     // Exclude `<current>` and `origin/<current>` so the branch isn't
@@ -224,7 +369,7 @@ pub async fn detect_fork_point(
     args.extend(remote_exclude.as_deref());
     args.push("--remotes");
 
-    let unique = match run_git_command(repo_path, &args).await {
+    let unique = match target.run_git(&args).await {
         Ok(out) => out,
         Err(e) => {
             log::debug!("detect_fork_point: rev-list failed: {e}");
@@ -234,11 +379,12 @@ pub async fn detect_fork_point(
 
     // Last non-empty line = oldest unique commit; its parent = fork point.
     // No unique commits means HEAD is fully shared, so fork = HEAD.
-    let target = match unique.lines().rfind(|l| !l.trim().is_empty()) {
+    let rev = match unique.lines().rfind(|l| !l.trim().is_empty()) {
         Some(sha) => format!("{}^", sha.trim()),
         None => "HEAD".to_string(),
     };
-    Ok(run_git_command(repo_path, &["rev-parse", &target])
+    Ok(target
+        .run_git(&["rev-parse", &rev])
         .await
         .ok()
         .map(|s| s.trim().to_string()))
@@ -387,23 +533,20 @@ pub async fn get_file_change_entries(
 }
 
 /// Unpushed commits: `<upstream>..HEAD`, or `<fork_point>..HEAD` if no upstream.
-#[cfg(feature = "local_fs")]
 pub async fn get_unpushed_commits(
-    repo_path: &Path,
+    target: &GitExecTarget,
     current_branch_name: Option<&str>,
     upstream_ref: Option<&str>,
 ) -> Result<Vec<Commit>> {
     let output = if let Some(upstream_ref) = upstream_ref.map(str::trim).filter(|s| !s.is_empty()) {
         let range = format!("{upstream_ref}..HEAD");
-        run_git_command(
-            repo_path,
-            &["log", &range, "--format=COMMIT:%H\t%s", "--numstat"],
-        )
-        .await?
+        target
+            .run_git(&["log", &range, "--format=COMMIT:%H\t%s", "--numstat"])
+            .await?
     } else {
         // No upstream — fall back to the fork-point commit so we show
         // exactly the commits unique to this branch
-        let fork_point = detect_fork_point(repo_path, current_branch_name)
+        let fork_point = detect_fork_point(target, current_branch_name)
             .await
             .ok()
             .flatten();
@@ -413,18 +556,15 @@ pub async fn get_unpushed_commits(
             None => "HEAD".to_string(),
         };
 
-        run_git_command(
-            repo_path,
-            &["log", &range, "--format=COMMIT:%H\t%s", "--numstat"],
-        )
-        .await
-        .inspect_err(|e| log::warn!("Fallback unpushed-commits log failed: {e}"))
-        .unwrap_or_default()
+        target
+            .run_git(&["log", &range, "--format=COMMIT:%H\t%s", "--numstat"])
+            .await
+            .inspect_err(|e| log::warn!("Fallback unpushed-commits log failed: {e}"))
+            .unwrap_or_default()
     };
     parse_commit_log(&output)
 }
 
-#[cfg(feature = "local_fs")]
 fn parse_commit_log(output: &str) -> Result<Vec<Commit>> {
     let mut commits = Vec::new();
     let mut current: Option<Commit> = None;
@@ -462,15 +602,6 @@ fn parse_commit_log(output: &str) -> Result<Vec<Commit>> {
     }
 
     Ok(commits)
-}
-
-#[cfg(not(feature = "local_fs"))]
-pub async fn get_unpushed_commits(
-    _repo_path: &Path,
-    _current_branch_name: Option<&str>,
-    _upstream_ref: Option<&str>,
-) -> Result<Vec<Commit>> {
-    Err(anyhow!("Not supported on wasm"))
 }
 
 /// Returns the list of files changed in a specific commit, with per-file stats.
@@ -683,9 +814,9 @@ pub async fn run_commit(
 /// `origin/<current>` (or HEAD when unpushed).
 #[cfg(feature = "local_fs")]
 pub async fn get_branch_diff_entries(repo_path: &Path) -> Result<Vec<FileChangeEntry>> {
-    let base = detect_main_branch(repo_path).await?;
+    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     let base = base.trim();
-    let current = detect_current_branch(repo_path).await?;
+    let current = detect_current_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     let remote_ref = format!("origin/{current}");
 
     // Use the remote ref if it exists, otherwise fall back to HEAD.
@@ -828,9 +959,9 @@ pub async fn get_pr_for_branch(
 /// truncated for AI token limits.
 #[cfg(feature = "local_fs")]
 pub async fn get_diff_for_pr(repo_path: &Path) -> Result<String> {
-    let base = detect_main_branch(repo_path).await?;
+    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     let base = base.trim();
-    let current = detect_current_branch(repo_path).await?;
+    let current = detect_current_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     let remote_ref = format!("origin/{current}");
 
     let end_ref = if run_git_command(repo_path, &["rev-parse", "--verify", &remote_ref])
@@ -861,7 +992,7 @@ pub async fn get_diff_for_pr(_repo_path: &Path) -> Result<String> {
 /// Commit subject lines on the current branch since the default branch.
 #[cfg(feature = "local_fs")]
 pub async fn get_branch_commit_messages(repo_path: &Path) -> Result<Vec<String>> {
-    let base = detect_main_branch(repo_path).await?;
+    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     let base = base.trim();
     let range = format!("{base}..HEAD");
     let output = run_git_command(repo_path, &["log", &range, "--format=%s"]).await?;
@@ -887,7 +1018,7 @@ pub async fn create_pr(
     body: Option<&str>,
     path_env: Option<&str>,
 ) -> Result<PrInfo> {
-    let base = detect_main_branch(repo_path).await?;
+    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
     let base = base.trim();
     let base = base.strip_prefix("origin/").unwrap_or(base);
     let sanitized_title;
