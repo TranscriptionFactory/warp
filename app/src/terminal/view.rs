@@ -2636,6 +2636,13 @@ pub struct TerminalView {
     /// Path to the current repository, or None if not currently in a repo.
     current_repo_path: Option<PathBuf>,
 
+    /// Repository root for a warpified remote (SSH) session, as `(host, root)`.
+    /// Populated by `git rev-parse --show-toplevel` over the remote server
+    /// client (the local-FS detection that drives `current_repo_path` cannot see
+    /// the remote working copy). `None` for local sessions and non-warpified SSH.
+    #[cfg(feature = "local_fs")]
+    current_remote_repo: Option<(warp_core::HostId, String)>,
+
     /// The title of the terminal view to show when there is no selected conversation.
     terminal_title: String,
 
@@ -2732,6 +2739,16 @@ impl TerminalView {
     /// Returns the path to the current repository, if any.
     pub fn current_repo_path(&self) -> Option<&PathBuf> {
         self.current_repo_path.as_ref()
+    }
+
+    /// Returns the `(host, repo root)` for a warpified remote session inside a
+    /// git repo, or `None` for local sessions / non-warpified SSH / cwd outside
+    /// any repo. The root is the remote-side path string (never a local FS path).
+    #[cfg(feature = "local_fs")]
+    pub fn current_remote_repo(&self) -> Option<(&warp_core::HostId, &str)> {
+        self.current_remote_repo
+            .as_ref()
+            .map(|(host, root)| (host, root.as_str()))
     }
 
     /// Create a SyncEvent for other terminals to use based on
@@ -3943,6 +3960,8 @@ impl TerminalView {
             block_completed_callbacks: Default::default(),
             conversation_completed_callbacks: Default::default(),
             current_repo_path: None,
+            #[cfg(feature = "local_fs")]
+            current_remote_repo: None,
             terminal_title: Default::default(),
             ignore_next_set_title_event: false,
             cli_subagent_views: Default::default(),
@@ -10394,6 +10413,75 @@ impl TerminalView {
                                         ctx.notify();
                                     }
                                 });
+                            }
+
+                            // Remote (warpified SSH) repository detection. The
+                            // local detection above runs against the local
+                            // filesystem and cannot see the remote working copy,
+                            // so resolve the remote repo root by running
+                            // `git rev-parse --show-toplevel` over the remote
+                            // server client. Mirrors the local path's
+                            // `RepoChanged` emit so the code review panel
+                            // re-initializes with the remote target.
+                            {
+                                use crate::remote_server::manager::RemoteServerManager;
+                                let session_id = block_metadata_received_event
+                                    .block_metadata
+                                    .session_id();
+                                let remote = session_id.and_then(|sid| {
+                                    let mgr = RemoteServerManager::as_ref(ctx);
+                                    let client = mgr.client_for_session(sid)?.clone();
+                                    let host_id = mgr.host_id_for_session(sid)?.clone();
+                                    Some((sid, client, host_id))
+                                });
+                                match remote {
+                                    Some((session_id, client, host_id)) => {
+                                        // Skip the SSH round-trip when the new
+                                        // cwd is already inside the known repo on
+                                        // the same host (remote hosts are Unix,
+                                        // so "/" is the path separator).
+                                        let already_inside = self
+                                            .current_remote_repo
+                                            .as_ref()
+                                            .is_some_and(|(known_host, known_root)| {
+                                                known_host == &host_id
+                                                    && (active_directory == known_root
+                                                        || active_directory.starts_with(
+                                                            &format!("{known_root}/"),
+                                                        ))
+                                            });
+                                        if !already_inside {
+                                            let target = crate::util::git::GitExecTarget::Remote {
+                                                client,
+                                                session_id,
+                                                repo_path: active_directory.to_string(),
+                                            };
+                                            let fut = async move {
+                                                target
+                                                    .run_git(&["rev-parse", "--show-toplevel"])
+                                                    .await
+                                            };
+                                            ctx.spawn(fut, move |me, result, ctx| {
+                                                let new_remote = result
+                                                    .ok()
+                                                    .map(|root| root.trim().to_string())
+                                                    .filter(|root| !root.is_empty())
+                                                    .map(|root| (host_id.clone(), root));
+                                                if me.current_remote_repo != new_remote {
+                                                    me.current_remote_repo = new_remote;
+                                                    ctx.emit(Event::Pane(PaneEvent::RepoChanged));
+                                                }
+                                            });
+                                        }
+                                    }
+                                    None => {
+                                        // Local or non-warpified session: drop any
+                                        // stale remote repo identity.
+                                        if self.current_remote_repo.take().is_some() {
+                                            ctx.emit(Event::Pane(PaneEvent::RepoChanged));
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
