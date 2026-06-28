@@ -4,6 +4,10 @@ use indexmap::IndexSet;
 use repo_metadata::repositories::DetectedRepositories;
 use std::collections::HashMap;
 #[cfg(feature = "local_fs")]
+use std::sync::Arc;
+#[cfg(feature = "local_fs")]
+use warp_core::{HostId, SessionId};
+#[cfg(feature = "local_fs")]
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "local_fs")]
@@ -20,6 +24,8 @@ use crate::code_review::{
     code_review_view::CodeReviewView,
     diff_state::{DiffMode, DiffStateModel},
 };
+#[cfg(feature = "local_fs")]
+use crate::remote_server::client::RemoteServerClient;
 use crate::workspace::view::global_search::view::GlobalSearchView;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +91,11 @@ pub struct WorkingDirectoriesModel {
     /// Since git state is inherently tied to a repository (not a pane group),
     /// this is stored globally and shared across all pane groups viewing the same repo.
     diff_state_models: HashMap<PathBuf, ModelHandle<DiffStateModel>>,
+    /// Like `diff_state_models`, but for warpified remote (SSH) repositories.
+    /// Keyed by `(host, remote repo root)` rather than a local `PathBuf` so that
+    /// a remote repo never collides with a local repo sharing the same path
+    /// string. These models have no FS watcher; the view drives their refreshes.
+    remote_diff_state_models: HashMap<(HostId, String), ModelHandle<DiffStateModel>>,
     /// Global mapping from repository root paths to their CommentBatch.
     /// Like the DiffStateModel mapping, comments are inherently tied to git diffs
     /// and are shared across all pane groups viewing the same repo.
@@ -189,6 +200,39 @@ impl WorkingDirectoriesModel {
 
         self.diff_state_models
             .insert(repo_path.clone(), diff_state_model.clone());
+
+        Some(diff_state_model)
+    }
+
+    /// Get or create a [`DiffStateModel`] for a warpified remote repository.
+    /// Unlike [`Self::get_or_create_diff_state_model`], this skips local repo
+    /// detection and routes git through the remote session. Cached models are
+    /// re-pointed at the current `session_id`/`client`, since those change
+    /// across reconnects while the `(host, root)` identity is stable.
+    pub fn get_or_create_remote_diff_state_model(
+        &mut self,
+        client: Arc<RemoteServerClient>,
+        session_id: SessionId,
+        host_id: HostId,
+        repo_root: String,
+        ctx: &mut ModelContext<Self>,
+    ) -> Option<ModelHandle<DiffStateModel>> {
+        let key = (host_id, repo_root.clone());
+        if let Some(model) = self.remote_diff_state_models.get(&key) {
+            let model = model.clone();
+            model.update(ctx, |model, ctx| {
+                model.set_remote_repository(client, session_id, repo_root, ctx);
+            });
+            return Some(model);
+        }
+
+        let diff_state_model = ctx.add_model(|model_ctx| {
+            let mut model = DiffStateModel::new(None, model_ctx);
+            model.set_remote_repository(client, session_id, repo_root, model_ctx);
+            model
+        });
+        self.remote_diff_state_models
+            .insert(key, diff_state_model.clone());
 
         Some(diff_state_model)
     }
