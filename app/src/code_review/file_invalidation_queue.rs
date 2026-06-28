@@ -5,6 +5,7 @@ use std::pin::Pin;
 use warp_core::sync_queue::{IsTransientError, SyncQueueTaskTrait};
 
 use super::diff_state::{DiffMode, DiffStateModel, FileDiffAndContent};
+use crate::util::git::GitExecTarget;
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -37,9 +38,14 @@ impl SyncQueueTaskTrait for FileInvalidationTask {
         let mode = self.mode.clone();
         let merge_base = self.merge_base.clone();
         Box::pin(async move {
-            DiffStateModel::retrieve_diff_state(&repo_path, &file, &mode, merge_base.as_deref())
-                .await
-                .map_err(FileInvalidationError::from)
+            DiffStateModel::retrieve_diff_state(
+                &GitExecTarget::local(repo_path),
+                &file,
+                &mode,
+                merge_base.as_deref(),
+            )
+            .await
+            .map_err(FileInvalidationError::from)
         })
     }
 }

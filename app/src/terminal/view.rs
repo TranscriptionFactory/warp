@@ -5633,7 +5633,11 @@ impl TerminalView {
         let diff_mode_clone = diff_mode.clone();
         let repo_path_clone = repo_path.clone();
         let future = async move {
-            DiffStateModel::load_diff_data_for_mode(diff_mode_clone, repo_path_clone).await
+            DiffStateModel::load_diff_data_for_mode(
+                diff_mode_clone,
+                crate::util::git::GitExecTarget::local(repo_path_clone),
+            )
+            .await
         };
 
         ctx.spawn(future, move |_me, git_diff_data_opt, ctx| {

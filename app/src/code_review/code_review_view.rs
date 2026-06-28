@@ -776,6 +776,23 @@ impl CodeReviewView {
         &self.diff_state_model
     }
 
+    /// The git-execution target for the active repository — a remote SSH
+    /// session when one is active, otherwise the local working copy. Sourced
+    /// from the diff-state model so standalone git queries (branch list, merge
+    /// base) transparently use the right transport.
+    fn git_exec_target(&self, ctx: &AppContext) -> Option<crate::util::git::GitExecTarget> {
+        #[cfg(feature = "local_fs")]
+        {
+            self.diff_state_model
+                .read(ctx, |model, ctx| model.exec_target(ctx))
+        }
+        #[cfg(not(feature = "local_fs"))]
+        {
+            let _ = ctx;
+            None
+        }
+    }
+
     pub fn update_current_repo(&mut self, repo_path: Option<PathBuf>, ctx: &mut ViewContext<Self>) {
         safe_info!(
             safe: ("Code Review: update_current_repo called. Branches cleared."),
@@ -1355,19 +1372,24 @@ impl CodeReviewView {
     }
 
     fn fetch_branches_and_setup_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
-        let Some(repo_path) = self.repo_path().cloned() else {
+        let Some(target) = self.git_exec_target(ctx) else {
             return;
         };
-        let fetched_repo_path = repo_path.clone();
+        let fetched_identity = target.identity_path();
         ctx.spawn(
             async move {
-                DiffStateModel::get_all_branches(&repo_path, None, false /* include_remotes */)
-                    .await
+                DiffStateModel::get_all_branches(&target, None, false /* include_remotes */).await
             },
             move |me, branches_result, ctx| {
                 // If the active repo changed while branches were being fetched,
-                // discard the stale result.
-                if me.repo_path() != Some(&fetched_repo_path) {
+                // discard the stale result. Compared by repository identity so
+                // this works for both local and remote targets.
+                if me
+                    .diff_state_model
+                    .read(ctx, |model, ctx| model.active_repository_path(ctx))
+                    .as_ref()
+                    != Some(&fetched_identity)
+                {
                     return;
                 }
                 match branches_result {
@@ -2649,10 +2671,9 @@ impl CodeReviewView {
     fn recompute_merge_base_and_flush(&mut self, ctx: &mut ViewContext<Self>) {
         let diff_mode = self.diff_state_model.as_ref(ctx).diff_mode();
         if !matches!(diff_mode, DiffMode::Head) {
-            if let Some(repo) = self.active_repo.as_ref() {
-                let repo_path = repo.repo_path.clone();
+            if let Some(target) = self.git_exec_target(ctx) {
                 let handle = ctx.spawn(
-                    async move { DiffStateModel::compute_merge_base(&repo_path, &diff_mode).await },
+                    async move { DiffStateModel::compute_merge_base(&target, &diff_mode).await },
                     |me, result, ctx| {
                         if let Some(repo) = me.active_repo.as_mut() {
                             repo.file_invalidation.merge_base_handle = None;

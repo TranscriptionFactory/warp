@@ -8,7 +8,7 @@ use warpui::ModelContext;
 #[cfg(feature = "local_fs")]
 use {
     crate::throttle::throttle,
-    crate::util::git::{detect_current_branch_display, detect_main_branch},
+    crate::util::git::{detect_current_branch_display, detect_main_branch, GitExecTarget},
     async_channel::Sender,
     repo_metadata::{
         repositories::DetectedRepositories,
@@ -282,14 +282,15 @@ impl GitRepoStatusModel {
     /// but only computes the HEAD (uncommitted) stats since that's all the git
     /// chip needs.
     async fn load_metadata(repo_path: PathBuf) -> anyhow::Result<GitStatusMetadata> {
+        let target = GitExecTarget::local(repo_path.clone());
         // Detect main branch.
-        let main_branch_name = detect_main_branch(&repo_path).await?;
+        let main_branch_name = detect_main_branch(&target).await?;
         // Detect current branch (using the display variant so detached HEAD
         // shows the short SHA instead of the literal "HEAD").
         let current_branch_name = detect_current_branch_display(&repo_path).await?;
         // Diff stats against HEAD.
         let stats_against_head =
-            super::diff_state::DiffStateModel::diff_metadata_against_head(&repo_path).await?;
+            super::diff_state::DiffStateModel::diff_metadata_against_head(&target).await?;
 
         Ok(GitStatusMetadata {
             current_branch_name,

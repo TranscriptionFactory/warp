@@ -8,7 +8,7 @@ use warpui::{
 use crate::{
     code_review::diff_state::DiffStateModel,
     tab_configs::PickerStyle,
-    util::git::detect_current_branch,
+    util::git::{detect_current_branch, GitExecTarget},
     view_components::{DropdownItem, FilterableDropdown},
 };
 
@@ -135,12 +135,13 @@ impl BranchPicker {
 
         ctx.spawn(
             async move {
+                let target = GitExecTarget::local(cwd);
                 let branches = match known_main {
                     Some(ref main) => {
-                        DiffStateModel::get_all_branches_with_known_main(&cwd, main, None, false)
+                        DiffStateModel::get_all_branches_with_known_main(&target, main, None, false)
                             .await
                     }
-                    None => DiffStateModel::get_all_branches(&cwd, None, false).await,
+                    None => DiffStateModel::get_all_branches(&target, None, false).await,
                 };
 
                 // git for-each-ref only lists refs backed by actual commits,
@@ -150,7 +151,7 @@ impl BranchPicker {
                 // so the picker still has a usable entry.
                 match branches {
                     Ok(ref list) if list.is_empty() => {
-                        if let Ok(current) = detect_current_branch(&cwd).await {
+                        if let Ok(current) = detect_current_branch(&target).await {
                             let trimmed = current.trim().to_string();
                             if !trimmed.is_empty() {
                                 return Ok(vec![(trimmed, true)]);
