@@ -7845,12 +7845,22 @@ impl Workspace {
             // Resolve DiffStateModel outside the read closure (needs mutable context).
             read_result.and_then(
                 |(repo_path, terminal_view): (Option<PathBuf>, WeakViewHandle<TerminalView>)| {
-                    let diff_state_model = repo_path.as_ref().and_then(|rp: &PathBuf| {
-                        self.working_directories_model.update(ctx, |model, ctx| {
-                            model.get_or_create_diff_state_model(rp.clone(), ctx)
-                        })
-                    })?;
-                    Some((repo_path, diff_state_model, terminal_view))
+                    if let Some(rp) = repo_path.as_ref() {
+                        let diff_state_model =
+                            self.working_directories_model.update(ctx, |model, ctx| {
+                                model.get_or_create_diff_state_model(rp.clone(), ctx)
+                            })?;
+                        return Some((repo_path, diff_state_model, terminal_view));
+                    }
+                    // No local repo detected. Fall back to a warpified remote
+                    // (SSH) repository, if the active session has one.
+                    #[cfg(feature = "local_fs")]
+                    if let Some((remote_repo_path, diff_state_model)) =
+                        self.remote_code_review_context(&terminal_view, ctx)
+                    {
+                        return Some((Some(remote_repo_path), diff_state_model, terminal_view));
+                    }
+                    None
                 },
             )
         };
@@ -7869,6 +7879,42 @@ impl Workspace {
                 right_panel_view.close_code_review(ctx);
             })
         }
+    }
+
+    /// Resolves the code-review context for a warpified remote (SSH) session:
+    /// the `(host, root)` tracked on the terminal view plus a connected remote
+    /// client become a remote-backed [`DiffStateModel`]. The returned `PathBuf`
+    /// is the remote root used purely as the panel's repo identity (never the
+    /// local filesystem). Returns `None` for local sessions, non-warpified SSH,
+    /// or before the remote repo root has been resolved.
+    #[cfg(feature = "local_fs")]
+    fn remote_code_review_context(
+        &mut self,
+        terminal_view: &WeakViewHandle<TerminalView>,
+        ctx: &mut ViewContext<Self>,
+    ) -> Option<(PathBuf, ModelHandle<DiffStateModel>)> {
+        let terminal_view = terminal_view.upgrade(ctx)?;
+        let (host_id, root, session_id) = terminal_view.read(ctx, |tv, _| {
+            let (host_id, root) = tv.current_remote_repo()?;
+            let session_id = tv.active_block_session_id()?;
+            Some((host_id.clone(), root.to_string(), session_id))
+        })?;
+
+        let client = RemoteServerManager::as_ref(ctx)
+            .client_for_session(session_id)?
+            .clone();
+
+        let diff_state_model = self.working_directories_model.update(ctx, |model, ctx| {
+            model.get_or_create_remote_diff_state_model(
+                client,
+                session_id,
+                host_id,
+                root.clone(),
+                ctx,
+            )
+        })?;
+
+        Some((PathBuf::from(root), diff_state_model))
     }
 
     fn open_code_review_panel_from_arg(
