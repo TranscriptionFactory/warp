@@ -134,6 +134,10 @@ struct CodeReviewState {
 struct CodeReviewSessionEnv {
     is_remote: bool,
     is_wsl: bool,
+    /// `true` for warpified SSH (a connected remote server), where diffs can be
+    /// rendered remotely. Distinguishes the supported case from plain tmux /
+    /// subshell SSH, which keeps the "local workspaces only" message.
+    has_remote_server: bool,
 }
 
 impl CodeReviewState {
@@ -457,9 +461,14 @@ impl RightPanelView {
         &mut self,
         is_remote: bool,
         is_wsl: bool,
+        has_remote_server: bool,
         ctx: &mut ViewContext<Self>,
     ) {
-        self.code_review_session_env = Some(CodeReviewSessionEnv { is_remote, is_wsl });
+        self.code_review_session_env = Some(CodeReviewSessionEnv {
+            is_remote,
+            is_wsl,
+            has_remote_server,
+        });
         ctx.notify();
     }
 
@@ -790,7 +799,7 @@ impl RightPanelView {
             let no_repo_body = {
                 let button = Some(ChildView::new(&self.open_repository_button).finish());
                 if let Some(env) = &self.code_review_session_env {
-                    if env.is_remote {
+                    if env.is_remote && !env.has_remote_server {
                         CodeReviewView::render_remote_state(appearance, button)
                     } else if env.is_wsl {
                         CodeReviewView::render_wsl_state(appearance, button)
