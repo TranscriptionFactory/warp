@@ -5,6 +5,44 @@ Follow-up spec for finishing remote (SSH) support in the Code Review panel.
 `feat/code-review-remote-diffs` (commit: "refactor(code-review): route git
 through transport-agnostic GitExecTarget"). This document is the remaining work.
 
+## Status: Phase B implemented (2026-06-28)
+
+All four steps below are implemented on `feat/code-review-remote-diffs`:
+
+- **Step 1** — `TerminalView::current_remote_repo: Option<(HostId, String)>` +
+  `current_remote_repo()` accessor; resolved by `git rev-parse --show-toplevel`
+  over the connected remote client in the block-metadata handler, emitting
+  `PaneEvent::RepoChanged`. A cwd-prefix guard avoids re-running rev-parse on
+  every block while inside the same repo.
+- **Step 2** — went with the "empty model + `set_remote_repository`" variant
+  (no separate `DiffStateModel::new_remote`). It lives in
+  `WorkingDirectoriesModel::get_or_create_remote_diff_state_model`, cached in a
+  **separate** `remote_diff_state_models: HashMap<(HostId, String), …>` (not a
+  unified `RepoKey` enum) so a remote repo never collides with a local repo at
+  the same path string. Cached models are re-pointed at the current
+  session/client on each lookup (session ids change across reconnects).
+- **Step 3** — `setup_code_review_panel` falls back to
+  `remote_code_review_context()` (a new `#[cfg(local_fs)]` helper on the
+  workspace view) when no local repo is detected; the remote root is passed as
+  `PathBuf::from(root)` for panel identity. The toggle-open path routes through
+  the same `setup_code_review_panel(None, …)`, so it is covered too.
+- **Step 4** — `has_remote_server` is reported truthfully (connected
+  `client_for_session`) in **two** gates: `code_review_view.rs::session_env`
+  *and* the panel-level `right_panel.rs` `CodeReviewSessionEnv` /
+  `update_session_env` (the latter was **not** in the original anchor list — it
+  is a second no-repo gate shown when no repo is selected). Both now show the
+  reworded `code-review-diffs-local-workspaces-only` string only for
+  non-warpified SSH; warpified SSH renders diffs / the normal no-repo state.
+  `render_remote_state_with_buttons` was left unchanged: with the match-pattern
+  flip it is only reached when `has_remote_server == false`.
+
+**Verification done:** `cargo check -p warp --lib` (desktop, `local_fs` on)
+compiles; Phase A unit tests (`util::git::tests`, `code_review::diff_state`)
+still pass. **Not done:** wasm build (target not installed in this env — the
+`Remote` arm and all new remote code are `#[cfg(local_fs)]` / `cfg(not(wasm))`
+gated, mirroring Phase A) and the manual E2E below (needs a live warpified SSH
+host).
+
 ## What Phase A delivered (already done)
 
 - `app/src/util/git.rs`: `GitExecTarget { Local { repo_path }, Remote { client,
