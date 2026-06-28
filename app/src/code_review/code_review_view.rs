@@ -2963,17 +2963,26 @@ impl CodeReviewView {
     fn session_env(&self, app: &AppContext) -> Option<GitSessionState> {
         let terminal_view = self.terminal_view.as_ref()?.upgrade(app)?;
         terminal_view.read(app, |terminal, ctx| {
-            let session = terminal
-                .active_block_session_id()
-                .and_then(|id| terminal.sessions_model().as_ref(ctx).get(id));
+            let session_id = terminal.active_block_session_id();
+            let session =
+                session_id.and_then(|id| terminal.sessions_model().as_ref(ctx).get(id));
             let is_local = terminal.active_session_is_local(ctx);
             let is_remote = matches!(is_local, Some(false));
             let is_wsl = session.as_ref().map(|s| s.is_wsl()).unwrap_or(false);
 
+            // A warpified SSH session has a connected remote server client, so
+            // git can run remotely and the panel should render diffs rather than
+            // the "local workspaces only" message. Plain tmux / subshell SSH has
+            // no client and keeps the unsupported message.
+            let has_remote_server = is_remote
+                && session_id.is_some_and(|sid| {
+                    crate::remote_server::manager::RemoteServerManager::as_ref(ctx)
+                        .client_for_session(sid)
+                        .is_some()
+                });
+
             let enablement = if is_remote {
-                CodingPanelEnablementState::RemoteSession {
-                    has_remote_server: false,
-                }
+                CodingPanelEnablementState::RemoteSession { has_remote_server }
             } else if is_wsl {
                 CodingPanelEnablementState::UnsupportedSession
             } else {
@@ -3000,10 +3009,15 @@ impl CodeReviewView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         match self.session_env(app) {
+            // Only non-warpified SSH (no remote server) keeps the unsupported
+            // message; warpified remotes fall through to the normal no-repo
+            // state (they render diffs once a repo is resolved).
             Some(state)
                 if matches!(
                     state.enablement,
-                    CodingPanelEnablementState::RemoteSession { .. }
+                    CodingPanelEnablementState::RemoteSession {
+                        has_remote_server: false
+                    }
                 ) =>
             {
                 self.render_remote_state_with_buttons(appearance)
