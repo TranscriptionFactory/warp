@@ -236,3 +236,42 @@ fn test_parse_git_status_file_without_spaces_still_works() {
     assert_eq!(result[0].0, std::path::PathBuf::from("simple.txt"));
     assert_eq!(result[0].1, GitFileStatus::Modified);
 }
+
+#[test]
+fn test_parse_git_status_from_remote_null_delimited_bytes() {
+    // A `-z` NUL-delimited porcelain v2 payload as it arrives over the
+    // remote-server channel (raw bytes). Decoding via `from_utf8_lossy` — the
+    // exact step the remote git path performs — must yield input that
+    // `parse_git_status` handles identically to the local subprocess path.
+    let remote_bytes: &[u8] =
+        b"1 .M N... 100644 100644 100644 abc1234 def5678 src/main file.rs\0? new file.txt\0";
+    let decoded = String::from_utf8_lossy(remote_bytes).to_string();
+    let result = DiffStateModel::parse_git_status(&decoded).unwrap();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].0, std::path::PathBuf::from("src/main file.rs"));
+    assert_eq!(result[0].1, GitFileStatus::Modified);
+    assert_eq!(result[1].0, std::path::PathBuf::from("new file.txt"));
+    assert_eq!(result[1].1, GitFileStatus::Untracked);
+}
+
+#[test]
+fn test_parse_diff_hunks_from_remote_bytes() {
+    // A unified-diff payload as it arrives over the remote-server channel.
+    // Decoding + parsing must produce the same hunk structure as a local diff.
+    let remote_bytes: &[u8] = b"@@ -1,2 +1,3 @@\n context\n-old line\n+new line\n+added line\n";
+    let decoded = String::from_utf8_lossy(remote_bytes).to_string();
+    let hunks = DiffStateModel::parse_diff_hunks(&decoded).unwrap();
+    assert_eq!(hunks.len(), 1);
+    let adds = hunks[0]
+        .lines
+        .iter()
+        .filter(|l| l.line_type == DiffLineType::Add)
+        .count();
+    let dels = hunks[0]
+        .lines
+        .iter()
+        .filter(|l| l.line_type == DiffLineType::Delete)
+        .count();
+    assert_eq!(adds, 2);
+    assert_eq!(dels, 1);
+}
