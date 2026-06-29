@@ -691,6 +691,19 @@ impl DiffStateModel {
         }
     }
 
+    /// Whether this model's diffs are sourced from a warpified-remote (SSH)
+    /// repository rather than a local working copy. Used by the panel to admit
+    /// remote repos past gates built from local repo detection.
+    pub fn is_remote(&self) -> bool {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "local_fs")] {
+                self.remote_target.is_some()
+            } else {
+                false
+            }
+        }
+    }
+
     pub fn set_diff_mode(
         &mut self,
         mode: DiffMode,
