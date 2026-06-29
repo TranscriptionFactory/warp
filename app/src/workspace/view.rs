@@ -14752,6 +14752,16 @@ impl Workspace {
     }
 
     fn keep_theme(&mut self, ctx: &mut ViewContext<Self>) {
+        // 关闭时把 per-window override map 同步回已提交的 self.theme_override,抵消打开时
+        // select_theme 在 ThisWindow scope 下写入的预览覆盖(否则重开后 override 会丢失)。
+        let window_id = ctx.window_id();
+        let committed = self.theme_override.clone();
+        AppearanceManager::handle(ctx).update(ctx, |appearance_manager, ctx| match &committed {
+            Some(theme_kind) => {
+                appearance_manager.set_window_theme(window_id, theme_kind.clone(), ctx)
+            }
+            None => appearance_manager.clear_window_theme(window_id, ctx),
+        });
         self.current_workspace_state.is_theme_chooser_open = false;
         self.previous_theme = None;
         self.previous_theme_override = None;
