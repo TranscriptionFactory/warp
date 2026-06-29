@@ -43,6 +43,32 @@ still pass. **Not done:** wasm build (target not installed in this env — the
 gated, mirroring Phase A) and the manual E2E below (needs a live warpified SSH
 host).
 
+### Fix (2026-06-29): third no-repo gate — `available_repos` filter
+
+Manual E2E on a warpified SSH host showed the panel still rendering
+"Diffs only work for git repositories" despite a connected client. Root
+cause: a **third** gate beyond the two above. `right_panel.rs`'s panel
+`render` filters `selected_repo_path` against `available_repos`
+(`state.selected_repo_path.filter(|p| available_repos.contains(p))`) and,
+when it filters to `None`, renders the no-repo body **before** ever
+reaching the `CodeReviewView` (whose `active_repo` *was* correctly set by
+Step 3). `available_repos` is built only from local detection
+(`set_active_pane_group` / `RepositoriesChanged` →
+`most_recent_repositories_for_pane_group`), so it never contains the
+remote root — and `set_available_repos` additionally *cleared* the remote
+selection on the next refresh. Because the env's `has_remote_server` is
+true, the gate fell through to the "git repositories only" string rather
+than "local workspaces only", which is exactly the reported symptom.
+
+Fix: `CodeReviewState` now tracks `remote_repo_root: Option<PathBuf>` and
+merges it into `available_repos` (so the dropdown, the clear-logic, and
+the render-gate filter all accept it). `setup_code_review_panel` passes
+the resolved remote root (or `None`) to a new
+`RightPanelView::set_remote_repo_root`. Once the remote root is
+selectable the gate is skipped entirely and the `CodeReviewView` renders,
+so the panel no longer depends on the (divergent across sites)
+`has_remote_server` computation for the remote-with-repo case.
+
 ## What Phase A delivered (already done)
 
 - `app/src/util/git.rs`: `GitExecTarget { Local { repo_path }, Remote { client,
