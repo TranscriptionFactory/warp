@@ -69,6 +69,38 @@ selectable the gate is skipped entirely and the `CodeReviewView` renders,
 so the panel no longer depends on the (divergent across sites)
 `has_remote_server` computation for the remote-with-repo case.
 
+### Fix (2026-06-29): fourth no-repo gate — `create_code_review_view` early return
+
+After the third fix the panel reached the right branch of
+`render_panel_content` (`selected_repo_path` survives the `available_repos`
+filter), but then `get_code_review_view(pane_group_id, selected_repo_path)`
+returned `None`, so render fell through to the `else` → `render_loading_state`,
+which shows the **"Loading open changes…"** placeholder header forever — the
+exact reported symptom (changes never resolve).
+
+Root cause: a **fourth** gate inside `right_panel.rs::create_code_review_view`.
+Before building the `CodeReviewView` it early-returns when the pane group has no
+active repos:
+
+```rust
+most_recent_repositories_for_pane_group(pane_group_id).is_some_and(|r| r.count() > 0)
+```
+
+`repository_roots` is populated purely from local `get_repo_root_for_path`
+detection (`working_directories.rs`), so a warpified-remote session has **zero**
+entries and the view is never created/stored. `open_code_review` then never
+calls `on_open`, no diff load is ever kicked off, and the panel is stuck on the
+loading placeholder (it is the panel-level placeholder, *not* the view's own
+`DiffState::Loading` — the view doesn't exist yet).
+
+Fix: admit the remote case via the remote-backed model. Added
+`DiffStateModel::is_remote()` (`remote_target.is_some()`, `false` off
+`local_fs`) and relaxed the gate to `!has_active_repos && !is_remote` →
+`return None`. With a remote model present the view is created, stored,
+retrieved, and `on_open` drives the remote diff load. Verified: `cargo check -p
+warp --lib --features local_fs` clean; `diff_state` unit tests (22) pass. Manual
+E2E on a live warpified SSH host still needed to confirm diffs render end to end.
+
 ## What Phase A delivered (already done)
 
 - `app/src/util/git.rs`: `GitExecTarget { Local { repo_path }, Remote { client,

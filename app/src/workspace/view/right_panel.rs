@@ -1183,14 +1183,18 @@ impl RightPanelView {
         terminal_view: WeakViewHandle<TerminalView>,
         ctx: &mut ViewContext<Self>,
     ) -> Option<ViewHandle<CodeReviewView>> {
-        // Early check: if pane group has no active repositories, don't create a view
+        // Early check: if pane group has no active repositories, don't create a view.
+        // A warpified-remote (SSH) repo is never in the local repository_roots map,
+        // so admit it via the remote-backed diff state model — otherwise the panel
+        // is stuck on the "Loading open changes…" placeholder (no view ever exists).
         let has_active_repos = self
             .working_directories_model
             .as_ref(ctx)
             .most_recent_repositories_for_pane_group(pane_group_id)
             .is_some_and(|repos| repos.count() > 0);
+        let is_remote = diff_state_model.as_ref(ctx).is_remote();
 
-        if !has_active_repos {
+        if !has_active_repos && !is_remote {
             return None;
         }
 
