@@ -25,6 +25,7 @@ fn mock_appearance() -> Appearance {
         FamilyId(1),
         1.4,
         FamilyId(0),
+        None,
         FamilyId(0),
         DEFAULT_UI_FONT_SIZE,
         Default::default(),
@@ -267,4 +268,20 @@ fn test_per_window_theme_override_resolution() {
     // Reset the thread-local ambient so it doesn't leak into other tests sharing
     // this test thread.
     set_current_render_window(None);
+}
+
+#[test]
+fn test_terminal_fallback_font_family_can_be_updated() {
+    let mut appearance = mock_appearance();
+
+    assert_eq!(appearance.terminal_fallback_font_family(), None);
+
+    appearance.set_terminal_fallback_font_family_test(Some(FamilyId(42)));
+    assert_eq!(
+        appearance.terminal_fallback_font_family(),
+        Some(FamilyId(42))
+    );
+
+    appearance.set_terminal_fallback_font_family_test(None);
+    assert_eq!(appearance.terminal_fallback_font_family(), None);
 }

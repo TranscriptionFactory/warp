@@ -38,6 +38,7 @@ pub struct Appearance {
     // isn't actually a changeable setting right now.
     ui_font_family: FamilyId,
     ai_font_family: FamilyId,
+    terminal_fallback_font_family: Option<FamilyId>,
     /// A font that is used for password fields.
     password_font_family: FamilyId,
     ui_font_size: f32,
@@ -78,6 +79,10 @@ pub enum AppearanceEvent {
         previous_family_id: FamilyId,
         current_family_id: FamilyId,
     },
+    TerminalFallbackFontFamilyChanged {
+        previous_family_id: Option<FamilyId>,
+        current_family_id: Option<FamilyId>,
+    },
     MonospaceFontWeightChanged {
         previous_font_weight: Weight,
         current_font_weight: Weight,
@@ -103,6 +108,7 @@ impl Appearance {
         ui_font_family: FamilyId,
         line_height_ratio: f32,
         ai_font_family: FamilyId,
+        terminal_fallback_font_family: Option<FamilyId>,
         password_font_family: FamilyId,
         ui_font_size: f32,
         heading_font_size_multipliers: HeadingFontSizeMultipliers,
@@ -122,6 +128,7 @@ impl Appearance {
                 line_height_ratio,
             ),
             ai_font_family,
+            terminal_fallback_font_family,
             password_font_family,
             ui_font_size,
             heading_font_size_multipliers,
@@ -165,6 +172,7 @@ impl Appearance {
             ),
             ui_font_family,
             ai_font_family: FamilyId(0),
+            terminal_fallback_font_family: None,
             password_font_family: FamilyId(0),
             ui_font_size: DEFAULT_UI_FONT_SIZE,
             heading_font_size_multipliers: HeadingFontSizeMultipliers::default(),
@@ -247,6 +255,22 @@ impl Appearance {
         });
     }
 
+    pub fn set_terminal_fallback_font_family(
+        &mut self,
+        new_family: Option<FamilyId>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let previous_family_id = self.terminal_fallback_font_family;
+        self.terminal_fallback_font_family = new_family;
+
+        ctx.invalidate_all_views();
+
+        ctx.emit(AppearanceEvent::TerminalFallbackFontFamilyChanged {
+            previous_family_id,
+            current_family_id: new_family,
+        });
+    }
+
     pub fn set_monospace_font_size(&mut self, new_font_size: f32, ctx: &mut ModelContext<Self>) {
         let previous_font_size = self.monospace_font_size;
         self.monospace_font_size = new_font_size;
@@ -311,6 +335,11 @@ impl Appearance {
             DEFAULT_COMMAND_PALETTE_FONT_SIZE,
             self.line_height_ratio,
         );
+    }
+
+    #[cfg(test)]
+    pub fn set_terminal_fallback_font_family_test(&mut self, new_family: Option<FamilyId>) {
+        self.terminal_fallback_font_family = new_family;
     }
 
     pub fn set_line_height_ratio(
@@ -402,6 +431,10 @@ impl Appearance {
 
     pub fn ai_font_family(&self) -> FamilyId {
         self.ai_font_family
+    }
+
+    pub fn terminal_fallback_font_family(&self) -> Option<FamilyId> {
+        self.terminal_fallback_font_family
     }
 
     pub fn monospace_font_size(&self) -> f32 {
