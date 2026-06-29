@@ -136,7 +136,7 @@ pub struct RenderedRequest {
 pub mod prompt_suggestions {
     use super::*;
     use crate::settings::language::{Language, LanguageSettings};
-    use warpui::{AppContext, EntityId};
+    use warpui::{AppContext, EntityId, SingletonEntity};
 
     pub struct Input {
         pub recent_blocks: Vec<BlockSnippet>,
