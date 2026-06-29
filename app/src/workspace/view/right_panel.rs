@@ -122,6 +122,13 @@ impl ReviewTerminalStatus {
 struct CodeReviewState {
     dropdown: ViewHandle<Dropdown<RightPanelAction>>,
     available_repos: Vec<PathBuf>,
+    /// Root of the active warpified-remote (SSH) repository, if any. Tracked
+    /// separately from `available_repos` because that list is built from local
+    /// detection, which never reports remote roots. It is merged into
+    /// `available_repos` so the dropdown, selection, and render gate all accept
+    /// a remote repo. `None` for local / non-warpified sessions.
+    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
+    remote_repo_root: Option<PathBuf>,
     /// The repository path of the focused terminal
     focused_repo_path: Option<PathBuf>,
     /// The repository path of the repository selected in the dropdown
@@ -165,6 +172,7 @@ impl CodeReviewState {
                 dropdown
             }),
             available_repos: vec![],
+            remote_repo_root: None,
             selected_repo_path: None,
             focused_repo_path: None,
             did_focused_repo_change: false,
@@ -180,7 +188,16 @@ impl CodeReviewState {
     }
 
     #[cfg(feature = "local_fs")]
-    fn set_available_repos(&mut self, repos: Vec<PathBuf>, ctx: &mut ViewContext<RightPanelView>) {
+    fn set_available_repos(&mut self, mut repos: Vec<PathBuf>, ctx: &mut ViewContext<RightPanelView>) {
+        // The incoming list comes from local detection, which never includes
+        // the active warpified-remote repo. Keep that root present so the
+        // selection survives and the render gate accepts it.
+        if let Some(remote) = &self.remote_repo_root {
+            if !repos.contains(remote) {
+                repos.push(remote.clone());
+            }
+        }
+
         let should_clear = self
             .selected_repo_path
             .as_ref()
@@ -199,6 +216,38 @@ impl CodeReviewState {
                 self.set_selected_repo(first_repo.clone(), ctx);
             }
         }
+    }
+
+    /// Records the active warpified-remote repository root (or clears it when
+    /// the active session is local / non-warpified). The root is merged into
+    /// `available_repos` via [`Self::set_available_repos`] so the dropdown and
+    /// render gate treat it like any other selectable repo.
+    #[cfg(feature = "local_fs")]
+    fn set_remote_repo_root(
+        &mut self,
+        root: Option<PathBuf>,
+        ctx: &mut ViewContext<RightPanelView>,
+    ) {
+        if self.remote_repo_root == root {
+            return;
+        }
+        let previous = self.remote_repo_root.take();
+        // If the now-stale remote root was selected, drop the selection so
+        // set_available_repos can re-pick (the new remote root, or a local one).
+        if self.selected_repo_path.is_some() && self.selected_repo_path == previous {
+            self.selected_repo_path = None;
+        }
+        self.remote_repo_root = root;
+
+        // Re-derive the local-only list (everything except the old remote root)
+        // and let set_available_repos merge in the new remote root.
+        let local_repos: Vec<PathBuf> = self
+            .available_repos
+            .iter()
+            .filter(|r| previous.as_deref() != Some(r.as_path()))
+            .cloned()
+            .collect();
+        self.set_available_repos(local_repos, ctx);
     }
 
     #[cfg(not(feature = "local_fs"))]
@@ -470,6 +519,17 @@ impl RightPanelView {
             has_remote_server,
         });
         ctx.notify();
+    }
+
+    /// Sets (or clears) the active warpified-remote repository root on the code
+    /// review state. Called from `setup_code_review_panel` once the remote repo
+    /// root has been resolved, so the remote repo becomes a selectable entry in
+    /// `available_repos` rather than being filtered out by the no-repo gate.
+    #[cfg(feature = "local_fs")]
+    pub fn set_remote_repo_root(&mut self, root: Option<PathBuf>, ctx: &mut ViewContext<Self>) {
+        if let Some(state) = self.code_review_state.as_mut() {
+            state.set_remote_repo_root(root, ctx);
+        }
     }
 
     pub fn selected_repo_path(&self) -> Option<&PathBuf> {

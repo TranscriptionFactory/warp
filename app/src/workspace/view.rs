@@ -7823,15 +7823,20 @@ impl Workspace {
         }
 
         // If context is provided, use it directly. Otherwise, derive from active pane group.
+        // The trailing `Option<PathBuf>` is the warpified-remote repo root (when
+        // the context was resolved remotely), used to register that root as a
+        // selectable repo on the panel.
         let context_data: Option<(
             Option<PathBuf>,
             ModelHandle<DiffStateModel>,
             WeakViewHandle<TerminalView>,
+            Option<PathBuf>,
         )> = if let Some(context) = context {
             Some((
                 context.repo_path.clone(),
                 context.diff_state_model.clone(),
                 context.terminal_view.clone(),
+                None,
             ))
         } else {
             let active_pane_group = self.active_tab_pane_group().clone();
@@ -7850,7 +7855,7 @@ impl Workspace {
                             self.working_directories_model.update(ctx, |model, ctx| {
                                 model.get_or_create_diff_state_model(rp.clone(), ctx)
                             })?;
-                        return Some((repo_path, diff_state_model, terminal_view));
+                        return Some((repo_path, diff_state_model, terminal_view, None));
                     }
                     // No local repo detected. Fall back to a warpified remote
                     // (SSH) repository, if the active session has one.
@@ -7858,15 +7863,24 @@ impl Workspace {
                     if let Some((remote_repo_path, diff_state_model)) =
                         self.remote_code_review_context(&terminal_view, ctx)
                     {
-                        return Some((Some(remote_repo_path), diff_state_model, terminal_view));
+                        return Some((
+                            Some(remote_repo_path.clone()),
+                            diff_state_model,
+                            terminal_view,
+                            Some(remote_repo_path),
+                        ));
                     }
                     None
                 },
             )
         };
 
-        if let Some((repo, diff_state_model, terminal_view)) = context_data {
+        if let Some((repo, diff_state_model, terminal_view, remote_repo_root)) = context_data {
             self.right_panel_view.update(ctx, |right_pane_view, ctx| {
+                // Register the remote root (or clear a stale one) before opening
+                // so it is present in `available_repos` and survives the gate.
+                #[cfg(feature = "local_fs")]
+                right_pane_view.set_remote_repo_root(remote_repo_root, ctx);
                 right_pane_view.open_code_review(
                     repo.clone(),
                     diff_state_model,
@@ -7876,6 +7890,8 @@ impl Workspace {
             });
         } else {
             self.right_panel_view.update(ctx, |right_panel_view, ctx| {
+                #[cfg(feature = "local_fs")]
+                right_panel_view.set_remote_repo_root(None, ctx);
                 right_panel_view.close_code_review(ctx);
             })
         }
