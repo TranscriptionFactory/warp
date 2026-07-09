@@ -420,18 +420,24 @@ impl CodeView {
             NotebooksEditorModel::new(styles, window_id, ctx)
         });
         let rendered_view = ctx.add_typed_action_view(|ctx| {
-            let mut view = RichTextEditorView::new(
+            RichTextEditorView::new(
                 view_position_id,
                 editor_model,
                 links,
                 RichTextEditorConfig::default(),
                 ctx,
-            );
-            view.set_interaction_state(InteractionState::Selectable, ctx);
-            view
+            )
         });
+        // 先写入内容,再切到只读 Selectable 状态,顺序不能反。
+        // `set_interaction_state` 发出的是**延迟**事件,而 `reset_with_markdown`
+        // 是**同步**改 buffer。若状态变更先入队,其延迟处理器会在首帧真实宽度已知前
+        // (viewport 宽度为 0)读到已填充的 buffer 并再插入一次整篇文档的布局编辑;
+        // 该编辑走 "insert before first block" 分支,把先前的窄树当作 suffix 保留,
+        // 于是文档在真实内容之后被重复渲染一份、且每行只有一个字符宽。
+        // 先发内容编辑可保证只留下单次布局编辑。
         rendered_view.update(ctx, |editor, ctx| {
             editor.reset_with_markdown(&content, ctx);
+            editor.set_interaction_state(InteractionState::Selectable, ctx);
         });
 
         if let Some(tab) = self.tab_group.get_mut(index) {
