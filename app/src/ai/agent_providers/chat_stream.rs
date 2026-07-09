@@ -1183,6 +1183,7 @@ fn build_chat_request(
     let plan_mode = is_plan_mode_turn(&params.input);
     let tool_names = available_tool_names(params);
     let mut system_text = prompt_renderer::render_system(
+        api_type,
         &params.model,
         agent_ctx,
         &tool_names,
@@ -1309,6 +1310,13 @@ fn build_chat_request(
     // `unexpected tool_use_id ... no corresponding tool_use block`。
     let mut skipped_subagent_call_ids: std::collections::HashSet<String> =
         std::collections::HashSet::new();
+    // Zap:仅在"同一 task_id 下真的落地过结构化 ToolCall"时才允许剥离 AgentOutput
+    // 里的疑似 tool JSON——避免用全历史范围的证据误伤跨轮(不同 task_id)的纯文本回答。
+    let tasks_with_tool_call: std::collections::HashSet<&str> = all_msgs
+        .iter()
+        .filter(|msg| matches!(msg.message, Some(api::message::Message::ToolCall(_))))
+        .map(|msg| msg.task_id.as_str())
+        .collect();
 
     for (idx, msg) in all_msgs.iter().enumerate() {
         // 摘要请求:tail 区间不送上游(只送 head + 末尾追加 SUMMARY_TEMPLATE)
@@ -1399,6 +1407,22 @@ fn build_chat_request(
                 }
             }
             api::message::Message::AgentOutput(a) => {
+                // Ollama 本地模型常把 tool JSON 当 AgentOutput 文本落地;同一轮后面还有
+                // 结构化 ToolCall + ToolCallResult。再发给上游会淹没真实摘要,导致 C3 失忆。
+                // 仅在(a)同一 task_id 下已经落地过结构化 ToolCall,且(b)这段文本本身能被
+                // extract_tool_calls_from_assistant_text 提取出可执行调用时才剥离——
+                // `contains_tool_shaped_json` 只要求出现 string `name` 键就返回 true(比如
+                // 粘贴的 package.json 内容),会把合法回答误判成 tool JSON 噪音删掉。
+                if api_type == AgentProviderApiType::Ollama
+                    && tasks_with_tool_call.contains(msg.task_id.as_str())
+                    && !super::content_tool_calls::extract_tool_calls_from_assistant_text(
+                        &a.text,
+                        &tool_names,
+                    )
+                    .is_empty()
+                {
+                    continue;
+                }
                 if buf.text.is_some() || !buf.tool_calls.is_empty() {
                     flush_assistant_buffer(&mut buf, &mut messages, &mut outbound_tool_groups);
                 }
@@ -2559,10 +2583,7 @@ fn serialize_outgoing_tool_call(
                 Some(SkillReference::BundledSkillId(id)) => format!("@warp-skill:{id}"),
                 None => String::new(),
             };
-            (
-                "read_skill".to_owned(),
-                json!({ "name": name }).to_string(),
-            )
+            ("read_skill".to_owned(), json!({ "name": name }).to_string())
         }
         Some(Tool::ReadShellCommandOutput(r)) => {
             use api::message::tool_call::read_shell_command_output::Delay;
@@ -2898,7 +2919,10 @@ pub(super) fn build_client(
                     &proxy_cfg.password,
                     &proxy_cfg.no_proxy,
                 ) {
-                    log::warn!("[byop] proxy URL '{}' 无效,跳过代理配置: {err}", proxy_cfg.url);
+                    log::warn!(
+                        "[byop] proxy URL '{}' 无效,跳过代理配置: {err}",
+                        proxy_cfg.url
+                    );
                 }
             }
         }
@@ -3256,6 +3280,7 @@ pub async fn generate_byop_output(
     let client = build_client(api_type, base_url, api_key);
     let request_id = Uuid::new_v4().to_string();
     let mcp_context = params.mcp_context.clone();
+    let tool_names_for_extract = available_tool_names(&params);
 
     // ⚠️ BYOP 持久化关键:warp 自家路径下,以下 ClientAction 都是 server 端 emit
     // 让 client 端把 UserQuery / ToolCallResult 等"非模型产出"的 message
@@ -3609,6 +3634,11 @@ pub async fn generate_byop_output(
         let mut tool_chunk_count: u32 = 0;
         let mut end_count: u32 = 0;
         let mut other_count: u32 = 0;
+        let mut captured_assistant_text: Option<String> = None;
+        // Ollama 等 provider 的 End.captured_content 有时为空,但 Chunk 事件已送达正文;
+        // 流式累积作为 content→tool 提取的可靠来源(仅 assistant 正文;reasoning 中的
+        // 假设性命令描述不应被当作可执行 tool call,见下方 extract_sources)。
+        let mut streamed_assistant_text = String::new();
         // 累积本轮 token 使用量。genai 在 ChatStreamEvent::End 事件里携带
         // captured_usage(Option<Usage>),其 prompt_tokens 是本轮整段 history
         // (Anthropic / OpenAI 都按"完整请求 prompt"计),completion_tokens 是模型输出。
@@ -3665,6 +3695,7 @@ pub async fn generate_byop_output(
                 ChatStreamEvent::Chunk(c) if !c.content.is_empty() => {
                     chunk_count += 1;
                     chunk_bytes += c.content.len();
+                    streamed_assistant_text.push_str(&c.content);
                     if use_think_extraction {
                         // <think> 标签流式提取:仅对 THINK_TAG_IN_CONTENT_MODELS 白名单内的模型激活。
                         // 把 /delta/content 中的 <think>...</think> 段路由到 reasoning 通道,
@@ -3859,6 +3890,11 @@ pub async fn generate_byop_output(
                     // 优先用 captured_content 里的 tool_calls(更完整),
                     // 否则用 streaming 中累积的 tool_bufs。
                     if let Some(content) = end.captured_content.as_ref() {
+                        if let Some(text) = content.first_text() {
+                            if !text.is_empty() {
+                                captured_assistant_text = Some(text.to_owned());
+                            }
+                        }
                         let mut captured_order: Vec<String> = Vec::new();
                         for call in content.tool_calls() {
                             if !captured_order.contains(&call.call_id) {
@@ -3909,12 +3945,64 @@ pub async fn generate_byop_output(
             }
         }
 
+        // Zap:content→tool 提取 fallback 只对 Ollama 生效,与 :1412 的历史过滤对称——
+        // 云端 provider(OpenAI/Anthropic/...)的正文如果恰好长得像 tool JSON(比如模型在
+        // 讲解一段 JSON 示例),不应该被误当成真实 ToolCall 执行。
+        if tool_bufs.is_empty() && api_type == AgentProviderApiType::Ollama {
+            let extract_sources: [&str; 2] = [
+                streamed_assistant_text.as_str(),
+                captured_assistant_text.as_deref().unwrap_or(""),
+            ];
+            let mut parsed_any_text = false;
+            for text in extract_sources.into_iter().filter(|t| !t.is_empty()) {
+                parsed_any_text = true;
+                let extracted = super::content_tool_calls::extract_tool_calls_from_assistant_text(
+                    text,
+                    &tool_names_for_extract,
+                );
+                if extracted.is_empty() {
+                    continue;
+                }
+                log::info!(
+                    "[byop] content_tool_extract: found={} names={:?} source_len={}",
+                    extracted.len(),
+                    extracted
+                        .iter()
+                        .map(|call| call.fn_name.as_str())
+                        .collect::<Vec<_>>(),
+                    text.len()
+                );
+                for call in extracted {
+                    let call_id = call.call_id.clone();
+                    if !tool_bufs.contains_key(&call_id) {
+                        tool_order.push(call_id.clone());
+                    }
+                    tool_bufs.insert(call_id, call);
+                }
+                break;
+            }
+            if tool_bufs.is_empty() && parsed_any_text {
+                let preview: String = streamed_assistant_text.chars().take(240).collect();
+                log::info!(
+                    "[byop] content_tool_extract: no tools parsed (streamed={}B captured={}B) \
+                     preview={preview:?}",
+                    streamed_assistant_text.len(),
+                    captured_assistant_text.as_ref().map(|t| t.len()).unwrap_or(0),
+                );
+            } else if tool_bufs.is_empty() {
+                log::warn!(
+                    "[byop] content_tool_extract: skipped — no assistant text in stream \
+                     (chunks={chunk_count} reasoning={reasoning_count})"
+                );
+            }
+        }
+
         // 流统计 INFO log。chunk_count=0 && tool_count=0 时上游返回为空,
         // 大概率是 model_id 不被识别 / max_tokens 缺失 / Anthropic API 兼容代理返回 200 但 body 空。
         let total_tools = tool_bufs.len();
         log::info!(
             "[byop] stream stats: start={start_count} chunks={chunk_count} ({chunk_bytes}B) \
-             reasoning={reasoning_count} ({reasoning_bytes}B) tool_chunks={tool_chunk_count} \
+             reasoning={reasoning_count} ({reasoning_bytes}B) native_tool_chunks={tool_chunk_count} \
              ends={end_count} other={other_count} captured_tools={total_tools}"
         );
         // P0-6 prompt cache 命中率日志(只在 provider 返回 cache 字段时打)。
@@ -5920,7 +6008,12 @@ mod serializer_readiness_tests {
     }
 
     fn build_openai_request(params: &RequestParams) -> Result<ChatRequest, ConvertToAPITypeError> {
-        build_chat_request(params, false, AgentProviderApiType::OpenAi, attachment_caps::AttachmentCaps::default())
+        build_chat_request(
+            params,
+            false,
+            AgentProviderApiType::OpenAi,
+            attachment_caps::AttachmentCaps::default(),
+        )
     }
 
     fn assert_request_has_no_repair_placeholder(request: &ChatRequest) {
@@ -6778,6 +6871,61 @@ mod serializer_readiness_tests {
         params.compaction_state = Some(compaction_state);
 
         assert_build_request_blocked(params, "MissingResultWithoutRepairSource");
+    }
+
+    #[test]
+    fn smoke_build_chat_request_simple_user_query_succeeds() {
+        let params = request_params(
+            vec![make_user_query_message(
+                "task-1",
+                "req-1",
+                "hello".to_owned(),
+                &[],
+            )],
+            vec![user_query_input("hello")],
+        );
+        let request = build_openai_request(&params).expect("simple user query should serialize");
+        assert!(
+            !request.messages.is_empty(),
+            "expected at least one chat message"
+        );
+        assert_request_has_no_repair_placeholder(&request);
+    }
+
+    #[test]
+    fn smoke_build_chat_request_pending_live_tool_call_is_pending_not_blocked() {
+        let user_message = make_user_query_message("task-1", "req-1", "hi".to_owned(), &[]);
+        let tool_call_message = make_tool_call_message("task-1", "req-1", "call-1", shell_tool());
+        let assistant_message_id = tool_call_message.id.clone();
+        let params = request_params(
+            vec![user_message, tool_call_message],
+            vec![user_query_input("continue")],
+        );
+
+        let pending_report = classify_byop_controller_readiness_with_live_tool_calls(
+            &params,
+            vec![LiveToolCall::new(
+                ToolCallRef::new(
+                    ToolCallKey::new("task-1", assistant_message_id, "call-1"),
+                    kind(),
+                ),
+                LiveToolCallState::Running,
+            )],
+        );
+        assert!(
+            matches!(
+                pending_report.state,
+                ReadinessState::PendingToolResults { .. }
+            ),
+            "running tool should wait, not block: {:?}",
+            pending_report.state
+        );
+
+        let build_result = build_openai_request(&params);
+        assert!(
+            build_result.is_err(),
+            "serializer must not send while tool is still running"
+        );
     }
 }
 
