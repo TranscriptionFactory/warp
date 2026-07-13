@@ -80,6 +80,21 @@ impl ActiveSession {
             .and_then(|session| session.launch_data().cloned())
     }
 
+    /// Test-only: set the live working directory directly, mirroring the
+    /// `BlockMetadataReceived` flow (unit tests don't run the terminal event
+    /// pipeline that normally relays it).
+    #[cfg(test)]
+    pub fn set_current_working_directory_for_test(
+        &mut self,
+        cwd: Option<String>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.current_working_directory != cwd {
+            self.current_working_directory = cwd;
+            ctx.emit(ActiveSessionEvent::UpdatedPwd);
+        }
+    }
+
     pub fn current_working_directory(&self) -> Option<&String> {
         self.current_working_directory.as_ref()
     }

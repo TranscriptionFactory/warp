@@ -11,6 +11,8 @@ use std::path::PathBuf;
 
 use fuzzy_match::FuzzyMatchResult;
 use ordered_float::OrderedFloat;
+#[cfg(not(target_family = "wasm"))]
+use repo_metadata::repositories::DetectedRepositories;
 use warp_core::ui::appearance::Appearance;
 use warpui::fonts::FamilyId;
 use warpui::{AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
@@ -150,10 +152,6 @@ impl SlashCommandDataSource {
             session_context |= Availability::TERMINAL_VIEW;
         }
 
-        if self.active_repo_root.is_some() {
-            session_context |= Availability::REPOSITORY;
-        }
-
         let is_local = self
             .active_session
             .as_ref(ctx)
@@ -161,6 +159,18 @@ impl SlashCommandDataSource {
             .is_some_and(|st| st == SessionType::Local);
         if is_local {
             session_context |= Availability::LOCAL;
+        }
+
+        // Derive REPOSITORY from the *live* working directory rather than the
+        // cached `active_repo_root`. The cache is only refreshed after async git
+        // detection resolves, but the pwd-changed recompute runs immediately on
+        // `cd`; keying off the cache would leave repo-gated commands available
+        // in the stale window after leaving a repo. Repo roots are only tracked
+        // for local sessions, so this is gated on `is_local`. `active_repo_root`
+        // is retained solely as the recompute trigger that re-runs this once
+        // detection caches a newly-entered repo's root.
+        if is_local && self.cwd_is_in_repository(ctx) {
+            session_context |= Availability::REPOSITORY;
         }
 
         if !self
@@ -219,6 +229,56 @@ impl SlashCommandDataSource {
             self.active_repo_root = repo_root;
             self.recompute_active_commands(ctx);
         }
+    }
+
+    /// Whether the active session's current working directory is inside a
+    /// detected git repository. Uses the live cwd (not the cached
+    /// `active_repo_root`) so REPOSITORY-gated commands update immediately on
+    /// `cd`, without waiting for async repo detection to resolve. Delegates path
+    /// membership to `DetectedRepositories`, reusing its centralized
+    /// canonicalization + ancestor walk.
+    #[cfg(not(target_family = "wasm"))]
+    fn cwd_is_in_repository(&self, ctx: &AppContext) -> bool {
+        let active_session = self.active_session.as_ref(ctx);
+        let Some(cwd) = active_session.current_working_directory() else {
+            return false;
+        };
+
+        // Repo detection converts the shell-native CWD (e.g. Git Bash/MSYS2/WSL
+        // "/c/Users/...") to an OS-native path via `ShellLaunchData` before
+        // caching the repo root. The live CWD must go through the same
+        // conversion so it can match those cached roots; otherwise repo-gated
+        // commands would be hidden inside a repo on Windows shell variants.
+        // Fall back to the raw path when no launch-data conversion applies (the
+        // common native-shell case, where the conversion is already a no-op).
+        let path = active_session
+            .shell_launch_data(ctx)
+            .and_then(|data| data.maybe_convert_absolute_path(cwd))
+            .unwrap_or_else(|| PathBuf::from(cwd));
+
+        DetectedRepositories::as_ref(ctx)
+            .get_root_for_path(&path)
+            .is_some()
+    }
+
+    /// Repo detection is not wired up on wasm, so no directory is ever in a repo.
+    #[cfg(target_family = "wasm")]
+    fn cwd_is_in_repository(&self, _ctx: &AppContext) -> bool {
+        false
+    }
+
+    /// Test-only: the active-session handle, for driving pwd changes.
+    #[cfg(test)]
+    pub(crate) fn active_session_handle(&self) -> ModelHandle<ActiveSession> {
+        self.active_session.clone()
+    }
+
+    /// Whether `command` is currently offered, per the last recompute.
+    #[cfg(test)]
+    pub(crate) fn command_is_active(&self, command: &StaticCommand, _ctx: &AppContext) -> bool {
+        self.active_commands_by_id
+            .values()
+            .any(|active| active.name == command.name)
     }
 
     pub fn active_commands(&self) -> impl Iterator<Item = (&SlashCommandId, &StaticCommand)> {

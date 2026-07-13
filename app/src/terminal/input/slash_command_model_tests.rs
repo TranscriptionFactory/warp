@@ -516,6 +516,24 @@ fn repository_gated_command_drops_when_leaving_repository() {
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
         let data_source = input.read(&app, |input, _| input.slash_command_data_source.clone());
 
+        // Unit tests don't run the terminal event pipeline that relays
+        // `BlockMetadataReceived` to `ActiveSession`, so the live cwd (which
+        // the availability check reads) must be set directly.
+        let active_session = data_source.read(&app, |ds, _| ds.active_session_handle());
+        let set_live_cwd = |app: &mut App, dir: String| {
+            // Simulated precmds clobber the dispatcher's active session id, so
+            // re-pin it before emitting the pwd update (`is_local` reads it).
+            terminal.update(app, |terminal, ctx| {
+                let dispatcher = terminal.model_event_dispatcher().clone();
+                dispatcher.update(ctx, |dispatcher, _| {
+                    dispatcher.set_active_session_id(session_id);
+                });
+            });
+            active_session.update(app, |session, ctx| {
+                session.set_current_working_directory_for_test(Some(dir), ctx);
+            });
+        };
+
         // Real on-disk directories so canonicalization (used by repo detection
         // and by the availability check) resolves consistently.
         let repo_dir = tempfile::TempDir::new().expect("repo temp dir");
@@ -537,6 +555,7 @@ fn repository_gated_command_drops_when_leaving_repository() {
             &mut app,
             repo_path.to_string_lossy().into_owned(),
         );
+        set_live_cwd(&mut app, repo_path.to_string_lossy().into_owned());
         data_source.update(&mut app, |data_source, ctx| {
             data_source.set_active_repo_root(Some(repo_path.clone()), ctx);
         });
@@ -555,6 +574,7 @@ fn repository_gated_command_drops_when_leaving_repository() {
             &mut app,
             outside_path.to_string_lossy().into_owned(),
         );
+        set_live_cwd(&mut app, outside_path.to_string_lossy().into_owned());
         data_source.read(&app, |data_source, ctx| {
             assert!(
                 !data_source.command_is_active(&commands::OPEN_CODE_REVIEW, ctx),
@@ -589,6 +609,23 @@ fn repository_gated_command_stays_within_repository() {
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
         let data_source = input.read(&app, |input, _| input.slash_command_data_source.clone());
 
+        // See repository_gated_command_drops_when_leaving_repository: the live
+        // cwd must be set directly in unit tests.
+        let active_session = data_source.read(&app, |ds, _| ds.active_session_handle());
+        let set_live_cwd = |app: &mut App, dir: String| {
+            // Simulated precmds clobber the dispatcher's active session id, so
+            // re-pin it before emitting the pwd update (`is_local` reads it).
+            terminal.update(app, |terminal, ctx| {
+                let dispatcher = terminal.model_event_dispatcher().clone();
+                dispatcher.update(ctx, |dispatcher, _| {
+                    dispatcher.set_active_session_id(session_id);
+                });
+            });
+            active_session.update(app, |session, ctx| {
+                session.set_current_working_directory_for_test(Some(dir), ctx);
+            });
+        };
+
         let repo_dir = tempfile::TempDir::new().expect("repo temp dir");
         let repo_path = repo_dir.path().to_path_buf();
         let subdir_a = repo_path.join("a");
@@ -609,6 +646,7 @@ fn repository_gated_command_stays_within_repository() {
             &mut app,
             subdir_a.to_string_lossy().into_owned(),
         );
+        set_live_cwd(&mut app, subdir_a.to_string_lossy().into_owned());
         data_source.read(&app, |data_source, ctx| {
             assert!(
                 data_source.command_is_active(&commands::OPEN_CODE_REVIEW, ctx),
@@ -624,6 +662,7 @@ fn repository_gated_command_stays_within_repository() {
             &mut app,
             subdir_b.to_string_lossy().into_owned(),
         );
+        set_live_cwd(&mut app, subdir_b.to_string_lossy().into_owned());
         data_source.read(&app, |data_source, ctx| {
             assert!(
                 data_source.command_is_active(&commands::OPEN_CODE_REVIEW, ctx),
