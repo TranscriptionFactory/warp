@@ -428,22 +428,37 @@ impl CodeView {
                 ctx,
             )
         });
-        // 先写入内容,再切到只读 Selectable 状态,顺序不能反。
-        // `set_interaction_state` 发出的是**延迟**事件,而 `reset_with_markdown`
-        // 是**同步**改 buffer。若状态变更先入队,其延迟处理器会在首帧真实宽度已知前
-        // (viewport 宽度为 0)读到已填充的 buffer 并再插入一次整篇文档的布局编辑;
-        // 该编辑走 "insert before first block" 分支,把先前的窄树当作 suffix 保留,
-        // 于是文档在真实内容之后被重复渲染一份、且每行只有一个字符宽。
-        // 先发内容编辑可保证只留下单次布局编辑。
+        // 先在**空 buffer** 上切到只读 Selectable 状态,内容写入推迟到**下一个**
+        // 事件循环周期。顺序与分周期都不能变,原因如下:
+        //
+        // Editable→Selectable 会翻转 Mermaid 渲染开关(仅当 MarkdownMermaid 特性
+        // 开启时),其**延迟**的 InteractionStateModelEvent 处理器会调用
+        // `rebuild_layout`。若在同一周期内 `reset_with_markdown` 已同步填充 buffer,
+        // 这次 relayout 便对**整篇已填充文档**发起一次布局失效,与内容插入这两条整篇
+        // 布局动作在同一 FIFO 布局通道里竞争;当失效先于插入到达时,会走
+        // "insert before first block" 分支把先前的窄树当作 suffix 保留 → 文档在真实
+        // 内容之后被重复渲染一份、每行仅一个字符宽(首帧 viewport 宽度为 0)。
+        //
+        // 先在空 buffer 上切状态,使这次 relayout 成为**空失效**(不可能产生窄树);
+        // 再把内容写入推迟到下一个周期,内容便作为唯一一条布局动作干净地插入空树,
+        // 与通道处理时序无关。这与本地文件路径行为一致:那里内容在异步文件加载后的
+        // 较晚周期才到达,故天然避开此问题。
         rendered_view.update(ctx, |editor, ctx| {
-            editor.reset_with_markdown(&content, ctx);
             editor.set_interaction_state(InteractionState::Selectable, ctx);
         });
 
         if let Some(tab) = self.tab_group.get_mut(index) {
-            tab.rendered_markdown_view = Some(rendered_view);
+            tab.rendered_markdown_view = Some(rendered_view.clone());
         }
         ctx.notify();
+
+        // 推迟内容写入到下一个事件循环周期(见上),让空 buffer 上的状态变更
+        // relayout 先完整跑完。
+        ctx.spawn(futures::future::ready(()), move |_view, (), ctx| {
+            rendered_view.update(ctx, |editor, ctx| {
+                editor.reset_with_markdown(&content, ctx);
+            });
+        });
     }
 
     /// Restore a code view from a persisted multi-tab snapshot.
