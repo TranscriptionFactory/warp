@@ -38,8 +38,8 @@ pub(super) async fn download_update_and_cleanup(
 
     let channel = ChannelState::channel();
     let installer_file_name = installer_file_name()?;
-    // openWarp:从 GitHub Release 缓存里取真实下载 URL(资产名为 ZapSetup.exe /
-    // ZapSetup-arm64.exe,见 installer_file_name())。其他 channel 走官方 base url。
+    // openWarp:从 GitHub Release 缓存里取真实下载 URL(资产名为 OpenWarpSetup.exe /
+    // OpenWarpSetup-arm64.exe,见 installer_file_name())。其他 channel 走官方 base url。
     let url = if matches!(channel, Channel::Oss) {
         if let Some(release) = github::cached_release() {
             if let Some(found) = release.find_asset(&installer_file_name) {
@@ -355,8 +355,8 @@ fn app_name_prefix(channel: Channel) -> &'static str {
         Channel::Local => "warp",
         Channel::Integration => "integration",
         Channel::Dev => "WarpDev",
-        // 与 script/windows/bundle.ps1 OSS 分支 INSTALLER_NAME=Zap+Setup 对齐,
-        // 这样 GitHub Release 资产名 ZapSetup.exe 能被 installer_file_name() 正确生成。
+        // 与 script/windows/bundle.ps1 OSS 分支 APP_NAME=OpenWarp 对齐,
+        // 这样 GitHub Release 资产名 OpenWarpSetup.exe 能被 installer_file_name() 正确生成。
         Channel::Oss => "OpenWarp",
     }
 }

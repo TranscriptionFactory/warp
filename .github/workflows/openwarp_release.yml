@@ -1,4 +1,4 @@
-# Zap 发布流水线 — 在 openWarp 分支上 push tag (v*) 即触发
+# OpenWarp 发布流水线 — 在 openWarp 分支上 push tag (v*) 即触发
 #
 # 与上游 create_release.yml 的差异:
 # - 仅 macOS arm64 + macOS Intel + Windows x64 + Linux x86_64,
@@ -16,7 +16,7 @@
 #                    → publish_release (全部 build 成功后下载 artifact 并创建 Release)
 # 任意 build job 失败 → publish_release 因 needs 跳过 → 不会留下没有安装包的 Release。
 
-name: Zap Release
+name: OpenWarp Release
 
 # PR 验证由 .github/workflows/pr-check.yml 负责(Linux cargo check)。
 # 本 workflow 只在 push tag / 手动 dispatch 时跑全量三平台打包,避免 PR 跑 ~3h 浪费。
@@ -216,7 +216,7 @@ jobs:
       - name: Upload DMG artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: zap-macos-${{ matrix.dmg_name_suffix }}
+          name: openwarp-macos-${{ matrix.dmg_name_suffix }}
           path: ${{ steps.bundle_app.outputs.dmg_path }}
           if-no-files-found: error
           retention-days: 7
@@ -240,7 +240,7 @@ jobs:
       - name: Upload CLI artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: zap-cli-macos-${{ matrix.arch }}
+          name: openwarp-cli-macos-${{ matrix.arch }}
           path: openwarp-macos-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
           retention-days: 7
@@ -279,7 +279,7 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: zap-windows-x64
+          name: openwarp-windows-x64
           path: ${{ steps.bundle_app.outputs.installer_path }}
           if-no-files-found: error
           retention-days: 7
@@ -350,7 +350,7 @@ jobs:
           # 让 linuxdeploy/appimagetool 不依赖 FUSE 内核模块,跨 runner 版本都稳。
           APPIMAGE_EXTRACT_AND_RUN: 1
 
-      # RPM 包:复用上一步 release-lto 已经 strip 过的 `target/release-lto/zap-oss`,
+      # RPM 包:复用上一步 release-lto 已经 strip 过的 `target/release-lto/openwarp-oss`,
       # 不重新 `cargo build`。`--skip-build` 让 `script/bundle` 跳过编译与 strip,
       # 直接进入 staging(`bundle_install` → 复制二进制 + resources)+ rpmbuild。
       # 与 deb 同一台 ubuntu-22.04 runner 上跑,共享 host glibc 链接的产物;
@@ -363,7 +363,7 @@ jobs:
         env:
           GIT_RELEASE_TAG: ${{ needs.prepare_metadata.outputs.release_tag }}
 
-      # Arch 包:复用上一步 release-lto 已经 strip 过的 `target/release-lto/zap-oss`,
+      # Arch 包:复用上一步 release-lto 已经 strip 过的 `target/release-lto/openwarp-oss`,
       # 不重新 `cargo build` 主二进制 —— `--skip-build` 让 `script/bundle` 跳过编译与 strip,
       # 直接进入 staging(`bundle_install` → 复制二进制 + resources)+ makepkg。
       #
@@ -434,7 +434,7 @@ jobs:
       - name: Upload package artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: zap-linux-x86_64
+          name: openwarp-linux-x86_64
           # packages_dir 是 target/release-lto/bundle/linux,AppImage/deb/Arch 都落在这里
           path: ${{ steps.bundle_app.outputs.packages_dir }}
           if-no-files-found: error
@@ -511,7 +511,7 @@ jobs:
       - name: Upload CLI artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: zap-cli-linux-x86_64
+          name: openwarp-cli-linux-x86_64
           path: openwarp-linux-x86_64.tar.gz
           if-no-files-found: error
           retention-days: 7
@@ -543,7 +543,7 @@ jobs:
       - name: Upload CLI artifact aarch64
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: zap-cli-linux-aarch64
+          name: openwarp-cli-linux-aarch64
           path: openwarp-linux-aarch64.tar.gz
           if-no-files-found: error
           retention-days: 7

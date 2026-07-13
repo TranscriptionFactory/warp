@@ -77,9 +77,10 @@ mod appimage {
         // openWarp:从 GitHub Release 缓存里取真实下载 URL,绕开空的 releases_base_url。
         // 官方 channel 仍然走 release_assets_directory_url。
         let url = if matches!(channel, warp_core::channel::Channel::Oss) {
-            // OSS Linux AppImage 默认资产名 "Zap-x86_64.AppImage"。
+            // OSS Linux AppImage 默认资产名 "OpenWarp-x86_64.AppImage"
+            // (script/linux/bundle 的 APP_NAME=OpenWarp + APPIMAGE_NAME 拼接)。
             // 已知 release 资产名固定在 GitHub Actions 里。
-            let asset = "Zap-x86_64.AppImage";
+            let asset = "OpenWarp-x86_64.AppImage";
             if let Some(release) = crate::autoupdate::github::cached_release() {
                 if let Some(found) = release.find_asset(asset) {
                     found.browser_download_url.clone()
