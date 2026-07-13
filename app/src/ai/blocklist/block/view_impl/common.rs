@@ -2968,7 +2968,7 @@ pub fn render_failed_output(props: FailedOutputProps, app: &AppContext) -> Box<d
             format!("{ERROR_APOLOGY_TEXT}\n\n{INTERNAL_WARP_ERROR}")
         }
         RenderableAIError::ServerOverloaded => {
-            "Zap is currently overloaded. Please try again later.".to_string()
+            "OpenWarp is currently overloaded. Please try again later.".to_string()
         }
         RenderableAIError::InternalWarpError => {
             format!("{ERROR_APOLOGY_TEXT}\n\n{INTERNAL_WARP_ERROR}")
