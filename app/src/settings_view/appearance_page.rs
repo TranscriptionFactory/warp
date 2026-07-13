@@ -1792,7 +1792,7 @@ impl AppearanceSettingsPageView {
             AppIcon::Original => "Original",
             AppIcon::Starburst => "Starburst",
             AppIcon::Sticker => "Sticker",
-            AppIcon::WarpOne => "Zap 1",
+            AppIcon::WarpOne => "OpenWarp 1",
         }
     }
 

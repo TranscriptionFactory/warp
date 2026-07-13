@@ -682,7 +682,7 @@ impl Display for RenderableAIError {
         match self {
             Self::QuotaLimit => write!(f, "Quota limit reached."),
             Self::ServerOverloaded => {
-                write!(f, "Zap is currently overloaded. Please try again later.")
+                write!(f, "OpenWarp is currently overloaded. Please try again later.")
             }
             Self::InternalWarpError => write!(f, "Internal Zap error."),
             Self::ContextWindowExceeded(message) => {
