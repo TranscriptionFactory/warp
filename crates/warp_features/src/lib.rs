@@ -744,7 +744,6 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::GeminiNotifications,
     FeatureFlag::LocalDockerSandbox,
     FeatureFlag::VerticalTabsSummaryMode,
-    FeatureFlag::DragTabsToWindows,
     FeatureFlag::ServerFileBrowser,
 ];
 
