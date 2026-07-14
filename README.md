@@ -188,6 +188,16 @@ cargo run   --release --bin warp-oss
 > asking you to run `./script/install_channel_config`. That script clones an SSH repo only
 > Warp employees can access. Zap users only need the `warp-oss` binary.
 
+### macOS Gatekeeper
+
+If macOS reports that OpenWarp is damaged, clear the quarantine flag:
+
+```bash
+xattr -cr /Applications/OpenWarp.app
+```
+
+You can also open **System Settings → Privacy & Security** and choose **Open Anyway**.
+
 See [AGENTS.md](AGENTS.md) for the repository code map and engineering guide.
 
 ## License
