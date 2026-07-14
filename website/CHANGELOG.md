@@ -1,6 +1,6 @@
 # Changelog
 
-本文档记录 Zap 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
+本文档记录 OpenWarp 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
 
 ## [Unreleased]
 
@@ -89,11 +89,11 @@ Zap 社区分支首个预览版本。
 - **AI**:CJK 输入分类、reasoning 拆分、BYOP tool_call 诊断、LRC tag-in 合成虚拟 subagent + 浮窗 spawn 链路
 - **CI**:Release 显式声明 `contents: write` 权限修 403
 
-[Unreleased]: https://github.com/zerx-lab/warp/compare/v2026.05.06.preview...HEAD
-[v2026.05.06.preview]: https://github.com/zerx-lab/warp/compare/v2026.05.04.preview...v2026.05.06.preview
-[v2026.05.04.preview]: https://github.com/zerx-lab/warp/compare/v2026.05.03.preview.4...v2026.05.04.preview
-[v2026.05.03.preview(.2/.3/.4)]: https://github.com/zerx-lab/warp/compare/v2026.05.02.preview...v2026.05.03.preview.4
-[v2026.05.02.preview]: https://github.com/zerx-lab/warp/compare/v2026.05.01.preview...v2026.05.02.preview
-[v2026.05.01.preview]: https://github.com/zerx-lab/warp/compare/v2026.04.30.oss...v2026.05.01.preview
-[v2026.04.30.oss]: https://github.com/zerx-lab/warp/compare/v2026.04.30.preview...v2026.04.30.oss
-[v2026.04.30.preview]: https://github.com/zerx-lab/warp/releases/tag/v2026.04.30.preview
+[Unreleased]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.06.preview...HEAD
+[v2026.05.06.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.04.preview...v2026.05.06.preview
+[v2026.05.04.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.03.preview.4...v2026.05.04.preview
+[v2026.05.03.preview(.2/.3/.4)]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.02.preview...v2026.05.03.preview.4
+[v2026.05.02.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.01.preview...v2026.05.02.preview
+[v2026.05.01.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.04.30.oss...v2026.05.01.preview
+[v2026.04.30.oss]: https://github.com/TranscriptionFactory/warp/compare/v2026.04.30.preview...v2026.04.30.oss
+[v2026.04.30.preview]: https://github.com/TranscriptionFactory/warp/releases/tag/v2026.04.30.preview
