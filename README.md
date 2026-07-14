@@ -16,7 +16,7 @@ own machine.
 
 [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Upstream Warp](https://www.warp.dev)
 
-> Early development. No official release yet. **Not affiliated with Warp, Inc.**
+> Early development. Pre-release builds only — expect rough edges. **Not affiliated with Warp, Inc.**
 
 </div>
 

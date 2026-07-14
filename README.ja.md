@@ -15,7 +15,7 @@ AI プロバイダーレイヤーを開放し、任意のサードパーティ C
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [上流 Warp](https://www.warp.dev)
 
-> 開発初期段階。公式リリース未定。**Warp, Inc. とは無関係です。**
+> 開発初期段階。プレリリースビルドのみ提供 — 荒削りな部分があります。**Warp, Inc. とは無関係です。**
 
 </div>
 
@@ -180,6 +180,16 @@ cargo run   --release --bin warp-oss
 > 生成された実行ファイルは起動時にパニックし、`./script/install_channel_config` の実行を求めます。
 > そのスクリプトは Warp 従業員のみがアクセスできる SSH リポジトリをクローンします。
 > Zap ユーザーは `warp-oss` バイナリのみ必要です。
+
+### macOS Gatekeeper
+
+macOS に OpenWarp が壊れている(damaged)と表示された場合は、quarantine フラグを削除してください:
+
+```bash
+xattr -cr /Applications/OpenWarp.app
+```
+
+または **システム設定 → プライバシーとセキュリティ** を開き、**このまま開く** を選択してください。
 
 リポジトリのコードマップとエンジニアリングガイドは [AGENTS.md](AGENTS.md) を参照。
 

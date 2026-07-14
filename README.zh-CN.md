@@ -13,7 +13,7 @@ Zap 是 [Warp](https://github.com/warpdotdev/warp) 的社区分支,在保留完�
 
 [English](./README.md) · [日本語](./README.ja.md) · [上游 Warp](https://www.warp.dev)
 
-> 早期开发中,暂无正式发布。**与 Warp, Inc. 无关。**
+> 早期开发中,仅提供预发布构建,可能存在粗糙之处。**与 Warp, Inc. 无关。**
 
 </div>
 
@@ -170,6 +170,16 @@ cargo run   --release --bin warp-oss
 > `warp-channel-config` 二进制加载渠道配置,该二进制位于闭源仓库中。编译可以成功,
 > 但生成的二进制在启动时会 panic,提示运行 `./script/install_channel_config`。
 > 该脚本克隆一个仅 Warp 员工可访问的 SSH 仓库。Zap 用户只需 `warp-oss` 二进制。
+
+### macOS Gatekeeper
+
+如果 macOS 提示 OpenWarp 已损坏,请清除 quarantine 标记:
+
+```bash
+xattr -cr /Applications/OpenWarp.app
+```
+
+也可以打开 **系统设置 → 隐私与安全性**,选择 **仍要打开**。
 
 详见 [AGENTS.md](AGENTS.md) 获取仓库代码地图和工程指南。
 
