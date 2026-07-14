@@ -7,7 +7,7 @@
             "is_prerelease": false,
             "is_autopush": false,
             "release_base_name": "OpenWarp",
-            "release_body_text": "OpenWarp release (open-source fork of Warp Terminal, via Zap; oss channel)",
+            "release_body_text": "OpenWarp release (open-source fork of Warp Terminal; oss channel)",
             "changelog_slack_channel": "",
             "gcs_cache_control_value": "",
             "web_gcs_bucket_prefix": ""
