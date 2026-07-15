@@ -2908,8 +2908,10 @@ impl Input {
             },
         );
 
+        // Structural child: only rendered while a suggestion banner is visible,
+        // so a render-tree walk alone would strand it during window transfers.
         let prompt_suggestions_view =
-            ctx.add_view(|ctx| PromptSuggestionsView::new(ai_input_model.clone(), ctx));
+            ctx.add_child_view(|ctx| PromptSuggestionsView::new(ai_input_model.clone(), ctx));
 
         let slash_command_data_source = ctx.add_model(|ctx| {
             SlashCommandDataSource::new(

@@ -2839,6 +2839,46 @@ impl AppContext {
         handle
     }
 
+    /// Add a view and register it as a structural child of `parent_view_id`.
+    ///
+    /// Structural children follow their parent in `transfer_view_tree_to_window`
+    /// even while absent from the render tree, so a conditionally-rendered view
+    /// stays in the same window as the view that owns its handle.
+    pub fn add_view_with_parent<T, F>(
+        &mut self,
+        window_id: WindowId,
+        parent_view_id: EntityId,
+        build_view: F,
+    ) -> ViewHandle<T>
+    where
+        T: View,
+        F: FnOnce(&mut ViewContext<T>) -> T,
+    {
+        let handle = self.add_view(window_id, build_view);
+        self.register_structural_child(window_id, handle.id(), parent_view_id);
+        handle
+    }
+
+    /// Record `view_id` as a structural child of `parent_view_id` in both the
+    /// presenter's parent-child mapping and the structural relationship maps
+    /// used by `transfer_structural_children`.
+    fn register_structural_child(
+        &mut self,
+        window_id: WindowId,
+        view_id: EntityId,
+        parent_view_id: EntityId,
+    ) {
+        if let Some(presenter) = self.presenter(window_id) {
+            presenter.borrow_mut().set_parent(view_id, parent_view_id);
+        }
+        self.structural_child_to_parent
+            .insert(view_id, parent_view_id);
+        self.structural_parent_to_children
+            .entry(parent_view_id)
+            .or_default()
+            .insert(view_id);
+    }
+
     /// Add a view that implements the `TypedAction` trait, including the default parent view
     ///
     /// This will create the view as normal as well as register it's `handle_action` method in the
@@ -2905,15 +2945,7 @@ impl AppContext {
 
         // If a parent view ID was provided, add the view as a child of the parent
         if let Some(parent_view_id) = parent_view_id {
-            if let Some(presenter) = self.presenter(window_id) {
-                presenter.borrow_mut().set_parent(view_id, parent_view_id);
-            }
-            self.structural_child_to_parent
-                .insert(view_id, parent_view_id);
-            self.structural_parent_to_children
-                .entry(parent_view_id)
-                .or_default()
-                .insert(view_id);
+            self.register_structural_child(window_id, view_id, parent_view_id);
         }
 
         // Register the action handler for this view type (if it hasn't already been added)

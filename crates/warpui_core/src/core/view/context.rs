@@ -147,6 +147,21 @@ impl<'a, T: View> ViewContext<'a, T> {
         self.app.add_view(self.window_id, build_view)
     }
 
+    /// Add a view as a structural child of the current view.
+    ///
+    /// Prefer this over `add_view` when the current view owns the handle:
+    /// structural children follow their parent across window transfers even
+    /// while they are not rendered, whereas views created with `add_view` are
+    /// only transferred when they appear in the render tree at transfer time.
+    pub fn add_child_view<S, F>(&mut self, build_view: F) -> ViewHandle<S>
+    where
+        S: View,
+        F: FnOnce(&mut ViewContext<S>) -> S,
+    {
+        self.app
+            .add_view_with_parent(self.window_id, self.view_id, build_view)
+    }
+
     pub fn add_typed_action_view<V, F>(&mut self, build_view: F) -> ViewHandle<V>
     where
         V: TypedActionView + View,

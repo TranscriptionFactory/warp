@@ -697,6 +697,77 @@ fn test_transfer_structural_children_follows_parent() {
 }
 
 #[test]
+fn test_add_child_view_transfers_with_parent() {
+    #[derive(Default)]
+    struct TestView {
+        value: usize,
+    }
+
+    impl Entity for TestView {
+        type Event = ();
+    }
+
+    impl View for TestView {
+        fn render(&self, _: &AppContext) -> Box<dyn Element> {
+            Empty::new().finish()
+        }
+
+        fn ui_name() -> &'static str {
+            "TestView"
+        }
+    }
+
+    impl TypedActionView for TestView {
+        type Action = ();
+    }
+
+    App::test((), |mut app| async move {
+        let (window_1_id, root_1) =
+            app.add_window(WindowStyle::NotStealFocus, |_| TestView::default());
+        let (window_2_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| TestView::default());
+
+        let parent = root_1.update(&mut app, |_, ctx| {
+            ctx.add_typed_action_view(|_| TestView { value: 1 })
+        });
+
+        // The child never enters the render tree (TestView renders Empty), so
+        // only the structural registration from add_child_view can carry it
+        // across the transfer.
+        let child = parent.update(&mut app, |_, ctx| {
+            ctx.add_child_view(|_| TestView { value: 2 })
+        });
+
+        let parent_id = parent.id();
+        let child_id = child.id();
+
+        let transferred =
+            app.update(|ctx| ctx.transfer_view_tree_to_window(parent_id, window_1_id, window_2_id));
+
+        assert!(
+            transferred.contains(&child_id),
+            "add_child_view child should be in transferred list"
+        );
+
+        app.read(|ctx| {
+            assert!(
+                ctx.windows[&window_2_id].views.contains_key(&child_id),
+                "child should be in window 2"
+            );
+            assert!(
+                !ctx.windows[&window_1_id].views.contains_key(&child_id),
+                "child should no longer be in window 1"
+            );
+        });
+
+        // Updating through the handle resolves to the child's current window.
+        child.update(&mut app, |view, _| view.value = 3);
+        child.read(&app, |view, _| {
+            assert_eq!(view.value, 3, "child should be updatable after transfer");
+        });
+    });
+}
+
+#[test]
 fn test_transfer_structural_grandchildren_follows_transitively() {
     #[derive(Default)]
     struct TestView {
