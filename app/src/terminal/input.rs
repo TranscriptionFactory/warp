@@ -2569,7 +2569,7 @@ impl Input {
             )
         });
 
-        let inline_history_menu_view = ctx.add_view({
+        let inline_history_menu_view = ctx.add_child_view({
             let active_session = active_session.clone();
             let buffer_model = buffer_model.clone();
             |ctx| {
@@ -2591,7 +2591,7 @@ impl Input {
         }
         let inline_history_model = inline_history_menu_view.as_ref(ctx).model().clone();
 
-        let terminal_input_message_bar = ctx.add_view(|ctx| {
+        let terminal_input_message_bar = ctx.add_child_view(|ctx| {
             TerminalInputMessageBar::new(
                 model.clone(),
                 ai_input_model.clone(),
@@ -2937,7 +2937,7 @@ impl Input {
             me.handle_slash_command_model_event(event, ctx);
         });
 
-        let inline_conversation_menu_view = ctx.add_view(|ctx| {
+        let inline_conversation_menu_view = ctx.add_child_view(|ctx| {
             InlineConversationMenuView::new(
                 suggestions_mode_model.clone(),
                 agent_view_controller.clone(),
@@ -2956,7 +2956,7 @@ impl Input {
             });
         }
 
-        let inline_repos_menu_view = ctx.add_view(|ctx| {
+        let inline_repos_menu_view = ctx.add_child_view(|ctx| {
             InlineReposMenuView::new(
                 suggestions_mode_model.clone(),
                 agent_view_controller.clone(),
@@ -2969,7 +2969,7 @@ impl Input {
             me.handle_repos_menu_event(event, ctx);
         });
 
-        let inline_model_selector_view = ctx.add_view(|ctx| {
+        let inline_model_selector_view = ctx.add_child_view(|ctx| {
             InlineModelSelectorView::new(
                 terminal_view_id,
                 suggestions_mode_model.clone(),
@@ -2984,7 +2984,7 @@ impl Input {
             me.handle_inline_model_selector_event(event, ctx);
         });
 
-        let inline_profile_selector_view = ctx.add_view(|ctx| {
+        let inline_profile_selector_view = ctx.add_child_view(|ctx| {
             InlineProfileSelectorView::new(
                 terminal_view_id,
                 suggestions_mode_model.clone(),
@@ -2998,7 +2998,7 @@ impl Input {
             me.handle_inline_profile_selector_event(event, ctx);
         });
 
-        let inline_prompts_menu_view = ctx.add_view(|ctx| {
+        let inline_prompts_menu_view = ctx.add_child_view(|ctx| {
             InlinePromptsMenuView::new(
                 suggestions_mode_model.clone(),
                 agent_view_controller.clone(),
@@ -3011,7 +3011,7 @@ impl Input {
             me.handle_inline_prompts_menu_event(event, ctx);
         });
 
-        let inline_skill_selector_view = ctx.add_view(|ctx| {
+        let inline_skill_selector_view = ctx.add_child_view(|ctx| {
             InlineSkillSelectorView::new(
                 suggestions_mode_model.clone(),
                 agent_view_controller.clone(),
@@ -3026,7 +3026,7 @@ impl Input {
             me.handle_inline_skill_selector_event(event, ctx);
         });
 
-        let user_query_menu_view = ctx.add_view(|ctx| {
+        let user_query_menu_view = ctx.add_child_view(|ctx| {
             UserQueryMenuView::new(
                 AIConversationId::default(),
                 suggestions_mode_model.clone(),
@@ -3042,7 +3042,7 @@ impl Input {
             });
         }
 
-        let inline_plan_menu_view = ctx.add_view(|ctx| {
+        let inline_plan_menu_view = ctx.add_child_view(|ctx| {
             InlinePlanMenuView::new(
                 AIConversationId::default(),
                 suggestions_mode_model.clone(),
@@ -3056,7 +3056,7 @@ impl Input {
             me.handle_plan_menu_event(event, ctx);
         });
 
-        let rewind_menu_view = ctx.add_view(|ctx| {
+        let rewind_menu_view = ctx.add_child_view(|ctx| {
             RewindMenuView::new(
                 AIConversationId::default(),
                 suggestions_mode_model.clone(),
@@ -3070,7 +3070,7 @@ impl Input {
             me.handle_rewind_menu_event(event, ctx);
         });
 
-        let inline_slash_commands_view = ctx.add_view(|ctx| {
+        let inline_slash_commands_view = ctx.add_child_view(|ctx| {
             InlineSlashCommandView::new(
                 &slash_command_model,
                 &inline_terminal_menu_positioner,
