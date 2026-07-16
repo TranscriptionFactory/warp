@@ -362,3 +362,44 @@ fn harness_parse_local_child_harness_rejects_oz() {
         Some(Harness::OpenCode)
     );
 }
+
+#[test]
+fn api_key_before_subcommand_parses() {
+    // Regression test: `warp --api-key KEY <subcommand>` should work.
+    // Previously the top-level [URLS] positional would swallow the subcommand
+    // when --api-key preceded it.
+    let args = Args::try_parse_from(["warp", "--api-key", "test-key", "whoami"]).unwrap();
+
+    assert_eq!(args.api_key(), Some(&"test-key".to_string()));
+    let Some(Command::CommandLine(boxed_cmd)) = args.command else {
+        panic!("Expected `warp whoami` command");
+    };
+    assert!(matches!(boxed_cmd.as_ref(), CliCommand::Whoami));
+}
+
+#[test]
+fn debug_before_subcommand_parses() {
+    // Regression test: `warp --debug <subcommand>` should work.
+    // Global flags like --debug must not prevent subcommand detection.
+    let args = Args::try_parse_from(["warp", "--debug", "whoami"]).unwrap();
+
+    assert!(args.debug());
+    let Some(Command::CommandLine(boxed_cmd)) = args.command else {
+        panic!("Expected `warp whoami` command");
+    };
+    assert!(matches!(boxed_cmd.as_ref(), CliCommand::Whoami));
+}
+
+#[test]
+fn multiple_global_flags_before_subcommand_parse() {
+    // Both --api-key and --debug before the subcommand should work.
+    let args =
+        Args::try_parse_from(["warp", "--api-key", "test-key", "--debug", "whoami"]).unwrap();
+
+    assert_eq!(args.api_key(), Some(&"test-key".to_string()));
+    assert!(args.debug());
+    let Some(Command::CommandLine(boxed_cmd)) = args.command else {
+        panic!("Expected `warp whoami` command");
+    };
+    assert!(matches!(boxed_cmd.as_ref(), CliCommand::Whoami));
+}
