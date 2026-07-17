@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v2026.07.16.1] — 2026-07-16
+
+- **UI**:修复输入框及提示建议视图跨窗口移动时的结构父子关系,避免子视图残留在旧窗口
+- **安装**:README 补充 macOS Gatekeeper 隔离属性清理方法
+- **发布**:Linux aarch64 CLI 交叉编译仅启用实际使用的 Deflate ZIP 后端,避免误链接 x86_64 `liblzma`
+
 - **AI / BYOP**:port opencode `applyCaching`,启用 prompt caching;`write_to_long_running_shell_command` 在 line 模式下拒绝嵌入 LF;BYOP LRC monitor fallback 改走 silent subtask;`cancel_execution` 50ms 窗口内 sender 泄漏修复(#134 follow-up,#137)
 - **云端剥离 Phase 1–2**:增加 `cloud-disabled` channel 谓词;清理 billing/pricing、referral/reward、cloud sharing dialog UI;退订 RTC UpdateManager;退役 notebook/folder sync queue
 - **平台**:修复 Spotlight/Finder/Launchpad 启动 macOS 时的 panic;`run_shell_command` stdout 兜底回退至 command grid
@@ -89,7 +95,8 @@ Zap 社区分支首个预览版本。
 - **AI**:CJK 输入分类、reasoning 拆分、BYOP tool_call 诊断、LRC tag-in 合成虚拟 subagent + 浮窗 spawn 链路
 - **CI**:Release 显式声明 `contents: write` 权限修 403
 
-[Unreleased]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.06.preview...HEAD
+[Unreleased]: https://github.com/TranscriptionFactory/warp/compare/v2026.07.16.1...HEAD
+[v2026.07.16.1]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.06.preview...v2026.07.16.1
 [v2026.05.06.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.04.preview...v2026.05.06.preview
 [v2026.05.04.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.03.preview.4...v2026.05.04.preview
 [v2026.05.03.preview(.2/.3/.4)]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.02.preview...v2026.05.03.preview.4
