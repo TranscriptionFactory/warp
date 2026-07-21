@@ -271,15 +271,40 @@ if [[ "$BUILD" == "true" ]]; then
   echo "Making debug copy of '$EXECUTABLE_PATH' at '$DEBUG_EXECUTABLE_PATH'"
   cp "$EXECUTABLE_PATH" "$DEBUG_EXECUTABLE_PATH"
 
+  # Host binutils `strip` only understands the host architecture, so
+  # cross-target builds (e.g. the aarch64 musl CLI built on an x86_64 runner)
+  # need a target-capable strip: llvm-strip handles any architecture, and the
+  # binutils cross package (<arch>-linux-gnu-strip) is the fallback.
+  STRIP_TOOL="strip"
+  if [[ -n "$BUILD_TARGET" && "${BUILD_TARGET%%-*}" != "$(uname -m)" ]]; then
+    TARGET_ARCH="${BUILD_TARGET%%-*}"
+    STRIP_TOOL=""
+    # Newest versioned llvm-strip (llvm-strip-18, ...) on runners that ship
+    # only versioned LLVM binaries.
+    VERSIONED_LLVM_STRIP="$(compgen -c llvm-strip- | sort -V | tail -1)"
+    for CANDIDATE in llvm-strip "$VERSIONED_LLVM_STRIP" "$TARGET_ARCH-linux-gnu-strip"; do
+      if [[ -n "$CANDIDATE" ]] && command -v "$CANDIDATE" >/dev/null 2>&1; then
+        STRIP_TOOL="$CANDIDATE"
+        break
+      fi
+    done
+    if [[ -z "$STRIP_TOOL" ]]; then
+      echo "No strip tool available for cross target $BUILD_TARGET" >&2
+      echo "(need llvm-strip or $TARGET_ARCH-linux-gnu-strip on PATH)" >&2
+      exit 1
+    fi
+    echo "Using '$STRIP_TOOL' to strip cross-target binary"
+  fi
+
   echo "Stripping debug symbols from '$EXECUTABLE_PATH'"
   if [[ $RELEASE_CHANNEL = "dev" ]]; then
     # For dev builds, only strip debug symbols, as we want to keep some
     # symbols for profiling purposes.
-    strip --strip-debug "$EXECUTABLE_PATH"
+    "$STRIP_TOOL" --strip-debug "$EXECUTABLE_PATH"
   else
     # For production builds, strip all symbols, to keep the binary size
     # smaller.
-    strip --strip-all "$EXECUTABLE_PATH"
+    "$STRIP_TOOL" --strip-all "$EXECUTABLE_PATH"
   fi
 else
   echo 'Skipping `cargo build` step due to --skip-build argument'

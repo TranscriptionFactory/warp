@@ -468,6 +468,10 @@ jobs:
           # 静态 aarch64 CLI tarball,给 ARM Linux 远端(Graviton/Ampere/RPi 等)
           # 用于 SSH remote-server 安装。原仅有 x86_64,所有 ARM 远端 404。
           rustup target add aarch64-unknown-linux-musl
+          # aarch64 交叉 strip 兜底:host binutils 的 `strip` 认不出 aarch64
+          # ELF,`script/linux/bundle` 优先找 llvm-strip,镜像里没有时回落到
+          # 这里装的 binutils-aarch64-linux-gnu(aarch64-linux-gnu-strip)。
+          sudo apt-get -y install binutils-aarch64-linux-gnu
           # zig:用官方预编译 tarball,固定版本以保证构建可复现。
           # 0.13.0 与 cargo-zigbuild >= 0.19 兼容。
           ZIG_VERSION="0.13.0"
