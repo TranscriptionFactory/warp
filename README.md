@@ -14,7 +14,7 @@ browsing and code review, and fixes a number of upstream rendering issues —
 all while keeping every credential, conversation, and agent history on your
 own machine.
 
-[简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Upstream Warp](https://www.warp.dev)
+[Download](https://github.com/TranscriptionFactory/warp/releases/latest) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Upstream Warp](https://www.warp.dev)
 
 > Early development. Pre-release builds only — expect rough edges. **Not affiliated with Warp, Inc.**
 
@@ -164,6 +164,38 @@ OpenWarp wants to be the kind of terminal that:
 
 If you share these goals, come help us finish it.
 
+## Download
+
+Pre-built binaries for every release are on the
+[Releases page](https://github.com/TranscriptionFactory/warp/releases/latest):
+
+| Platform | Asset |
+| --- | --- |
+| macOS (Apple Silicon) | `OpenWarp-arm64.dmg` |
+| macOS (Intel) | `OpenWarp-intel.dmg` |
+| Linux (any distro) | `OpenWarp-x86_64.AppImage` |
+| Debian / Ubuntu | `openwarp_<version>_amd64.deb` |
+| Fedora / RHEL 8+ | `openwarp-<version>.x86_64.rpm` |
+| Windows x64 | `OpenWarpSetup.exe` |
+| Headless CLI (macOS / Linux, x86_64 + aarch64) | `openwarp-<os>-<arch>.tar.gz` |
+
+- **AppImage**: `chmod +x OpenWarp-x86_64.AppImage && ./OpenWarp-x86_64.AppImage`
+- **deb / rpm**: `sudo apt install ./openwarp_*_amd64.deb` · `sudo dnf install ./openwarp-*.x86_64.rpm`
+- **macOS**: builds are unsigned; if Gatekeeper complains, see
+  [macOS Gatekeeper](#macos-gatekeeper) below.
+- The `.tar.gz` assets are static CLI builds of `openwarp-oss`; OpenWarp also
+  fetches these automatically when installing itself on remote SSH hosts.
+
+### macOS Gatekeeper
+
+If macOS reports that OpenWarp is damaged, clear the quarantine flag:
+
+```bash
+xattr -cr /Applications/OpenWarp.app
+```
+
+You can also open **System Settings → Privacy & Security** and choose **Open Anyway**.
+
 ## Build from source
 
 ```bash
@@ -177,8 +209,8 @@ cd warp
 If you prefer raw `cargo`, **always target the OSS binary explicitly**:
 
 ```bash
-cargo build --release --bin warp-oss
-cargo run   --release --bin warp-oss
+cargo build --release --bin openwarp-oss
+cargo run   --release --bin openwarp-oss
 ```
 
 > Do not run `cargo build --release` / `cargo run --release --bin {warp,stable,dev,preview}`
@@ -186,17 +218,7 @@ cargo run   --release --bin warp-oss
 > their channel config through Warp's private `warp-channel-config` binary, which lives in a
 > closed-source repo. Compilation succeeds, but the resulting executables panic at startup
 > asking you to run `./script/install_channel_config`. That script clones an SSH repo only
-> Warp employees can access. OpenWarp users only need the `warp-oss` binary.
-
-### macOS Gatekeeper
-
-If macOS reports that OpenWarp is damaged, clear the quarantine flag:
-
-```bash
-xattr -cr /Applications/OpenWarp.app
-```
-
-You can also open **System Settings → Privacy & Security** and choose **Open Anyway**.
+> Warp employees can access. OpenWarp users only need the `openwarp-oss` binary.
 
 See [AGENTS.md](AGENTS.md) for the repository code map and engineering guide.
 
@@ -254,10 +276,6 @@ status and notification center all work out of the box.
 
 <br clear="left" />
 
-<a href="https://github.com/google/antigravity">
-  <img src="assets/agy-icon.png" alt="Google Antigravity" width="96" align="left" />
-</a>
-
 **[Google Antigravity](https://github.com/google/antigravity)** (`agy`) — Google's
 CLI agent for coding tasks. OpenWarp ships native integration so `agy` runs as a
 first-class Block with notification routing through OpenWarp's notification center.
@@ -281,10 +299,10 @@ first-class Block with notification routing through OpenWarp's notification cent
 If you maintain a CLI agent or a terminal-adjacent tool and want similar
 first-class integration, open an issue — we are happy to wire more partners in.
 
-## Migrating from OpenWarp or Warp
+## Migrating from Zap or Warp
 
-If you used the project before it was renamed to OpenWarp (formerly **OpenWarp**),
-or are coming from upstream **Warp**, see
+If you used this project under its earlier **Zap** branding, or are coming
+from upstream **Warp**, see
 [docs/migrate-from-warp.md](docs/migrate-from-warp.md) to bring your settings
 across.
 
