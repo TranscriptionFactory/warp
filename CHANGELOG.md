@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [v2026.07.21.2] — 2026-07-21
+
+- **发布**:Linux oss 包名 `zap`/`zap-cli` 更名为 `openwarp`/`openwarp-cli`(deb/rpm/arch 包名、`/opt` 安装目录、`/usr/bin` 符号链接与包元数据同步更名),并修复 desktop 启动器 `Exec=openwarp` 指向不存在的 `/usr/bin/zap` 符号链接的问题
+
 ## [v2026.07.21.1] — 2026-07-21
 
 - **发布**:Linux aarch64 CLI 交叉编译 strip 改为目标感知(优先 llvm-strip,回落 aarch64-linux-gnu-strip),修复 host `strip` 无法识别 aarch64 ELF 导致的发布中断
