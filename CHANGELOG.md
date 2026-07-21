@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [v2026.07.21.1] — 2026-07-21
+
+- **发布**:Linux aarch64 CLI 交叉编译 strip 改为目标感知(优先 llvm-strip,回落 aarch64-linux-gnu-strip),修复 host `strip` 无法识别 aarch64 ELF 导致的发布中断
+
 ## [v2026.07.16.1] — 2026-07-16
 
 - **UI**:修复输入框及提示建议视图跨窗口移动时的结构父子关系,避免子视图残留在旧窗口
@@ -95,7 +99,8 @@ Zap 社区分支首个预览版本。
 - **AI**:CJK 输入分类、reasoning 拆分、BYOP tool_call 诊断、LRC tag-in 合成虚拟 subagent + 浮窗 spawn 链路
 - **CI**:Release 显式声明 `contents: write` 权限修 403
 
-[Unreleased]: https://github.com/TranscriptionFactory/warp/compare/v2026.07.16.1...HEAD
+[Unreleased]: https://github.com/TranscriptionFactory/warp/compare/v2026.07.21.1...HEAD
+[v2026.07.21.1]: https://github.com/TranscriptionFactory/warp/compare/v2026.07.16.1...v2026.07.21.1
 [v2026.07.16.1]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.06.preview...v2026.07.16.1
 [v2026.05.06.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.04.preview...v2026.05.06.preview
 [v2026.05.04.preview]: https://github.com/TranscriptionFactory/warp/compare/v2026.05.03.preview.4...v2026.05.04.preview
