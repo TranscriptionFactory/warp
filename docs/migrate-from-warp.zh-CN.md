@@ -1,50 +1,50 @@
-# 迁移设置到 Zap
+# 迁移设置到 OpenWarp
 
 [English](./migrate-from-warp.md) · [日本語](./migrate-from-warp.ja.md)
 
 本文给希望把**设置类配置**(自定义快捷键、主题、工作流、MCP 配置等)从历史安装
-带到 Zap 的用户。
+带到 OpenWarp 的用户。
 
 可能的"源端"有两种,**两者的安全等级不同**,本文分两节说明。如果两边都有,
-**请先迁 OpenWarp,再考虑迁 Warp**。
+**请先迁 Zap,再考虑迁 Warp**:
 
-1. **OpenWarp** —— Zap 自己之前的名字。
-2. **上游 [Warp](https://github.com/warpdotdev/warp)** —— Zap 所 fork 的项目。
+1. **Zap** —— 本项目此前使用的品牌名。
+2. **上游 [Warp](https://github.com/warpdotdev/warp)** —— OpenWarp 分叉自的
+   原项目。
 
-本文**有意不覆盖**命令历史、SQLite 数据库、Drive 对象,以及任何凭证。这些要么
-绑定到本机(Keychain / DPAPI / libsecret),要么 schema 与对方强耦合,跨过来
-并不安全。
+本文刻意**不覆盖**命令历史、SQLite 数据库、Drive 对象与任何凭证。它们要么绑定
+本机(Keychain / DPAPI / libsecret),要么与 schema 强耦合,跨分支复制并不安全。
 
 ---
 
-## 磁盘布局总览
+## 磁盘状态的布局方式
 
-Zap(以及 OpenWarp / 上游 Warp)把磁盘状态分成**三类目录**:
+OpenWarp(以及它之前的 Zap 与上游 Warp)把磁盘状态分成**三类目录**:
 
 - **config** —— `settings.toml`、`keybindings.yaml`
 - **data** —— `themes/`、`workflows/`、`launch_configurations/`、`tab_configs/`
-- **home dotfile** —— `.mcp.json`、`skills/`
+- **home 点目录** —— `.mcp.json`、`skills/`
 
-macOS 上三类目录都收敛到同一个 home dotfile 目录(`~/.warp/`、`~/.openwarp/`
-或 `~/.zap/`);Linux 上按 XDG 规范分到**三个不同的位置**,Windows 上按
-`directories` crate 的等价布局分。下面的迁移脚本会按平台把每个文件放到
-正确的目标。
+macOS 上三类目录合并在同一个 home 点目录下(`~/.warp/`、`~/.zap/` 或
+`~/.openwarp/`)。Linux 与 Windows 上它们位于**三个不同位置** —— Linux 遵循
+XDG 约定,Windows 遵循 `directories` crate 布局。下面的迁移脚本会按平台把每个
+文件放到正确的目标位置。
 
-### Zap 目标路径
-
-| 类别 | macOS | Linux | Windows |
-|---|---|---|---|
-| config | `~/.zap/` | `${XDG_CONFIG_HOME:-~/.config}/zap/` | `%LOCALAPPDATA%\zap\Zap\config\` |
-| data | `~/.zap/` | `${XDG_DATA_HOME:-~/.local/share}/zap/` | `%APPDATA%\zap\Zap\data\` |
-| home dotfile | `~/.zap/` | `~/.zap/` | `%USERPROFILE%\.zap\` |
-
-### OpenWarp 源路径
+### OpenWarp 目标路径
 
 | 类别 | macOS | Linux | Windows |
 |---|---|---|---|
 | config | `~/.openwarp/` | `${XDG_CONFIG_HOME:-~/.config}/openwarp/` | `%LOCALAPPDATA%\openwarp\OpenWarp\config\` |
 | data | `~/.openwarp/` | `${XDG_DATA_HOME:-~/.local/share}/openwarp/` | `%APPDATA%\openwarp\OpenWarp\data\` |
-| home dotfile | `~/.openwarp/` | `~/.openwarp/` | `%USERPROFILE%\.openwarp\` |
+| home 点目录 | `~/.openwarp/` | `~/.openwarp/` | `%USERPROFILE%\.openwarp\` |
+
+### Zap 源路径
+
+| 类别 | macOS | Linux | Windows |
+|---|---|---|---|
+| config | `~/.zap/` | `${XDG_CONFIG_HOME:-~/.config}/zap/` | `%LOCALAPPDATA%\zap\Zap\config\` |
+| data | `~/.zap/` | `${XDG_DATA_HOME:-~/.local/share}/zap/` | `%APPDATA%\zap\Zap\data\` |
+| home 点目录 | `~/.zap/` | `~/.zap/` | `%USERPROFILE%\.zap\` |
 
 ### 上游 Warp 源路径
 
@@ -52,45 +52,46 @@ macOS 上三类目录都收敛到同一个 home dotfile 目录(`~/.warp/`、`~/.
 |---|---|---|---|
 | config | `~/.warp/` | `${XDG_CONFIG_HOME:-~/.config}/warp-terminal/` | `%LOCALAPPDATA%\warp\Warp-Terminal\config\` |
 | data | `~/.warp/` | `${XDG_DATA_HOME:-~/.local/share}/warp-terminal/` | `%APPDATA%\warp\Warp-Terminal\data\` |
-| home dotfile | `~/.warp/` | `~/.warp/` | `%USERPROFILE%\.warp\` |
+| home 点目录 | `~/.warp/` | `~/.warp/` | `%USERPROFILE%\.warp\` |
 
-> Linux 下目录名 `warp-terminal` 与 Linux 软件包名一致(例如 Debian/Ubuntu 下
-> `/opt/warpdotdev/warp-terminal/`)。Windows 上的 organization 文件夹名可能因
-> 打包方式而异;如果你在 `%APPDATA%\warp\Warp-Terminal`(或 `%LOCALAPPDATA%\warp\Warp-Terminal`)
-> 找不到,请检查 Warp 实际使用的 `%APPDATA%` / `%LOCALAPPDATA%` 路径。
+> Linux 目录名 `warp-terminal` 与 Linux 包名一致(如 Debian/Ubuntu 上的
+> `/opt/warpdotdev/warp-terminal/`)。Windows 的组织目录可能因 Warp 打包方式而
+> 异;如果找不到 `%APPDATA%\warp\Warp-Terminal`(或
+> `%LOCALAPPDATA%\warp\Warp-Terminal`),请检查你的 Warp 安装实际使用的
+> `%APPDATA%` / `%LOCALAPPDATA%` 位置。
 
 ---
 
-## 1. 从 OpenWarp 迁过来(老用户推荐路径)
+## 1. 从 Zap 迁移(现有用户的推荐路径)
 
-OpenWarp 就是改名前的 Zap。改名提交(`feat: rename project Warp/OpenWarp → Zap`)
-只改了标识符与磁盘路径名,**配置文件的格式和 schema 完全没变**,下面这些文件
-可以直接拷过来。
+Zap **就是** OpenWarp —— 本项目在恢复 OpenWarp 名称之前以 Zap 品牌发布。改名
+只改动了标识符与磁盘路径,**配置文件格式与 schema 没有变化**,因此下列文件可以
+原样复制。
 
-### 可以拷的内容
+### 要复制的文件
 
-| 文件 / 目录 | 类别 | 控制什么 |
+| 文件或目录 | 类别 | 控制内容 |
 |---|---|---|
-| `settings.toml` | config | 公开设置(TOML 设置文件)。 |
+| `settings.toml` | config | 公开设置(TOML 格式的设置文件)。 |
 | `keybindings.yaml` | config | 自定义快捷键。 |
 | `themes/` | data | 自定义主题。 |
-| `workflows/` | data | 自定义 workflow。 |
-| `launch_configurations/` | data | Launch 配置。 |
-| `tab_configs/` | data | Tab 配置。 |
-| `.mcp.json` | home dotfile | MCP server 配置。 |
-| `skills/` | home dotfile | Agent skills。 |
+| `workflows/` | data | 自定义工作流。 |
+| `launch_configurations/` | data | 启动配置。 |
+| `tab_configs/` | data | 标签页配置。 |
+| `.mcp.json` | home 点目录 | MCP 服务器配置。 |
+| `skills/` | home 点目录 | Agent skills。 |
 
-### 操作步骤
+### 步骤
 
-> 拷贝前**关掉 Zap**,以免有进程持有这些文件。
+> 复制前请先退出 OpenWarp,避免有进程占用文件。
 
 **macOS**
 
 ```sh
-mkdir -p "$HOME/.zap"
+mkdir -p "$HOME/.openwarp"
 for f in settings.toml keybindings.yaml themes workflows launch_configurations tab_configs skills .mcp.json; do
-  if [ -e "$HOME/.openwarp/$f" ] && [ ! -e "$HOME/.zap/$f" ]; then
-    cp -R "$HOME/.openwarp/$f" "$HOME/.zap/$f"
+  if [ -e "$HOME/.zap/$f" ] && [ ! -e "$HOME/.openwarp/$f" ]; then
+    cp -R "$HOME/.zap/$f" "$HOME/.openwarp/$f"
   fi
 done
 ```
@@ -98,13 +99,13 @@ done
 **Linux**
 
 ```sh
-src_config="${XDG_CONFIG_HOME:-$HOME/.config}/openwarp"
-src_data="${XDG_DATA_HOME:-$HOME/.local/share}/openwarp"
-src_home="$HOME/.openwarp"
+src_config="${XDG_CONFIG_HOME:-$HOME/.config}/zap"
+src_data="${XDG_DATA_HOME:-$HOME/.local/share}/zap"
+src_home="$HOME/.zap"
 
-dst_config="${XDG_CONFIG_HOME:-$HOME/.config}/zap"
-dst_data="${XDG_DATA_HOME:-$HOME/.local/share}/zap"
-dst_home="$HOME/.zap"
+dst_config="${XDG_CONFIG_HOME:-$HOME/.config}/openwarp"
+dst_data="${XDG_DATA_HOME:-$HOME/.local/share}/openwarp"
+dst_home="$HOME/.openwarp"
 mkdir -p "$dst_config" "$dst_data" "$dst_home"
 
 copy() {
@@ -126,13 +127,13 @@ copy "$src_home"   "$dst_home"   skills
 **Windows(PowerShell)**
 
 ```powershell
-$src_config = "$env:LOCALAPPDATA\openwarp\OpenWarp\config"
-$src_data   = "$env:APPDATA\openwarp\OpenWarp\data"
-$src_home   = "$env:USERPROFILE\.openwarp"
+$src_config = "$env:LOCALAPPDATA\zap\Zap\config"
+$src_data   = "$env:APPDATA\zap\Zap\data"
+$src_home   = "$env:USERPROFILE\.zap"
 
-$dst_config = "$env:LOCALAPPDATA\zap\Zap\config"
-$dst_data   = "$env:APPDATA\zap\Zap\data"
-$dst_home   = "$env:USERPROFILE\.zap"
+$dst_config = "$env:LOCALAPPDATA\openwarp\OpenWarp\config"
+$dst_data   = "$env:APPDATA\openwarp\OpenWarp\data"
+$dst_home   = "$env:USERPROFILE\.openwarp"
 New-Item -ItemType Directory -Force -Path $dst_config, $dst_data, $dst_home | Out-Null
 
 function Copy-IfMissing($srcDir, $dstDir, $name) {
@@ -153,62 +154,63 @@ Copy-IfMissing $src_home   $dst_home   .mcp.json
 Copy-IfMissing $src_home   $dst_home   skills
 ```
 
-`[ ! -e ... ]` / `-not (Test-Path $to)` 这层守卫是为了避免覆盖你已经在 Zap
-里改过的内容。如果你就是想让 OpenWarp 的值覆盖掉 Zap,去掉它即可。
+`[ ! -e ... ]` / `-not (Test-Path $to)` 守卫可避免覆盖你在 OpenWarp 中已经
+设置的内容;如果希望 Zap 的值优先,删掉守卫即可。
 
-确认 Zap 一切正常之后,可以删掉上面那些 OpenWarp 目录来回收空间。它们已经不会
-被任何程序使用了。
+确认 OpenWarp 一切正常后,可以删除上面的 Zap 目录以回收磁盘空间 —— 它们已不再
+被任何程序使用。
 
 ---
 
-## 2. 从上游 Warp 迁过来
+## 2. 从上游 Warp 迁移
 
-上游 Warp 是另一个独立产品,有自己的磁盘身份(见上面"上游 Warp 源路径"表)。
-Zap 编译时 channel = `Oss`,对应独立的 app id(`dev.zap.Zap`)和按平台分开的
-目录布局。两边互相看不到对方的文件 —— 这也正是 Zap 能让你的 Warp 账号 / 云端
-状态留在 Warp 那边的原因。
+上游 Warp 是独立产品,拥有自己的磁盘身份(见上文"上游 Warp 源路径"表)。
+OpenWarp 以 `Oss` channel 构建,拥有自己的 app ID(`dev.openwarp.OpenWarp`)
+与独立的各平台布局。两个安装互相看不到对方的文件 —— 这也正是把你的 Warp
+账号 / 云端状态挡在 OpenWarp 之外的机制。
 
-下表里的文本格式文件 schema 稳定、跨过来安全;**其它东西就不一定了** —— Warp
-独立演进,二进制 / 私有存储可能绑定到 Warp 的认证和 bundle 身份。
+下列文本格式文件的 schema 稳定且兼容,复制是安全的。**其他状态则不然** ——
+Warp 独立于 OpenWarp 演进,二进制 / 私有存储可能绑定 Warp 的认证与 bundle
+身份。
 
-### 可以拷的内容
+### 要复制的内容
 
-和第 1 节相同的 8 项:
+与上一节相同的八项:
 
-| 文件 / 目录 | 类别 | 控制什么 |
+| 文件或目录 | 类别 | 控制内容 |
 |---|---|---|
-| `settings.toml` | config | 公开设置(TOML 设置文件)。 |
+| `settings.toml` | config | 公开设置(TOML 格式的设置文件)。 |
 | `keybindings.yaml` | config | 自定义快捷键。 |
 | `themes/` | data | 自定义主题。 |
-| `workflows/` | data | 自定义 workflow。 |
-| `launch_configurations/` | data | Launch 配置。 |
-| `tab_configs/` | data | Tab 配置。 |
-| `.mcp.json` | home dotfile | MCP server 配置。 |
-| `skills/` | home dotfile | Agent skills。 |
+| `workflows/` | data | 自定义工作流。 |
+| `launch_configurations/` | data | 启动配置。 |
+| `tab_configs/` | data | 标签页配置。 |
+| `.mcp.json` | home 点目录 | MCP 服务器配置。 |
+| `skills/` | home 点目录 | Agent skills。 |
 
-### **不要**拷的内容
+### **不要**复制的内容
 
-- **`user_preferences.json`** —— 这是私有存储,位于 macOS 上的
-  `~/Library/Application Support/dev.warp.Warp/`(Linux / Windows 对应的 state
-  目录),里面混杂了用户偏好、登录 token、机器绑定 ID 和云端缓存状态。整文件
-  拷过去会泄漏身份信息,也会让 Zap 误判登录状态。Zap 默认值本身已经是隐私
-  优先的,**不要碰它**。
-- **`warp.sqlite`**(以及 `-wal` / `-shm` 伴生文件)—— schema 与上游 Warp 耦合,
-  不保证能跑 Zap 的 migrations。
-- **Keychain / DPAPI / libsecret 中的条目** —— 绑定到 Warp 的 bundle / service
-  名,对 Zap 没有意义。
+- **`user_preferences.json`** —— 位于
+  `~/Library/Application Support/dev.warp.Warp/`(macOS)或 Linux/Windows
+  对应状态目录下的私有存储。混杂了用户偏好、认证 token、机器绑定 ID 与云端
+  缓存状态。复制它可能泄露身份并干扰 OpenWarp 的认证状态。OpenWarp 的默认值
+  已经对隐私友好。
+- **`warp.sqlite`**(及其 `-wal` / `-shm` 伴随文件)—— schema 与上游 Warp
+  耦合,不保证与 OpenWarp 的迁移兼容。
+- **Keychain / DPAPI / libsecret 条目** —— 绑定 Warp 的 bundle / service
+  名称,对 OpenWarp 无用。
 
-### 操作步骤
+### 步骤
 
-> 拷贝前**关掉 Warp 与 Zap**。
+> 复制前请同时退出 Warp 与 OpenWarp。
 
 **macOS**
 
 ```sh
-mkdir -p "$HOME/.zap"
+mkdir -p "$HOME/.openwarp"
 for f in settings.toml keybindings.yaml themes workflows launch_configurations tab_configs skills .mcp.json; do
-  if [ -e "$HOME/.warp/$f" ] && [ ! -e "$HOME/.zap/$f" ]; then
-    cp -R "$HOME/.warp/$f" "$HOME/.zap/$f"
+  if [ -e "$HOME/.warp/$f" ] && [ ! -e "$HOME/.openwarp/$f" ]; then
+    cp -R "$HOME/.warp/$f" "$HOME/.openwarp/$f"
   fi
 done
 ```
@@ -220,9 +222,9 @@ src_config="${XDG_CONFIG_HOME:-$HOME/.config}/warp-terminal"
 src_data="${XDG_DATA_HOME:-$HOME/.local/share}/warp-terminal"
 src_home="$HOME/.warp"
 
-dst_config="${XDG_CONFIG_HOME:-$HOME/.config}/zap"
-dst_data="${XDG_DATA_HOME:-$HOME/.local/share}/zap"
-dst_home="$HOME/.zap"
+dst_config="${XDG_CONFIG_HOME:-$HOME/.config}/openwarp"
+dst_data="${XDG_DATA_HOME:-$HOME/.local/share}/openwarp"
+dst_home="$HOME/.openwarp"
 mkdir -p "$dst_config" "$dst_data" "$dst_home"
 
 copy() {
@@ -248,9 +250,9 @@ $src_config = "$env:LOCALAPPDATA\warp\Warp-Terminal\config"
 $src_data   = "$env:APPDATA\warp\Warp-Terminal\data"
 $src_home   = "$env:USERPROFILE\.warp"
 
-$dst_config = "$env:LOCALAPPDATA\zap\Zap\config"
-$dst_data   = "$env:APPDATA\zap\Zap\data"
-$dst_home   = "$env:USERPROFILE\.zap"
+$dst_config = "$env:LOCALAPPDATA\openwarp\OpenWarp\config"
+$dst_data   = "$env:APPDATA\openwarp\OpenWarp\data"
+$dst_home   = "$env:USERPROFILE\.openwarp"
 New-Item -ItemType Directory -Force -Path $dst_config, $dst_data, $dst_home | Out-Null
 
 function Copy-IfMissing($srcDir, $dstDir, $name) {
@@ -271,41 +273,40 @@ Copy-IfMissing $src_home   $dst_home   .mcp.json
 Copy-IfMissing $src_home   $dst_home   skills
 ```
 
-Warp 自己的数据从始至终不会被改动,Warp 本体继续可用。
+你原本的 Warp 数据不会被触碰 —— Warp 自身继续正常工作。
 
 ---
 
 ## 验证
 
-启动 Zap,你应该能在主题选择器里看到自定义主题,在快捷键编辑器里看到自定义
-键位,在 workflow 启动器里看到自定义 workflow。设置界面里所有出现在
-`settings.toml` 中的项,值应该和源端一致。
+启动 OpenWarp。主题选择器里应能看到你的自定义主题,快捷键编辑器里是你的键位,
+工作流启动器里是你的工作流。设置界面的值应与 `settings.toml` 中的内容一致。
 
-如果哪一项不对,问题一定在上面 8 个文件中的某一个 —— 用文本编辑器打开看看,或者
-直接删掉让 Zap 用默认值。
+如果哪里不对,问题一定出在上述八个文件之一 —— 用文本编辑器打开检查,或直接
+删除让 OpenWarp 回退到默认值。
 
 ## 回滚
 
-本文里的操作**都不是破坏性的**:拷过去的每个文件都是 Zap 启动时能自动用默认
-值重建的。整体回滚:
+本指南中没有任何破坏性操作:复制的每个文件 OpenWarp 都会在下次启动时从默认值
+重建。要完全撤销:
 
 ```sh
 # macOS
-rm -rf ~/.zap
+rm -rf ~/.openwarp
 ```
 
 ```sh
 # Linux
-rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/zap"
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/zap"
-rm -rf "$HOME/.zap"
+rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/openwarp"
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/openwarp"
+rm -rf "$HOME/.openwarp"
 ```
 
 ```powershell
 # Windows
-Remove-Item -Recurse -Force "$env:APPDATA\zap"
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\zap"
-Remove-Item -Recurse -Force "$env:USERPROFILE\.zap"
+Remove-Item -Recurse -Force "$env:APPDATA\openwarp"
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\openwarp"
+Remove-Item -Recurse -Force "$env:USERPROFILE\.openwarp"
 ```
 
-OpenWarp 与 Warp 的源端目录都不会被本指南改动。
+Zap 与 Warp 的源目录在本指南中始终不会被触碰。
