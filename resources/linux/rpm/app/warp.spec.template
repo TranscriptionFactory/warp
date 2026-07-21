@@ -7,7 +7,7 @@ Name:        @@PACKAGE_NAME@@
 Version:     @@VERSION@@
 Release:     @@RELEASE@@
 Vendor:      OpenWarp Maintainers
-Url:         https://github.com/zerx-lab/warp
+Url:         https://github.com/TranscriptionFactory/warp
 Packager:    OpenWarp Maintainers <openwarp-maintainers@localhost>
 License:     AGPL-3.0-only AND MIT
 
@@ -74,11 +74,11 @@ ln -s @@OPT_DIR@@/@@BINARY_NAME@@ %{buildroot}%{_bindir}/%{name}
 ###############################################################################
 %post
 
-# Zap 不配置上游 Warp RPM 软件源,也不安装上游签名 key。
+# OpenWarp 不配置上游 Warp RPM 软件源,也不安装上游签名 key。
 # Make sure the system incorporates the newly-installed desktop file.
 if hash update-desktop-database 2>/dev/null; then
 	update-desktop-database
 fi
 
-# Zap 不做 post-install repo 配置；deb/rpm 包通过 GitHub Release 分发。
+# OpenWarp 不做 post-install repo 配置；deb/rpm 包通过 GitHub Release 分发。
 exit 0
