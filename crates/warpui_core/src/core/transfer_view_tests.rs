@@ -906,3 +906,99 @@ fn test_transfer_structural_children_does_not_move_unrelated_views() {
         });
     });
 }
+
+/// A view that defines nothing beyond what these tests need to put it in a window.
+#[derive(Default)]
+struct StrandingTestView;
+
+impl Entity for StrandingTestView {
+    type Event = ();
+}
+
+impl View for StrandingTestView {
+    fn render(&self, _: &AppContext) -> Box<dyn Element> {
+        Empty::new().finish()
+    }
+
+    fn ui_name() -> &'static str {
+        "StrandingTestView"
+    }
+}
+
+impl TypedActionView for StrandingTestView {
+    type Action = ();
+}
+
+#[test]
+#[should_panic(expected = "a genuinely re-entrant update")]
+fn test_reentrant_view_update_panic_names_the_cause() {
+    App::test((), |mut app| async move {
+        let (window_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| StrandingTestView);
+
+        let view = app.add_view(window_id, |_| StrandingTestView);
+        let nested = view.clone();
+
+        // The view is checked out of the window for the duration of the outer
+        // update, so the inner update finds it missing.
+        view.update(&mut app, |_, ctx| {
+            nested.update(ctx, |_, _| {});
+        });
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "stranded by a cross-window transfer or left behind when its window closed"
+)]
+fn test_stranded_view_update_panic_names_the_cause() {
+    App::test((), |mut app| async move {
+        let (window_1_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| StrandingTestView);
+        let (window_2_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| StrandingTestView);
+
+        // A view created in window 1 and moved to window 2, whose new window then
+        // closes: the shape a conditionally-rendered child view ends up in when a
+        // tab drag leaves it behind in the preview window.
+        let view = app.add_view(window_1_id, |_| StrandingTestView);
+        let view_id = view.id();
+        app.update(|ctx| ctx.transfer_view_to_window(view_id, window_1_id, window_2_id));
+        app.update(|ctx| ctx.handle_window_closed(window_2_id));
+
+        view.update(&mut app, |_, _| {});
+    });
+}
+
+#[test]
+fn test_resolve_view_window_reports_fallback_after_window_closes() {
+    use crate::core::app::ViewWindow;
+
+    App::test((), |mut app| async move {
+        let (window_1_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| StrandingTestView);
+        let (window_2_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| StrandingTestView);
+
+        let view = app.add_view(window_1_id, |_| StrandingTestView);
+        let view_id = view.id();
+        app.update(|ctx| ctx.transfer_view_to_window(view_id, window_1_id, window_2_id));
+
+        app.read(|ctx| {
+            assert!(
+                matches!(
+                    ctx.resolve_view_window(view_id, window_1_id),
+                    ViewWindow::Mapped(window_id) if window_id == window_2_id
+                ),
+                "a transferred view should resolve through its window mapping"
+            );
+        });
+
+        app.update(|ctx| ctx.handle_window_closed(window_2_id));
+
+        app.read(|ctx| {
+            assert!(
+                matches!(
+                    ctx.resolve_view_window(view_id, window_1_id),
+                    ViewWindow::Fallback(window_id) if window_id == window_1_id
+                ),
+                "once the mapping is gone the creation window is only a fallback"
+            );
+        });
+    });
+}

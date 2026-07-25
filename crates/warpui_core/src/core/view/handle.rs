@@ -48,12 +48,20 @@ impl<T: View> ViewHandle<T> {
     ///
     /// This looks up the window from the view_to_window mapping, which may differ
     /// from the window where the view was originally created if the view has been
-    /// transferred between windows.
+    /// transferred between windows. When the mapping is gone the creation window
+    /// is used as a fallback, which is not guaranteed to hold the view — see
+    /// `AppContext::resolve_view_window` if you need to tell the two apart.
     pub fn window_id(&self, app: &AppContext) -> WindowId {
-        app.view_to_window
-            .get(&self.view_id)
-            .copied()
-            .unwrap_or(self.window_id)
+        app.resolve_view_window(self.view_id, self.window_id)
+            .window_id()
+    }
+
+    /// The window this view was created in.
+    ///
+    /// Only meaningful as the fallback for [`Self::window_id`]; a transferred
+    /// view no longer lives here.
+    pub(in crate::core) fn creation_window_id(&self) -> WindowId {
+        self.window_id
     }
 
     pub fn id(&self) -> EntityId {
@@ -166,12 +174,11 @@ impl AnyViewHandle {
         self.view_id
     }
 
-    /// Returns the current window this view belongs to.
+    /// Returns the current window this view belongs to, falling back to the
+    /// window it was created in when the mapping is gone.
     pub fn window_id(&self, app: &AppContext) -> WindowId {
-        app.view_to_window
-            .get(&self.view_id)
-            .copied()
-            .unwrap_or(self.window_id)
+        app.resolve_view_window(self.view_id, self.window_id)
+            .window_id()
     }
 
     pub fn is<T: 'static>(&self) -> bool {

@@ -690,9 +690,14 @@ pub struct AppContext {
     /// enabling views to be transferred between windows.
     ///
     /// Visibility is `pub(super)` because the `view::handle` module needs to access
-    /// this field for dynamic window lookup in `ViewHandle::window_id()`,
-    /// `WeakViewHandle::upgrade()`, and `WeakViewHandle::window_id()`.
+    /// this field for dynamic window lookup in `WeakViewHandle::upgrade()` and
+    /// `WeakViewHandle::window_id()`.
     pub(super) view_to_window: HashMap<EntityId, WindowId>,
+
+    /// Views we've already warned about in `warn_view_window_fallback`, so that a
+    /// view with no `view_to_window` entry produces one log line rather than one
+    /// per update. Cleaned up in `remove_dropped_items`.
+    views_missing_window_mapping: HashSet<EntityId>,
 
     /// Maps child view → parent view for views created via `add_typed_action_view_with_parent`.
     /// Unlike the presenter's layout-time parent map, this persists across renders and
@@ -808,6 +813,7 @@ impl AppContext {
             termination_result: Default::default(),
             zoom_factor: ZoomFactor::default(),
             view_to_window: Default::default(),
+            views_missing_window_mapping: Default::default(),
             structural_child_to_parent: Default::default(),
             structural_parent_to_children: Default::default(),
             suppress_focus_for_window: None,
@@ -3141,6 +3147,7 @@ impl AppContext {
 
                 self.subscriptions.remove(&view_id);
                 self.observations.remove(&view_id);
+                self.views_missing_window_mapping.remove(&view_id);
                 if let Some(parent_id) = self.structural_child_to_parent.remove(&view_id) {
                     if let Some(children) = self.structural_parent_to_children.get_mut(&parent_id) {
                         children.remove(&view_id);
@@ -4321,6 +4328,105 @@ impl AppContext {
             cache.set_fallback_font_fn(Box::new(f));
         });
     }
+
+    /// Resolves the window a view currently lives in.
+    ///
+    /// See [`ViewWindow`] for what the two outcomes mean.
+    pub(in crate::core) fn resolve_view_window(
+        &self,
+        view_id: EntityId,
+        creation_window_id: WindowId,
+    ) -> ViewWindow {
+        match self.view_to_window.get(&view_id) {
+            Some(window_id) => ViewWindow::Mapped(*window_id),
+            None => ViewWindow::Fallback(creation_window_id),
+        }
+    }
+
+    /// Reports (once per view) that we fell back to a handle's creation window
+    /// because the view has no `view_to_window` entry.
+    ///
+    /// This is the point where a stranded view becomes observable. Without it,
+    /// the fallback silently keeps working until some later update happens to
+    /// land on a window that no longer holds the view, and the resulting panic
+    /// points at the keystroke that tripped over the problem rather than the
+    /// window transfer or close that caused it.
+    fn warn_view_window_fallback(
+        &mut self,
+        view_id: EntityId,
+        view_type: &str,
+        creation_window_id: WindowId,
+    ) {
+        if self.views_missing_window_mapping.insert(view_id) {
+            log::warn!(
+                "View {view_type} ({view_id:?}) has no window mapping; falling back to its \
+                 creation window {creation_window_id:?}. It was stranded by a cross-window \
+                 transfer or by its window closing."
+            );
+        }
+    }
+
+    /// Explains why a view isn't in the window we resolved it to.
+    ///
+    /// The bare "Circular view update" message conflated a genuinely re-entrant
+    /// update with the several ways a view goes missing, so this distinguishes
+    /// them using where the view actually is.
+    fn describe_missing_view(
+        &self,
+        view_id: EntityId,
+        view_type: &str,
+        resolved: ViewWindow,
+    ) -> String {
+        let found_in = self
+            .windows
+            .iter()
+            .find(|(_, window)| window.views.contains_key(&view_id))
+            .map(|(window_id, _)| *window_id);
+
+        let cause = match (resolved, found_in) {
+            (ViewWindow::Mapped(_), None) => {
+                "it is in no live window, so it is most likely checked out by an update already \
+                 in progress: a genuinely re-entrant update"
+                    .to_string()
+            }
+            (ViewWindow::Mapped(_), Some(other)) => {
+                format!("the view is actually in window {other:?}, so its window mapping is stale")
+            }
+            (ViewWindow::Fallback(_), None) => {
+                "it has no window mapping and is in no live window, so it was stranded by a \
+                 cross-window transfer or left behind when its window closed"
+                    .to_string()
+            }
+            (ViewWindow::Fallback(_), Some(other)) => format!(
+                "it has no window mapping and is actually in window {other:?}, so this handle was \
+                 left behind by a cross-window transfer"
+            ),
+        };
+
+        format!(
+            "view {view_type} ({view_id:?}) is not in window {:?}: {cause}",
+            resolved.window_id()
+        )
+    }
+}
+
+/// Where a view lives, and how confident we are about it.
+///
+/// `Fallback` means `view_to_window` had no entry for the view — it was stranded
+/// by a cross-window transfer, or its window closed — and we fell back to the
+/// window the handle was created in. The view may well not be there.
+#[derive(Clone, Copy, Debug)]
+pub(in crate::core) enum ViewWindow {
+    Mapped(WindowId),
+    Fallback(WindowId),
+}
+
+impl ViewWindow {
+    pub(in crate::core) fn window_id(self) -> WindowId {
+        match self {
+            Self::Mapped(window_id) | Self::Fallback(window_id) => window_id,
+        }
+    }
 }
 
 impl UpdateModel for AppContext {
@@ -4355,18 +4461,38 @@ impl UpdateView for AppContext {
         F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
     {
         self.pending_flushes += 1;
-        let window_id = handle.window_id(self);
-        let mut view = if let Some(window) = self.windows.get_mut(&window_id) {
-            if let Some(view) = window.views.remove(&handle.id()) {
-                view
-            } else {
-                panic!("Circular view update");
-            }
-        } else {
-            panic!("Window does not exist");
+        let view_id = handle.id();
+        let view_type = std::any::type_name::<T>();
+        let resolved = self.resolve_view_window(view_id, handle.creation_window_id());
+        let window_id = resolved.window_id();
+        if let ViewWindow::Fallback(creation_window_id) = resolved {
+            self.warn_view_window_fallback(view_id, view_type, creation_window_id);
+        }
+
+        // Take the view out in its own statement so the borrow of `self.windows`
+        // ends before we build a panic message from the rest of `self`.
+        let removed = self
+            .windows
+            .get_mut(&window_id)
+            .map(|window| window.views.remove(&view_id));
+        let mut view = match removed {
+            Some(Some(view)) => view,
+            Some(None) => panic!(
+                "Circular view update: {}",
+                self.describe_missing_view(view_id, view_type, resolved)
+            ),
+            None => panic!(
+                "Window does not exist: view {view_type} ({view_id:?}) resolved to window \
+                 {window_id:?}{}",
+                match resolved {
+                    ViewWindow::Fallback(_) =>
+                        ", its creation window, because the view has no window mapping",
+                    ViewWindow::Mapped(_) => "",
+                }
+            ),
         };
 
-        let mut ctx = ViewContext::new(self, window_id, handle.id());
+        let mut ctx = ViewContext::new(self, window_id, view_id);
         let result = update(
             view.as_any_mut()
                 .downcast_mut()
@@ -4374,7 +4500,7 @@ impl UpdateView for AppContext {
             &mut ctx,
         );
         if let Some(window) = self.windows.get_mut(&window_id) {
-            window.views.insert(handle.id(), view);
+            window.views.insert(view_id, view);
         }
         self.flush_effects();
         result
