@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [v2026.07.25.1] — 2026-07-25
+
+- **UI**:视图更新落空时的 panic 改为报出视图类型、实体 ID、目标窗口以及视图实际所在窗口,区分"真正的重入更新"与"跨窗口移动/窗口关闭后残留的视图";`ViewHandle::window_id` 回退到创建窗口时按视图打一次 warn 日志,使残留视图在崩溃前即可观测
+- **文档 / 许可**:fork 新增 crate 声明 workspace license;迁移指南改为以 OpenWarp 为目标;README 补充下载章节并同步各语言翻译
+
 ## [v2026.07.21.2] — 2026-07-21
 
 - **发布**:Linux oss 包名 `zap`/`zap-cli` 更名为 `openwarp`/`openwarp-cli`(deb/rpm/arch 包名、`/opt` 安装目录、`/usr/bin` 符号链接与包元数据同步更名),并修复 desktop 启动器 `Exec=openwarp` 指向不存在的 `/usr/bin/zap` 符号链接的问题
