@@ -14,7 +14,7 @@ header = ""
 body = """
 {%- if previous %}
 {%- if previous.version %}
-**变更范围**: [`{{ previous.version }}` … `{{ version }}`]({{ self::compare_url(prev=previous.version, curr=version) }})
+**Compare**: [`{{ previous.version }}` … `{{ version }}`]({{ self::compare_url(prev=previous.version, curr=version) }})
 
 {% endif -%}
 {%- endif -%}
@@ -70,19 +70,23 @@ commit_parsers = [
     { message = "^[Bb]ump ", skip = true },
     { message = "^chore\\(release\\)", skip = true },
     { message = "^chore: release", skip = true },
+    # 本仓库的发版簿记 commit 形如 `release: prepare v2026.07.25.1`,不是 `chore(release):`,
+    # 上面两条命中不了,会被兜底规则收进「Other」冒充一条用户可见变更。
+    # `^release[:(]` 只锚首词,`fix(release): ...` 这类真实修复不受影响。
+    { message = "^release[:(]", skip = true },
     { message = "^v[0-9]+\\.", skip = true },
 
-    # conventional commit 主分组(中文标题,顺序就是渲染顺序)
-    { message = "^feat", group = "✨ 新功能" },
-    { message = "^fix", group = "🐛 修复" },
-    { message = "^perf", group = "⚡ 性能" },
-    { message = "^refactor", group = "♻️ 重构" },
-    { message = "^ui", group = "🎨 界面" },
-    { message = "^style", group = "🎨 界面" },
-    { message = "^test", group = "🧪 测试" },
-    { message = "^docs", group = "📝 文档" },
-    { message = "^(build|ci|chore)", group = "🛠 基建与杂项" },
+    # conventional commit 主分组(英文标题,顺序就是渲染顺序)
+    { message = "^feat", group = "✨ Features" },
+    { message = "^fix", group = "🐛 Fixes" },
+    { message = "^perf", group = "⚡ Performance" },
+    { message = "^refactor", group = "♻️ Refactor" },
+    { message = "^ui", group = "🎨 UI" },
+    { message = "^style", group = "🎨 UI" },
+    { message = "^test", group = "🧪 Tests" },
+    { message = "^docs", group = "📝 Documentation" },
+    { message = "^(build|ci|chore)", group = "🛠 Build & chores" },
 
-    # 兜底:其余形态的 commit 也保留下来,放到「其他」分组,避免漏掉非规范提交。
-    { message = ".*", group = "📦 其他" },
+    # 兜底:其余形态的 commit 也保留下来,放到「Other」分组,避免漏掉非规范提交。
+    { message = ".*", group = "📦 Other" },
 ]
