@@ -2059,6 +2059,9 @@ impl GridHandler {
 
                 self.images.evict_placements(&placements);
             }
+            // Animation actions carry no placement: the terminal model applies
+            // them to the image itself before any grid sees them.
+            KittyAction::TransmitFrame { .. } | KittyAction::AnimationControl { .. } => {}
         }
 
         Ok(())
