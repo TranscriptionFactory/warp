@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v2026.07.30.1] — 2026-07-30
+
+- **终端 / 图形**:补全 kitty graphics 协议 —— Unicode 占位符(`U=1`,tmux 透传与 ratatui-image 可用)、动画(`a=f` 帧传输 + `a=a` 播放控制,合成类操作以 `ENOTSUPP:` 报告)、全部删除指定符(`d=a/i/n/c/p/q/x/y/z/r` 及大写形式,修复未知 `d=` 误触发全量删除的 bug);回复改用规范错误码(`ENOENT:`/`EINVAL:` 等)并回显 `p=`/`I=`,prompt 阶段的支持探测(`a=q`)不再被静默丢弃;修复零高图片在 release 构建下越界回绕导致的挂起/OOM;每图动画帧数与字节数设上限,防内存滥用
+- **渲染**:`draw_image` 支持源矩形采样(Metal/wgpu 双后端);占位符渲染按行合批,无虚拟放置时零逐格开销;iTerm 协议传输的 GIF 开始播放(此前解码后被丢弃)
+- **构建**:`iterm_images` 由 build.rs 强注 cfg 改为 Cargo default feature,Windows 行为保持不变(无图片)
+
 ## [v2026.07.25.1] — 2026-07-25
 
 - **UI**:视图更新落空时的 panic 改为报出视图类型、实体 ID、目标窗口以及视图实际所在窗口,区分"真正的重入更新"与"跨窗口移动/窗口关闭后残留的视图";`ViewHandle::window_id` 回退到创建窗口时按视图打一次 warn 日志,使残留视图在崩溃前即可观测
