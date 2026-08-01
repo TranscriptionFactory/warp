@@ -357,6 +357,17 @@ fn build_host_shell_command(
         builder.env("WINDOWID", format!("{window_id}"));
     }
 
+    // We implement the kitty graphics protocol and answer its `a=q` support
+    // query, but several clients (e.g. Codex) never send that query -- they
+    // decide whether images are usable purely by sniffing env vars, and
+    // `KITTY_WINDOW_ID` is the signal they look for. Advertise it so those
+    // clients enable image output instead of falling back to a text mode.
+    // The value is an opaque id; callers only test for its presence.
+    builder.env(
+        "KITTY_WINDOW_ID",
+        window_id.map_or_else(|| "1".to_owned(), |id| id.to_string()),
+    );
+
     // Set whether or not we should utilize the SSH wrapper in this shell.
     if enable_ssh_wrapper {
         builder.env("WARP_USE_SSH_WRAPPER", "1");
@@ -855,6 +866,11 @@ fn build_docker_sandbox_command(
     if let Some(window_id) = window_id {
         builder.env("WINDOWID", format!("{window_id}"));
     }
+    // See the local-shell path above for why we advertise `KITTY_WINDOW_ID`.
+    builder.env(
+        "KITTY_WINDOW_ID",
+        window_id.map_or_else(|| "1".to_owned(), |id| id.to_string()),
+    );
     builder.env(
         "WARP_USE_SSH_WRAPPER",
         if enable_ssh_wrapper { "1" } else { "0" },
