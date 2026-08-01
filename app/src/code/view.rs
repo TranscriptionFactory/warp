@@ -91,6 +91,7 @@ use crate::{
         link::{NotebookLinks, SessionSource},
     },
     settings::FontSettings,
+    util::file::external_editor::EditorSettings,
 };
 
 type SaveCallback =
@@ -227,6 +228,11 @@ pub struct TabData {
     /// 可编辑源码。仅远端文件会用到 —— 本地 Markdown 走 `ReplaceWithFilePane` 切换到
     /// `FileNotebookView`,不在 `CodeView` 内联渲染。
     rendered_markdown_view: Option<ViewHandle<RichTextEditorView>>,
+    /// 是否已对该 tab 套用过「Markdown 默认渲染」偏好。只在第一次看到该 tab 时套用,
+    /// 之后用户手动切到 Raw 再切走/切回来不会被默认值覆盖。
+    /// 仅在 `local_fs` 下读取(分段控件本身也只在该特性下存在)。
+    #[cfg(feature = "local_fs")]
+    markdown_default_applied: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -358,6 +364,26 @@ impl CodeView {
             });
 
             self.markdown_mode_segmented_control = Some(handle);
+        }
+
+        // 首次看到某个远端 Markdown tab 时套用 `prefer_markdown_viewer` 偏好:开启时
+        // 直接进入渲染预览,与本地 Markdown 走 `FileNotebookView` 默认 Rendered 的行为一致。
+        // 本地文件不在这里处理 —— 它们由 `resolve_file_target` 在打开阶段路由。
+        let index = self.active_tab_index;
+        let needs_default = self
+            .tab_at(index)
+            .is_some_and(|tab| !tab.markdown_default_applied);
+        if needs_default {
+            let is_remote = self
+                .tab_at(index)
+                .and_then(|t| t.location.as_ref())
+                .is_some_and(|loc| matches!(loc, BufferLocation::Remote(_)));
+            if let Some(tab) = self.tab_group.get_mut(index) {
+                tab.markdown_default_applied = true;
+            }
+            if is_remote && *EditorSettings::as_ref(ctx).prefer_markdown_viewer {
+                self.set_remote_markdown_rendered(true, ctx);
+            }
         }
 
         // 切 tab 时,把分段控件的选中态同步到当前 tab 的渲染状态。
@@ -810,6 +836,8 @@ impl CodeView {
             mouse_state_handles: Default::default(),
             preview,
             rendered_markdown_view: None,
+            #[cfg(feature = "local_fs")]
+            markdown_default_applied: false,
         }
     }
 

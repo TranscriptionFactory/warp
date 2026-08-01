@@ -104,7 +104,7 @@ define_settings_group!(EditorSettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "code.editor.prefer_markdown_viewer",
-        description: "Whether to use the Markdown viewer when opening Markdown files.",
+        description: "Whether to use the Markdown viewer when opening Markdown files. Local files open in the Markdown viewer pane; remote files open in the rendered preview inside the code view.",
     },
     prefer_tabbed_editor_view: PreferTabbedEditorView {
         type: bool,
