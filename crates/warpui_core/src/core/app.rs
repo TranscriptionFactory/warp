@@ -3064,11 +3064,15 @@ impl AppContext {
 
         if self.transfer_view_to_window(root_view_id, source_window_id, target_window_id) {
             transferred.push(root_view_id);
+        } else {
+            self.warn_view_transfer_skipped(root_view_id, source_window_id, target_window_id);
         }
 
         for view_id in descendants {
             if self.transfer_view_to_window(view_id, source_window_id, target_window_id) {
                 transferred.push(view_id);
+            } else {
+                self.warn_view_transfer_skipped(view_id, source_window_id, target_window_id);
             }
         }
 
@@ -3105,8 +3109,34 @@ impl AppContext {
                     transferred.push(child_id);
                     transferred_set.insert(child_id);
                     to_process.push(child_id);
+                } else {
+                    self.warn_view_transfer_skipped(child_id, source_window_id, target_window_id);
                 }
             }
+        }
+    }
+
+    /// Reports a view that a tree/structural transfer expected to move out of
+    /// `source_window_id` but couldn't. A view already living in the target is
+    /// fine (e.g. created there); anything else is the moment the view becomes
+    /// stranded, so name it here rather than in the panic that later trips on it.
+    fn warn_view_transfer_skipped(
+        &self,
+        view_id: EntityId,
+        source_window_id: WindowId,
+        target_window_id: WindowId,
+    ) {
+        match self.view_to_window.get(&view_id) {
+            Some(window_id) if *window_id == target_window_id => {}
+            Some(window_id) => log::warn!(
+                "view {view_id:?} was not transferred from {source_window_id:?} to \
+                 {target_window_id:?}: it is mapped to window {window_id:?} (checked out \
+                 mid-update, or left there by an earlier partial transfer)"
+            ),
+            None => log::warn!(
+                "view {view_id:?} was not transferred from {source_window_id:?} to \
+                 {target_window_id:?}: it has no window mapping (already stranded or dropped)"
+            ),
         }
     }
 
@@ -4711,13 +4741,23 @@ impl ViewAsRef for AppContext {
                     .downcast_ref()
                     .expect("downcast should be type safe")
             } else {
+                let resolved =
+                    self.resolve_view_window(handle.id(), handle.creation_window_id());
                 panic!(
-                    "circular view reference for view type {}",
-                    std::any::type_name::<T>()
+                    "{}",
+                    self.describe_missing_view(
+                        handle.id(),
+                        std::any::type_name::<T>(),
+                        resolved
+                    )
                 );
             }
         } else {
-            panic!("window does not exist");
+            let resolved = self.resolve_view_window(handle.id(), handle.creation_window_id());
+            panic!(
+                "window {window_id:?} does not exist: {}",
+                self.describe_missing_view(handle.id(), std::any::type_name::<T>(), resolved)
+            );
         }
     }
 
