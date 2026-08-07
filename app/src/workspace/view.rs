@@ -69,6 +69,7 @@ use crate::notifications::{
     AgentNotificationToastStack, NotificationFilter, NotificationMailboxView,
     NotificationMailboxViewEvent,
 };
+use crate::pane_group::pane::view::header::calculate_pane_move_direction;
 use crate::pane_group::pane::ActionOrigin;
 use crate::projects::ProjectManagementModel;
 use crate::settings_view::mcp_servers_page::MCPServersSettingsPage;
@@ -19282,6 +19283,7 @@ impl TypedActionView for Workspace {
                 // If we are renaming a tab, finish the rename before dragging.
                 self.finish_tab_rename(ctx);
                 self.current_workspace_state.is_tab_being_dragged = true;
+                self.current_workspace_state.tab_drag_over_pane = None;
             }
             ZapDrive => {
                 if WarpDriveSettings::is_warp_drive_enabled(ctx) {
@@ -19617,8 +19619,13 @@ impl TypedActionView for Workspace {
             DragTab {
                 tab_index,
                 tab_position,
-            } => self.on_tab_drag(*tab_index, *tab_position, ctx),
-            DropTab => {
+                target_pane,
+            } => self.on_tab_drag(*tab_index, *tab_position, *target_pane, ctx),
+            DropTab {
+                tab_index,
+                tab_position,
+                target_pane,
+            } => {
                 let is_cross_window = CrossWindowTabDrag::as_ref(ctx).is_active();
                 let handed_off_tab_index =
                     CrossWindowTabDrag::as_ref(ctx)
@@ -19639,6 +19646,7 @@ impl TypedActionView for Workspace {
                     }
                     tab.detached = false;
                 }
+                self.current_workspace_state.tab_drag_over_pane = None;
                 send_telemetry_from_ctx!(TelemetryEvent::DragAndDropTab, ctx);
                 if is_cross_window {
                     let drop_result =
@@ -19648,6 +19656,8 @@ impl TypedActionView for Workspace {
                     // from `Workspace::on_window_closed` once the source /
                     // preview window actually closes. See the field doc on
                     // `CrossWindowTabDrag::pending_source_window_closes`.
+                } else if let Some(target_pane) = target_pane {
+                    self.merge_tab_into_pane(*tab_index, *target_pane, *tab_position, ctx);
                 }
             }
             CopyAccessTokenToClipboard => {
@@ -22239,6 +22249,65 @@ impl Workspace {
         });
     }
 
+    /// Handles dropping a dragged tab onto one of the active tab's panes:
+    /// splits the target pane in the drop-quadrant direction and moves the
+    /// dragged tab's panes into the active tab's pane group. The dragged tab
+    /// closes itself once its last pane is moved out (via
+    /// `pane_group::Event::Exited`).
+    pub(crate) fn merge_tab_into_pane(
+        &mut self,
+        source_tab_index: usize,
+        target_pane_id: PaneId,
+        drop_position: RectF,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if !FeatureFlag::DragTabsToWindows.is_enabled()
+            || source_tab_index == self.active_tab_index
+        {
+            return;
+        }
+        let Some(source_tab) = self.tabs.get(source_tab_index) else {
+            return;
+        };
+        let source_pane_group = source_tab.pane_group.clone();
+        let target_pane_group = self.active_tab_pane_group().clone();
+        if source_pane_group.id() == target_pane_group.id() {
+            return;
+        }
+        // Only accept drops onto panes that are part of the active tab's group.
+        let target_in_active_group = target_pane_group.read(ctx, |pane_group, _| {
+            pane_group.pane_ids().any(|id| id == target_pane_id)
+        });
+        if !target_in_active_group {
+            return;
+        }
+        // Center drops (inside the quadrant threshold) default to a right split,
+        // matching the default used when panes are dropped on the tab bar.
+        let direction = ctx
+            .element_position_by_id(target_pane_id.position_id())
+            .and_then(|target_rect| calculate_pane_move_direction(target_rect, drop_position))
+            .unwrap_or(PaneGroupDirection::Right);
+
+        let source_pane_ids =
+            source_pane_group.read(ctx, |pane_group, _| pane_group.visible_pane_ids());
+        // Insert each moved pane as a sibling of the previously inserted one so
+        // a multi-pane tab keeps its panes adjacent in the target group.
+        let mut anchor = target_pane_id;
+        let mut focus_new_pane = true;
+        for pane_id in source_pane_ids {
+            let Some(pane) = source_pane_group.update(ctx, |pane_group, ctx| {
+                pane_group.remove_pane_for_move(&pane_id, ctx)
+            }) else {
+                continue;
+            };
+            target_pane_group.update(ctx, |pane_group, ctx| {
+                pane_group.add_pane_sibling(anchor, direction, pane, focus_new_pane, ctx);
+            });
+            anchor = pane_id;
+            focus_new_pane = false;
+        }
+    }
+
     /// Handles a tab drag event from the `Draggable` element. Dispatches to
     /// one of three modes: forward to an in-progress cross-window drag,
     /// initiate a new cross-window drag when the drag leaves the tab bar
@@ -22247,6 +22316,7 @@ impl Workspace {
         &mut self,
         current_index: usize,
         position: RectF,
+        over_pane: Option<PaneId>,
         ctx: &mut ViewContext<Self>,
     ) {
         const DETACH_SENSITIVITY: f32 = 10.0;
@@ -22299,6 +22369,37 @@ impl Workspace {
         }
 
         let source_is_single_tab = self.tabs.len() == 1;
+
+        // Dragging a non-active tab over one of the active tab's panes is the
+        // split gesture: keep the drag local (no detach into a new window) so
+        // the drop can move the dragged tab's panes into the hovered pane's
+        // split. The last hovered pane is kept sticky while the cursor stays
+        // inside the window so that briefly crossing a pane divider (where
+        // there is no drop target under the cursor) doesn't spuriously detach
+        // the tab.
+        if FeatureFlag::DragTabsToWindows.is_enabled()
+            && !source_is_single_tab
+            && current_index != self.active_tab_index
+        {
+            if !is_drag_outside_tab_bar {
+                // Back over the tab bar: resume the normal reorder flow below.
+                self.current_workspace_state.tab_drag_over_pane = None;
+            } else {
+                let inside_window = ctx.window_bounds(&ctx.window_id()).is_some_and(|bounds| {
+                    RectF::new(Vector2F::zero(), bounds.size()).contains_point(drag_center)
+                });
+                let over_pane = over_pane.or(self
+                    .current_workspace_state
+                    .tab_drag_over_pane
+                    .filter(|_| inside_window));
+                self.current_workspace_state.tab_drag_over_pane = over_pane;
+                if over_pane.is_some() {
+                    ctx.notify();
+                    return;
+                }
+            }
+        }
+
         if (is_drag_outside_tab_bar || source_is_single_tab)
             && FeatureFlag::DragTabsToWindows.is_enabled()
         {

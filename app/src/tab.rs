@@ -7,6 +7,7 @@ use crate::editor::EditorView;
 use crate::features::FeatureFlag;
 use crate::launch_configs::launch_config::LaunchConfig;
 use crate::menu::{MenuAction, MenuItem, MenuItemFields};
+use crate::pane_group::pane::view::{pane_drop_target_id, PaneDropTargetData};
 use crate::pane_group::PaneGroup;
 use crate::terminal::model::terminal_model::ConversationTranscriptViewerStatus;
 use settings::Setting as _;
@@ -38,12 +39,12 @@ use warp_core::ui::builder::UiBuilder;
 use warp_core::ui::theme::color::internal_colors;
 use warp_core::ui::theme::AnsiColors;
 use warpui::elements::{
-    Align, Border, ChildAnchor, Clipped, ConstrainedBox, Container, CornerRadius,
-    CrossAxisAlignment, DragAxis, Draggable, DraggableState, DropTarget, Element, Empty, Fill,
-    Flex, Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle, OffsetPositioning, Padding,
-    ParentAnchor, ParentElement, ParentOffsetBounds, PositionedElementAnchor,
-    PositionedElementOffsetBounds, Radius, Rect, SavePosition, Shrinkable, SizeConstraintCondition,
-    SizeConstraintSwitch, Stack, Text,
+    AcceptedByDropTarget, Align, Border, ChildAnchor, Clipped, ConstrainedBox, Container,
+    CornerRadius, CrossAxisAlignment, DragAxis, Draggable, DraggableState, DropTarget, Element,
+    Empty, Fill, Flex, Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle,
+    OffsetPositioning, Padding, ParentAnchor, ParentElement, ParentOffsetBounds,
+    PositionedElementAnchor, PositionedElementOffsetBounds, Radius, Rect, SavePosition, Shrinkable,
+    SizeConstraintCondition, SizeConstraintSwitch, Stack, Text,
 };
 use warpui::fonts::Weight;
 use warpui::text_layout::ClipConfig;
@@ -1627,14 +1628,32 @@ impl UiComponent for TabComponent<'_> {
             constrained_tab
         } else {
             let draggable = Draggable::new(draggable_state, constrained_tab)
+                .with_accepted_by_drop_target_fn(|data, _| {
+                    // Tabs can be dropped onto panes to split them; no other drop
+                    // target accepts a tab drag.
+                    if FeatureFlag::DragTabsToWindows.is_enabled()
+                        && data.as_any().is::<PaneDropTargetData>()
+                    {
+                        AcceptedByDropTarget::Yes
+                    } else {
+                        AcceptedByDropTarget::No
+                    }
+                })
                 .on_drag_start(|ctx, _, _| ctx.dispatch_typed_action(WorkspaceAction::StartTabDrag))
-                .on_drag(move |ctx, _, rect, _| {
+                .on_drag(move |ctx, _, rect, data| {
                     ctx.dispatch_typed_action(WorkspaceAction::DragTab {
                         tab_index,
                         tab_position: rect,
+                        target_pane: pane_drop_target_id(data),
                     });
                 })
-                .on_drop(|ctx, _, _, _| ctx.dispatch_typed_action(WorkspaceAction::DropTab));
+                .on_drop(move |ctx, _, rect, data| {
+                    ctx.dispatch_typed_action(WorkspaceAction::DropTab {
+                        tab_index,
+                        tab_position: rect,
+                        target_pane: pane_drop_target_id(data),
+                    })
+                });
             let draggable = if FeatureFlag::DragTabsToWindows.is_enabled() {
                 draggable
             } else {

@@ -418,3 +418,9 @@ impl DropTargetData for PaneDropTargetData {
         self
     }
 }
+
+/// Extracts the pane id when the given drag-and-drop data identifies a pane drop target.
+pub fn pane_drop_target_id(data: Option<&dyn DropTargetData>) -> Option<PaneId> {
+    data.and_then(|data| data.as_any().downcast_ref::<PaneDropTargetData>())
+        .map(|data| data.id)
+}

@@ -13,6 +13,7 @@ use crate::auth::LoginGatedFeature;
 use crate::drive::items::WarpDriveItemId;
 use crate::drive::ObjectTypeAndId;
 use crate::palette::PaletteMode;
+use crate::pane_group::PaneId;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::search;
 use crate::server::ids::SyncId;
@@ -251,8 +252,16 @@ pub enum WorkspaceAction {
     DragTab {
         tab_index: usize,
         tab_position: RectF,
+        /// Set when the drag is over one of the active tab's pane drop targets.
+        target_pane: Option<PaneId>,
     },
-    DropTab,
+    DropTab {
+        tab_index: usize,
+        tab_position: RectF,
+        /// When set, the tab was dropped onto this pane: the dragged tab's panes
+        /// move into the active tab's pane group as a split of the target pane.
+        target_pane: Option<PaneId>,
+    },
     /// Toggles the left panel. In Code Mode V1 this toggles Zap Drive.
     /// In Code Mode V2 this toggles the left panel which contains both the project explorer and
     /// Zap Drive. This happens as explicit action from the user.
@@ -657,7 +666,7 @@ impl WorkspaceAction {
             | MoveActiveTabRight
             | MoveTabLeft(_)
             | MoveTabRight(_)
-            | DropTab
+            | DropTab { .. }
             | RenameTab(_)
             | ResetTabName(_)
             | RenamePane(_)

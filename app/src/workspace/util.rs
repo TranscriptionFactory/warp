@@ -98,6 +98,10 @@ pub struct WorkspaceState {
     pub is_theme_deletion_modal_open: bool,
     pub is_changelog_modal_open: bool,
     pub is_tab_being_dragged: bool,
+    /// The pane of the active tab that a dragged tab is currently hovering
+    /// over. While set, the drag stays local (no detach into a new window) so
+    /// dropping can split that pane with the dragged tab's contents.
+    pub tab_drag_over_pane: Option<crate::pane_group::PaneId>,
     pub is_launch_config_save_modal_open: bool,
     pub is_resource_center_open: bool,
     pub is_command_search_open: bool,
