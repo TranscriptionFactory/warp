@@ -2400,3 +2400,48 @@ fn test_standard_tab_context_menu_shows_hover_only_tab_bar() {
 
 // 已删:test_open_ambient_agent_setup_guide_action_opens_management_view_and_is_idempotent
 // agent_management_view 字段连同 agent setup guide 整片功能在 Phase 2c 已删。
+
+#[test]
+fn test_merge_tab_into_pane_splits_active_tab_and_closes_source() {
+    let _drag_flag_guard = FeatureFlag::DragTabsToWindows.override_enabled(true);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let workspace = mock_workspace(&mut app);
+
+        // Create a second terminal tab, then return to the first tab so the
+        // second one is a non-active drag source.
+        let target_pane_id = workspace.update(&mut app, |workspace, ctx| {
+            workspace.add_terminal_tab(false, ctx);
+            workspace.activate_tab(0, ctx);
+            assert_eq!(workspace.tabs.len(), 2);
+            workspace
+                .active_tab_pane_group()
+                .as_ref(ctx)
+                .visible_pane_ids()[0]
+        });
+
+        // Simulate dropping tab 1 onto the active tab's pane. The drop
+        // position has no laid-out pane rect in this headless test, so the
+        // split direction falls back to the default (right).
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.merge_tab_into_pane(
+                1,
+                target_pane_id,
+                RectF::new(Vector2F::zero(), Vector2F::new(10., 10.)),
+                ctx,
+            );
+        });
+
+        workspace.update(&mut app, |workspace, ctx| {
+            // The source tab closed once its only pane moved out...
+            assert_eq!(workspace.tabs.len(), 1);
+            // ...and the active tab now holds both panes as a split.
+            assert_eq!(
+                workspace.active_tab_pane_group().as_ref(ctx).pane_count(),
+                2
+            );
+        });
+    });
+}

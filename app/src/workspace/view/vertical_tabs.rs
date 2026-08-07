@@ -27,6 +27,7 @@ use crate::drive::{cloud_object_styling::warp_drive_icon_color, DriveObjectType}
 use crate::editor::EditorView;
 use crate::pane_group::pane::IPaneType;
 use crate::pane_group::TerminalPane;
+use crate::pane_group::pane::view::{pane_drop_target_id, PaneDropTargetData};
 use crate::pane_group::{
     CodePane, NotebookPane, PaneGroup, PaneId, TabBarHoverIndex, WorkflowPane,
 };
@@ -64,11 +65,11 @@ use warp_core::ui::theme::{AnsiColorIdentifier, Fill as WarpThemeFill, WarpTheme
 use warp_core::ui::Icon as WarpIcon;
 use warpui::elements::DispatchEventResult;
 use warpui::elements::{
-    resizable_state_handle, Border, ChildAnchor, Clipped, ClippedScrollStateHandle,
-    ClippedScrollable, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, DragAxis,
-    DragBarSide, Draggable, DropShadow, DropTarget, Element, Empty, EventHandler, Expanded,
-    Fill as ElementFill, Flex, Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle,
-    OffsetPositioning, Padding, ParentAnchor, ParentElement, ParentOffsetBounds,
+    resizable_state_handle, AcceptedByDropTarget, Border, ChildAnchor, Clipped,
+    ClippedScrollStateHandle, ClippedScrollable, ConstrainedBox, Container, CornerRadius,
+    CrossAxisAlignment, DragAxis, DragBarSide, Draggable, DropShadow, DropTarget, Element, Empty,
+    EventHandler, Expanded, Fill as ElementFill, Flex, Hoverable, MainAxisAlignment, MainAxisSize,
+    MouseStateHandle, OffsetPositioning, Padding, ParentAnchor, ParentElement, ParentOffsetBounds,
     PositionedElementAnchor, PositionedElementOffsetBounds, Radius, Resizable,
     ResizableStateHandle, SavePosition, ScrollTarget, ScrollToPositionMode, ScrollbarWidth,
     Shrinkable, Stack, Text,
@@ -2098,17 +2099,33 @@ fn render_tab_group_internal(
     let group_element = group_element.with_defer_events_to_children().finish();
 
     let draggable = Draggable::new(tab.draggable_state.clone(), group_element)
+        .with_accepted_by_drop_target_fn(|data, _| {
+            // Tabs can be dropped onto panes to split them; no other drop
+            // target accepts a tab drag.
+            if FeatureFlag::DragTabsToWindows.is_enabled()
+                && data.as_any().is::<PaneDropTargetData>()
+            {
+                AcceptedByDropTarget::Yes
+            } else {
+                AcceptedByDropTarget::No
+            }
+        })
         .on_drag_start(|ctx, _, _| {
             ctx.dispatch_typed_action(WorkspaceAction::StartTabDrag);
         })
-        .on_drag(move |ctx, _, rect, _| {
+        .on_drag(move |ctx, _, rect, data| {
             ctx.dispatch_typed_action(WorkspaceAction::DragTab {
                 tab_index,
                 tab_position: rect,
+                target_pane: pane_drop_target_id(data),
             });
         })
-        .on_drop(|ctx, _, _, _| {
-            ctx.dispatch_typed_action(WorkspaceAction::DropTab);
+        .on_drop(move |ctx, _, rect, data| {
+            ctx.dispatch_typed_action(WorkspaceAction::DropTab {
+                tab_index,
+                tab_position: rect,
+                target_pane: pane_drop_target_id(data),
+            });
         });
     // Only lock the drag to the vertical axis when cross-window tab drag is
     // disabled. When it is enabled, the user needs to be able to drag
