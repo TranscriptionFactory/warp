@@ -207,9 +207,11 @@ where
             );
 
             if let Some(visible_items_notifier) = &self.visible_items_tx {
-                visible_items_notifier
-                    .try_send(start..end)
-                    .expect("unable to send visible_items");
+                // The channel is unbounded, so the only possible failure is that the
+                // receiver was dropped (view teardown racing a final layout pass).
+                if let Err(err) = visible_items_notifier.try_send(start..end) {
+                    log::debug!("unable to send visible_items: {err}");
+                }
             };
 
             self.items.clear();
