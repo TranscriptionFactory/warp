@@ -152,6 +152,16 @@ pub async fn rotate_files(channel_file_name: &str, max_rotation: usize) -> Resul
         }
     };
 
+    rotate_files_in_directory(&log_directory, channel_file_name, max_rotation);
+
+    Ok(())
+}
+
+fn rotate_files_in_directory(
+    log_directory: &Path,
+    channel_file_name: &str,
+    max_rotation: usize,
+) {
     // Delete the oldest log file.
     let largest_log_file_suffix = max_rotation.saturating_sub(1);
     let _ = fs::remove_file(
@@ -166,14 +176,12 @@ pub async fn rotate_files(channel_file_name: &str, max_rotation: usize) -> Resul
     }
 
     // Rename `warp.log.old.temp` (the temporary file) to `warp.log.old.0`.
-    let temp_file_path = temp_log_file_path(&log_directory);
+    let temp_file_path = temp_log_file_path(log_directory);
 
     let _ = fs::rename(
         temp_file_path,
         log_directory.join(format!("{channel_file_name}.old.0")),
     );
-
-    Ok(())
 }
 
 /// Initializes the logger for the crash recovery process.
@@ -462,6 +470,7 @@ fn init_internal(
     fn setup_log_files_for_current_execution(
         log_directory: &Path,
         is_from_crash_recovery_process: bool,
+        max_rotation: usize,
     ) -> Result<File> {
         fs::create_dir_all(log_directory)?;
 
@@ -472,6 +481,19 @@ fn init_internal(
             crash_recovery_process_log_file_path(log_directory)
         } else {
             let main_log_path = main_process_log_file_path(log_directory);
+
+            // A leftover `warp.log.old.temp` is the crashed previous session's log,
+            // parked there by the crash recovery process (`on_parent_process_crash`)
+            // and never rotated because the app died before the deferred rotation
+            // ran. Renaming over it here would destroy the one log that explains
+            // the crash, so rotate it into the `.old.N` chain first.
+            if temp_log_file_path(log_directory).exists() {
+                rotate_files_in_directory(
+                    log_directory,
+                    &ChannelState::logfile_name(),
+                    max_rotation,
+                );
+            }
 
             // Rename the old main log file to `warp.log.temp`.
             // We rotate the log files later in the background to make fewer blocking calls.
@@ -532,7 +554,11 @@ fn init_internal(
     }
     if use_logfile {
         base_logger.target(env_logger::Target::Pipe(Box::new(
-            setup_log_files_for_current_execution(&log_directory, is_from_crash_recovery_process)?,
+            setup_log_files_for_current_execution(
+                &log_directory,
+                is_from_crash_recovery_process,
+                max_rotation,
+            )?,
         )));
         base_logger.format(format_for_file_output);
     } else {
