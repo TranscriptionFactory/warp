@@ -11683,10 +11683,12 @@ impl Workspace {
             || self.tab_bar_pinned_by_popup;
 
         // Check if any panes are being dragged (potentially into a new tab).
+        // The pane group can be mid-transfer during a cross-window tab drag;
+        // treat an unresolvable group as "not dragged" rather than panicking.
         let is_pane_being_dragged = self
             .active_tab_pane_group()
-            .as_ref(app)
-            .any_pane_being_dragged(app);
+            .try_as_ref(app)
+            .is_some_and(|pane_group| pane_group.any_pane_being_dragged(app));
 
         let workspace_decoration_visibility = TabSettings::as_ref(app)
             .workspace_decoration_visibility
@@ -20601,8 +20603,8 @@ impl View for Workspace {
 
         if self
             .active_tab_pane_group()
-            .as_ref(app)
-            .any_pane_being_dragged(app)
+            .try_as_ref(app)
+            .is_some_and(|pane_group| pane_group.any_pane_being_dragged(app))
         {
             context.set.insert("Workspace_PaneDragging");
         }

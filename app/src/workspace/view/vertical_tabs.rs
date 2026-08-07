@@ -1077,7 +1077,11 @@ fn any_workspace_pane_being_dragged(workspace: &Workspace, app: &AppContext) -> 
     workspace
         .tabs
         .iter()
-        .any(|tab| tab.pane_group.as_ref(app).any_pane_being_dragged(app))
+        .any(|tab| {
+            tab.pane_group
+                .try_as_ref(app)
+                .is_some_and(|pane_group| pane_group.any_pane_being_dragged(app))
+        })
 }
 
 /// Renders an empty insertion slot for a cross-window ghost drag in the

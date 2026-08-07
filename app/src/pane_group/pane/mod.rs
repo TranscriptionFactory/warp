@@ -658,6 +658,11 @@ pub trait PaneContent: 'static {
     /// Pane-agnostic state that all panes have.
     fn pane_configuration(&self) -> ModelHandle<PaneConfiguration>;
 
+    /// Whether this pane's view is currently being dragged.
+    ///
+    /// Called on the render path (tab-bar visibility), so implementations must
+    /// tolerate a pane view stranded by a cross-window tab transfer: resolve the
+    /// view with `try_as_ref` and report `false` instead of panicking.
     fn is_pane_being_dragged(&self, ctx: &AppContext) -> bool;
 }
 

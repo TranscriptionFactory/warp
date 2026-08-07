@@ -103,6 +103,6 @@ impl PaneContent for SftpPane {
     }
 
     fn is_pane_being_dragged(&self, ctx: &AppContext) -> bool {
-        self.view.as_ref(ctx).is_being_dragged()
+        self.view.try_as_ref(ctx).is_some_and(|view| view.is_being_dragged())
     }
 }
