@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v2026.08.08.1] — 2026-08-08
+
+- **UI / 标签页**:修复跨窗口标签合并后 pane 视图滞留、渲染路径读取该视图导致的 panic/SIGABRT 崩溃(2026-08-07)—— `is_pane_being_dragged` / `any_pane_being_dragged` 改用 `try_as_ref` 解析,视图不可达时按“未拖拽”处理而非 panic
+- **诊断**:视图读取路径的 panic(“circular view reference” / “window does not exist”)与失败的跨窗口视图迁移现在报出视图标识、所属窗口与可能原因(`describe_missing_view`),`transfer_view_tree_to_window` 不再静默跳过无法迁移的视图 —— 即视图滞留发生的确切时刻
+- **日志**:修复每次崩溃都会销毁解释该次崩溃的日志 —— 崩溃时暂存到 `openwarp.log.old.temp` 的日志,下次启动会在初始化阶段同步轮转进 `.old.N` 链,不再被新日志改名覆盖
+
 ## [v2026.08.06.1] — 2026-08-06
 
 - **UI**:修复输入建议列表在视图销毁与最后一帧布局竞争时的 panic/SIGABRT 崩溃 —— `visible_items` 通道接收端已随视图关闭,`try_send` 失败从 `expect` 改为 debug 日志
