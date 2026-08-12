@@ -18,6 +18,7 @@ fn test_format_log_entry_uses_explicit_empty_and_missing_markers() {
     let entry = format_log_entry(&ChipCommandLogEntry {
         chip_kind: &ContextChipKind::GithubPullRequest,
         chip_title: "GitHub Pull Request",
+        session_id: SessionId::from(7),
         phase: PromptChipExecutionPhase::Value,
         shell_type: ShellType::Zsh,
         working_directory: None,
@@ -46,6 +47,7 @@ fn test_format_log_entry_preserves_stdout_and_stderr_sections() {
     let entry = format_log_entry(&ChipCommandLogEntry {
         chip_kind: &ContextChipKind::GithubPullRequest,
         chip_title: "GitHub Pull Request",
+        session_id: SessionId::from(7),
         phase: PromptChipExecutionPhase::OnClick,
         shell_type: ShellType::Zsh,
         working_directory: Some("/tmp/project"),
@@ -56,6 +58,8 @@ fn test_format_log_entry_preserves_stdout_and_stderr_sections() {
 
     assert!(entry.contains("phase: on_click"));
     assert!(entry.contains("status: success"));
+    // Distinguishes concurrent pollers from one poller firing repeatedly.
+    assert!(entry.contains("session_id: 7"));
     assert!(entry.contains("working_directory: /tmp/project"));
     assert!(entry.contains("command:\n<<<COMMAND\ngh pr view --json url --jq .url\n>>>COMMAND"));
     assert!(entry.contains(

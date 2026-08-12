@@ -379,6 +379,16 @@ impl ContextChipKind {
         }
     }
 
+    /// Whether this chip's value can come from the shared per-repo git status watcher instead
+    /// of its own shell command.
+    ///
+    /// Callers that subscribe to the watcher and callers that suppress the chip's periodic
+    /// timer must agree on this set. If they drift, a chip gets neither the shared value nor a
+    /// suppressed timer, and every pane polls `git` on its own.
+    pub fn is_git_status_driven(&self) -> bool {
+        matches!(self, Self::ShellGitBranch | Self::GitDiffStats)
+    }
+
     /// Whether the context chip has a copyable value.
     pub fn is_copyable(&self) -> bool {
         !matches!(self, Self::AgentPlanAndTodoList)

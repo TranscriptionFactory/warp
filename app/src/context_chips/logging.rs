@@ -16,6 +16,7 @@ use warp_completer::completer::{CommandExitStatus, CommandOutput};
 #[cfg(test)]
 use std::sync::Arc;
 
+use crate::terminal::model::session::SessionId;
 use crate::terminal::shell::ShellType;
 
 use super::ContextChipKind;
@@ -26,6 +27,10 @@ const MISSING_VALUE: &str = "<none>";
 pub(crate) struct ChipCommandLogEntry<'a> {
     pub chip_kind: &'a ContextChipKind,
     pub chip_title: &'a str,
+    /// Identifies which session ran the command. Every pane bootstraps its own session and its
+    /// own poller, so this is what distinguishes one pane refreshing twice from two panes each
+    /// refreshing once.
+    pub session_id: SessionId,
     pub phase: PromptChipExecutionPhase,
     pub shell_type: ShellType,
     pub working_directory: Option<&'a str>,
@@ -209,6 +214,7 @@ fn format_log_entry(entry: &ChipCommandLogEntry<'_>) -> String {
 timestamp: {timestamp}
 chip_kind: {:?}
 chip_title: {}
+session_id: {}
 phase: {}
 shell_type: {:?}
 working_directory: {}
@@ -223,6 +229,7 @@ exit_code: {exit_code}
 ",
         entry.chip_kind,
         entry.chip_title,
+        entry.session_id.as_u64(),
         entry.phase.as_str(),
         entry.shell_type,
         format_scalar_field(entry.working_directory),

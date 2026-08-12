@@ -781,6 +781,7 @@ impl CurrentPrompt {
                         logger.log_shell_command(&ChipCommandLogEntry {
                             chip_kind: &chip_kind,
                             chip_title: &chip_title,
+                            session_id: exec_ctx.session.id(),
                             phase: PromptChipExecutionPhase::Value,
                             shell_type: exec_ctx.shell_type,
                             working_directory: exec_ctx.current_dir_path.as_deref(),
@@ -939,6 +940,7 @@ impl CurrentPrompt {
                 logger.log_shell_command(&ChipCommandLogEntry {
                     chip_kind: &chip_kind,
                     chip_title: &chip_title,
+                    session_id: exec_ctx.session.id(),
                     phase: PromptChipExecutionPhase::OnClick,
                     shell_type: exec_ctx.shell_type,
                     working_directory: exec_ctx.current_dir_path.as_deref(),
@@ -1518,10 +1520,7 @@ impl CurrentPrompt {
     fn is_updated_externally(&self, chip_kind: &ContextChipKind) -> bool {
         #[cfg(feature = "local_fs")]
         {
-            if matches!(
-                chip_kind,
-                ContextChipKind::ShellGitBranch | ContextChipKind::GitDiffStats
-            ) {
+            if chip_kind.is_git_status_driven() {
                 return self.git_repo_status.is_some();
             }
         }

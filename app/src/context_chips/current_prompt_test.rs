@@ -1147,7 +1147,10 @@ fn test_externally_driven_chip_skips_periodic_timer() {
     App::test((), |mut app| async move {
         app.add_singleton_model(|_| {
             Prompt::mock_with(
-                [ContextChipKind::ShellGitBranch],
+                [
+                    ContextChipKind::ShellGitBranch,
+                    ContextChipKind::GitDiffStats,
+                ],
                 false,
                 WarpPromptSeparator::None,
             )
@@ -1190,14 +1193,22 @@ fn test_externally_driven_chip_skips_periodic_timer() {
 
         app.read(|ctx| {
             let cp = current_prompt.as_ref(ctx);
-            let state = cp
-                .states
-                .get(&ContextChipKind::ShellGitBranch)
-                .expect("ShellGitBranch state should exist after set_git_repo_status");
-            assert!(
-                state.refresh_handle.is_none(),
-                "Externally-driven chip should not have a periodic refresh handle"
-            );
+            // Every chip the watcher can drive must have its own timer suppressed; a chip left
+            // polling here would shell out per pane alongside the shared watcher.
+            for chip_kind in [
+                ContextChipKind::ShellGitBranch,
+                ContextChipKind::GitDiffStats,
+            ] {
+                assert!(chip_kind.is_git_status_driven());
+                let state = cp
+                    .states
+                    .get(&chip_kind)
+                    .expect("state should exist after set_git_repo_status");
+                assert!(
+                    state.refresh_handle.is_none(),
+                    "{chip_kind:?} is externally driven and should not have a periodic refresh handle"
+                );
+            }
         });
     });
 }
