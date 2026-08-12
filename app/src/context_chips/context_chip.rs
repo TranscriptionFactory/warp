@@ -287,6 +287,11 @@ impl ChipRuntimePolicy {
         self
     }
 
+    pub fn with_shell_command_timeout(mut self, timeout: Duration) -> Self {
+        self.shell_command_timeout = Some(timeout);
+        self
+    }
+
     pub fn invalidate_on_commands(&self) -> &[String] {
         &self.invalidate_on_commands
     }

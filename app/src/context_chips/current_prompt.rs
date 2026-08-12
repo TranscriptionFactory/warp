@@ -152,6 +152,14 @@ impl ChipState {
         }
     }
 
+    /// Whether a shell command spawned for this chip's value is still outstanding.
+    ///
+    /// The handle stays populated after the command finishes, so we also require the status to
+    /// still be `Loading` — the completion callback always moves it off `Loading`.
+    fn generator_in_flight(&self) -> bool {
+        self.generator_handle.is_some() && matches!(self.update_status, ChipUpdateStatus::Loading)
+    }
+
     fn clear_cache(&mut self) {
         self.last_computed_value = None;
         self.last_on_click_values = None;
@@ -984,15 +992,29 @@ impl CurrentPrompt {
             return;
         };
         if let RefreshConfig::Periodically { interval } = chip.refresh_config() {
-            let initial_value_generator =
-                initial_value_generator.as_ref().unwrap_or(chip.generator());
-            self.fetch_chip_value_once(
-                chip_kind,
-                initial_value_generator,
-                on_click_generator.clone(),
-                allow_fingerprint_skip,
-                ctx,
-            );
+            // Skip this tick if the previous command for this chip hasn't come back yet. Aborting
+            // and respawning (what `fetch_chip_value_once` does) doesn't reliably free the old
+            // child: a process blocked in an uninterruptible read on a degraded filesystem ignores
+            // the kill until its syscall returns, and remote executors can't signal the child at
+            // all. Adding another one on top only deepens the pileup. Chips with a
+            // `shell_command_timeout` bound how long this can suppress refreshes.
+            let in_flight = self
+                .states
+                .get(chip_kind)
+                .is_some_and(ChipState::generator_in_flight);
+            if in_flight {
+                log::debug!("Skipping refresh for {chip_kind:?}: previous command still running");
+            } else {
+                let initial_value_generator =
+                    initial_value_generator.as_ref().unwrap_or(chip.generator());
+                self.fetch_chip_value_once(
+                    chip_kind,
+                    initial_value_generator,
+                    on_click_generator.clone(),
+                    allow_fingerprint_skip,
+                    ctx,
+                );
+            }
             let interval = *interval;
             let chip_kind_clone = chip_kind.clone();
             let future = ctx.spawn(

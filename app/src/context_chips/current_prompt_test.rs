@@ -348,6 +348,22 @@ fn test_github_pr_chip_runtime_policy_configuration() {
 }
 
 #[test]
+fn test_git_chips_have_a_shell_command_timeout() {
+    for chip_kind in [
+        ContextChipKind::ShellGitBranch,
+        ContextChipKind::GitDiffStats,
+    ] {
+        let chip = chip_kind.to_chip().expect("git chip should exist");
+        assert_eq!(
+            chip.runtime_policy().shell_command_timeout(),
+            Some(Duration::from_secs(5)),
+            "{chip_kind:?} must bound its shell command; without a timeout a `git` blocked on a \
+             degraded filesystem stays outstanding forever"
+        );
+    }
+}
+
+#[test]
 fn test_invalidating_command_count_unaffected_for_chips_without_invalidate_on_commands() {
     App::test((), |mut app| async move {
         let session_id = SessionId::from(888);
@@ -1268,6 +1284,151 @@ fn test_git_status_change_updates_chip_value() {
     });
 }
 
+#[test]
+fn test_periodic_refresh_skips_tick_while_previous_command_is_outstanding() {
+    App::test((), |mut app| async move {
+        let session_id = SessionId::from(4242);
+        app.add_singleton_model(|_| {
+            Prompt::mock_with(
+                [ContextChipKind::GitDiffStats],
+                false,
+                WarpPromptSeparator::None,
+            )
+        });
+        app.add_singleton_model(SessionSettings::new_with_defaults);
+        app.add_singleton_model(|_| History::new(vec![]));
+        app.add_singleton_model(|_ctx| {
+            settings::PublicPreferences::new(
+                Box::<user_preferences::in_memory::InMemoryPreferences>::default(),
+            )
+        });
+        app.add_singleton_model(|_| {
+            settings::PrivatePreferences::new(
+                Box::<user_preferences::in_memory::InMemoryPreferences>::default(),
+            )
+        });
+        app.add_singleton_model(|_| AuthStateProvider::new_for_test());
+        app.add_singleton_model(AuthManager::new_for_test);
+        app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
+        crate::settings::InputSettings::register(&mut app);
+        app.update(crate::settings::AISettings::register_and_subscribe_to_events);
+        app.add_singleton_model(crate::workspaces::user_workspaces::UserWorkspaces::default_mock);
+        #[cfg(windows)]
+        app.add_singleton_model(SystemInfo::new);
+
+        // The single queued response satisfies the external-commands probe; every chip command
+        // after it hangs, standing in for a `git` wedged on an unresponsive filesystem.
+        let executor = Arc::new(HangingCommandExecutor::with_success_responses(["git\n"]));
+        let sessions = app.add_model(|ctx| {
+            let mut sessions = Sessions::new_for_test().with_command_executor(executor.clone());
+            sessions.initialize_bootstrapped_session(
+                SessionInfo::new_for_test().with_id(session_id),
+                "test command".to_string(),
+                vec![],
+                None,
+                ctx,
+            );
+            sessions
+        });
+        let sessions_for_prompt = sessions.clone();
+        let current_prompt =
+            app.add_model(move |ctx| CurrentPrompt::new(sessions_for_prompt.clone(), ctx));
+
+        let session = app
+            .read(|ctx| sessions.as_ref(ctx).get(session_id))
+            .expect("session should exist");
+        session.load_external_commands().await;
+
+        let outstanding_future_id = current_prompt.update(&mut app, |current_prompt, ctx| {
+            current_prompt.latest_context = Some(PromptContext {
+                active_block_metadata: BlockMetadata::new(
+                    Some(session_id),
+                    Some("/tmp/project".to_string()),
+                ),
+                environment: Environment::default(),
+            });
+            current_prompt.update_states_with_new_context(ctx);
+
+            let state = current_prompt
+                .states
+                .get(&ContextChipKind::GitDiffStats)
+                .expect("expected git diff stats state");
+            assert!(
+                state.generator_in_flight(),
+                "the first fetch should leave a command outstanding: availability={:?} status={:?} handle={:?}",
+                state.availability,
+                state.update_status,
+                state.generator_handle.is_some(),
+            );
+            state
+                .generator_handle
+                .as_ref()
+                .expect("expected a generator handle")
+                .future_id()
+        });
+
+        // A periodic tick while that command is still outstanding must not spawn another one.
+        current_prompt.update(&mut app, |current_prompt, ctx| {
+            current_prompt.fetch_chip_value_at_interval(
+                &ContextChipKind::GitDiffStats,
+                None,
+                None,
+                false,
+                ctx,
+            );
+
+            let state = current_prompt
+                .states
+                .get(&ContextChipKind::GitDiffStats)
+                .expect("expected git diff stats state");
+            assert_eq!(
+                state
+                    .generator_handle
+                    .as_ref()
+                    .expect("expected a generator handle")
+                    .future_id(),
+                outstanding_future_id,
+                "the tick should have been skipped, leaving the outstanding command in place"
+            );
+            assert!(
+                state.refresh_handle.is_some(),
+                "a skipped tick should still arm the next one"
+            );
+        });
+
+        // Once the command comes back (here, as the timeout would report it), refreshes resume.
+        current_prompt.update(&mut app, |current_prompt, ctx| {
+            current_prompt
+                .states
+                .get_mut(&ContextChipKind::GitDiffStats)
+                .expect("expected git diff stats state")
+                .update_status = ChipUpdateStatus::TimedOut;
+
+            current_prompt.fetch_chip_value_at_interval(
+                &ContextChipKind::GitDiffStats,
+                None,
+                None,
+                false,
+                ctx,
+            );
+
+            let state = current_prompt
+                .states
+                .get(&ContextChipKind::GitDiffStats)
+                .expect("expected git diff stats state");
+            assert_ne!(
+                state
+                    .generator_handle
+                    .as_ref()
+                    .expect("expected a generator handle")
+                    .future_id(),
+                outstanding_future_id,
+                "a settled chip should refresh on the next tick"
+            );
+        });
+    });
+}
+
 /// A [`CommandExecutor`] implementation that records which commands were run, but does not
 /// execute them.
 #[derive(Debug, Default)]
@@ -1313,6 +1474,55 @@ impl RecordingCommandExecutor {
 
     pub fn clear(&self) {
         self.commands.lock().clear();
+    }
+}
+
+/// A [`CommandExecutor`] implementation that answers the first queued responses and then never
+/// returns, standing in for a command blocked on an unresponsive filesystem.
+#[derive(Debug, Default)]
+struct HangingCommandExecutor {
+    commands: Mutex<Vec<String>>,
+    response_queue: Mutex<VecDeque<CommandOutput>>,
+}
+
+impl HangingCommandExecutor {
+    pub fn with_success_responses(responses: impl IntoIterator<Item = &'static str>) -> Self {
+        Self {
+            commands: Mutex::default(),
+            response_queue: Mutex::new(
+                responses
+                    .into_iter()
+                    .map(RecordingCommandExecutor::success_output)
+                    .collect(),
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl CommandExecutor for HangingCommandExecutor {
+    async fn execute_command(
+        &self,
+        command: &str,
+        _shell: &Shell,
+        _current_directory_path: Option<&str>,
+        _environment_variables: Option<HashMap<String, String>>,
+        _execute_command_options: ExecuteCommandOptions,
+    ) -> anyhow::Result<CommandOutput> {
+        self.commands.lock().push(command.to_string());
+        let response = self.response_queue.lock().pop_front();
+        match response {
+            Some(output) => Ok(output),
+            None => std::future::pending().await,
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn supports_parallel_command_execution(&self) -> bool {
+        false
     }
 }
 

@@ -120,6 +120,12 @@ const GIT_REFRESH_CONFIG: RefreshConfig =
         interval: Duration::from_secs(30),
     };
 
+/// How long a Git context chip's shell command may run before we give up on it.
+///
+/// Without a timeout these commands inherit `Timer::never()`, so a `git` blocked on a
+/// degraded filesystem stays outstanding indefinitely and blocks every later refresh.
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChipResult {
     kind: ContextChipKind,
@@ -285,21 +291,33 @@ impl ContextChipKind {
                 log::warn!("Tried to use custom chip {title}");
                 None
             }
-            Self::ShellGitBranch => Some(ContextChip::shell_builtin(
-                "Git Branch",
-                builtins::shell_git_branch(),
-                Some(builtins::shell_other_git_branches()),
-                GIT_REFRESH_CONFIG,
-            )),
-            Self::GitDiffStats => Some(
-                ContextChip::shell_builtin(
-                    "Git Diff Stats",
-                    builtins::shell_git_line_changes(),
-                    None,
+            Self::ShellGitBranch => {
+                let generator = builtins::shell_git_branch();
+                let policy = ChipRuntimePolicy::for_shell_generator(&generator)
+                    .with_shell_command_timeout(GIT_COMMAND_TIMEOUT);
+                Some(ContextChip::shell_builtin_with_runtime_policy(
+                    "Git Branch",
+                    generator,
+                    Some(builtins::shell_other_git_branches()),
                     GIT_REFRESH_CONFIG,
+                    policy,
+                ))
+            }
+            Self::GitDiffStats => {
+                let generator = builtins::shell_git_line_changes();
+                let policy = ChipRuntimePolicy::for_shell_generator(&generator)
+                    .with_shell_command_timeout(GIT_COMMAND_TIMEOUT);
+                Some(
+                    ContextChip::shell_builtin_with_runtime_policy(
+                        "Git Diff Stats",
+                        generator,
+                        None,
+                        GIT_REFRESH_CONFIG,
+                        policy,
+                    )
+                    .with_allow_empty_value(),
                 )
-                .with_allow_empty_value(),
-            ),
+            }
             Self::GithubPullRequest if !FeatureFlag::GithubPrPromptChip.is_enabled() => None,
             Self::GithubPullRequest => {
                 let generator = builtins::github_pull_request_url();
