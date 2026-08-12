@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [v2026.08.12.1] — 2026-08-12
+
+- **上下文 Chip / Git**:修复慢仓库下 `git` 子进程堆积 —— 两个 git chip 沿用默认 shell 运行策略(timeout 为 `None`,命令跑在 `Timer::never()` 下),且每次周期 tick 都会 abort 上一条命令再起一条;abort 并不保证回收子进程(阻塞在不可中断读上的进程要等 syscall 返回才响应 kill,远端 executor 更无法向子进程发信号),于是每 30s tick 累积一个并发 `git`。现在两个 git chip 统一 5s 超时(与 GitHub PR chip 一致),且上一条命令未返回时跳过本次周期 tick
+- **上下文 Chip / Git**:修复只带分支 chip 的 prompt 逐 pane 轮询 git —— 终端视图的订阅门控只认 `GitDiffStats`,而 `is_updated_externally` 同时对 `GitDiffStats` 与 `ShellGitBranch` 抑制定时器,这类 prompt 于是既拿不到每仓库共享的 watcher、也没被抑制定时器;两处改为统一走 `ContextChipKind::is_git_status_driven`,两份列表不再漂移
+- **诊断**:chip 命令日志新增 session id —— 此前只记录命令与 cwd,无法区分“同一个 pane 刷新两次”与“两个 pane 各刷新一次”,而这正是判断冗余 git 轮询属于调度 bug 还是每 pane 预期行为的依据
+- 已知未解决:每个 pane 各自持有 `CurrentPrompt`,同一仓库下 N 个 pane 仍会跑 N 个独立轮询器;去重涉及模型归属变更,待与上游协调
+
 ## [v2026.08.08.1] — 2026-08-08
 
 - **UI / 标签页**:修复跨窗口标签合并后 pane 视图滞留、渲染路径读取该视图导致的 panic/SIGABRT 崩溃(2026-08-07)—— `is_pane_being_dragged` / `any_pane_being_dragged` 改用 `try_as_ref` 解析,视图不可达时按“未拖拽”处理而非 panic
