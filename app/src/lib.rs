@@ -2297,6 +2297,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::InBandGeneratorsForSSH,
         #[cfg(feature = "run_generators_with_cmd_exe")]
         FeatureFlag::RunGeneratorsWithCmdExe,
+        #[cfg(feature = "warping_model_name")]
+        FeatureFlag::WarpingModelName,
         #[cfg(feature = "windows_high_performance_gpu_default")]
         FeatureFlag::WindowsHighPerformanceGpuDefault,
         #[cfg(feature = "ligatures")]
