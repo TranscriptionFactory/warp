@@ -1,6 +1,14 @@
 use chrono::{DateTime, Duration, Local, Utc};
 use std::ops::Sub;
 
+pub fn format_message_timestamp(datetime: &DateTime<Local>) -> String {
+    datetime.format("%-m/%-d at %-I:%M %p").to_string()
+}
+
+pub fn is_trustworthy_message_timestamp(datetime: &DateTime<Local>) -> bool {
+    datetime != &DateTime::<Local>::default()
+}
+
 // Some conversion ratios for time units.
 const SEC_TO_MS: f64 = 1000.;
 const MIN_TO_MS: f64 = 60. * SEC_TO_MS;
