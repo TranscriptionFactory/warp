@@ -68,6 +68,7 @@ use warpui::{
 mod about_page;
 mod agent_providers_widget;
 mod ai_page;
+mod ai_shared;
 mod appearance_page;
 mod cloud_sync_page;
 mod code_page;
