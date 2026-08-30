@@ -26,6 +26,7 @@ use crate::terminal::{
     SizeUpdate, TerminalModel,
 };
 use crate::SessionSettings;
+use warp_util::path::ShellFamily;
 
 use super::Message;
 
@@ -482,8 +483,6 @@ impl<T: EventLoopSender> PtyController<T> {
         shell_type: ShellType,
         ctx: &mut ModelContext<Self>,
     ) {
-        use warp_util::path::ShellFamily;
-
         // TODO(CORE-2099): Figure out a more robust solution here. Fish users
         // can redefine these functions via fish functions. Ideally this won't
         // break if the user redefines the `source` or `.` built-in.
@@ -825,6 +824,11 @@ fn bytes_to_execute_command(
     shell_type: ShellType,
     is_bracketed_paste_enabled: bool,
 ) -> Vec<u8> {
+    let command = match ShellFamily::from(shell_type) {
+        ShellFamily::Posix if cfg!(windows) => LINEFEED_REGEX.replace_all(command, "\n"),
+        ShellFamily::PowerShell => LINEFEED_REGEX.replace_all(command, "\r"),
+        _ => Cow::Borrowed(command),
+    };
     let mut command_bytes = shell_type.kill_buffer_bytes().to_vec();
 
     // Only execute the command via bracketed paste if the command is not empty. Some ZSH
@@ -862,11 +866,7 @@ fn bytes_to_execute_command(
         }
     } else {
         let command_without_escapes = command.replace(escape_sequences::C0::ESC as char, "");
-        // This is a fix for PLAT-770 to allow multi-line commands in Powershell.
-        // In general, shells without bracketed paste don't handle `\n` that well,
-        // and in the case of PowerShell, it is explicitly ignored.
-        let command_without_newlines = LINEFEED_REGEX.replace_all(&command_without_escapes, "\r");
-        command_bytes.extend(command_without_newlines.as_bytes());
+        command_bytes.extend(command_without_escapes.as_bytes());
     }
     command_bytes.extend(shell_type.execute_command_bytes().to_vec());
     command_bytes
