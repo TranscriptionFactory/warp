@@ -912,6 +912,70 @@ impl BlocklistAIHistoryModel {
         self.agent_id_to_conversation_id.get(agent_id).copied()
     }
 
+    /// Single canonical parent resolution: the explicit local parent
+    /// conversation id wins, otherwise the parent agent id resolved through
+    /// [`Self::conversation_id_for_agent_id`]. Child indexing, the
+    /// orchestration root walk, breadcrumbs, and UI parent lookups all
+    /// resolve through here so they cannot disagree.
+    fn resolved_parent_conversation_id_from_refs(
+        &self,
+        parent_conversation_id: Option<AIConversationId>,
+        parent_agent_id: Option<&str>,
+    ) -> Option<AIConversationId> {
+        parent_conversation_id.or_else(|| {
+            parent_agent_id.and_then(|agent_id| self.conversation_id_for_agent_id(agent_id))
+        })
+    }
+
+    pub fn resolved_parent_conversation_id_for_conversation(
+        &self,
+        conversation: &AIConversation,
+    ) -> Option<AIConversationId> {
+        self.resolved_parent_conversation_id_from_refs(
+            conversation.parent_conversation_id(),
+            conversation.parent_agent_id(),
+        )
+    }
+
+    pub fn mark_conversation_as_remote_child(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) else {
+            return;
+        };
+        conversation.mark_as_remote_child();
+        conversation.write_updated_conversation_state(ctx);
+    }
+
+    /// Sets the persisted pin state for a conversation and writes
+    /// the change to SQLite. Used by the orchestration pin singleton to
+    /// keep the per-conversation source of truth in sync with toggles.
+    pub fn set_conversation_pinned(
+        &mut self,
+        conversation_id: AIConversationId,
+        pinned: bool,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) else {
+            log::warn!(
+                "set_conversation_pinned called for conversation {conversation_id:?} that is \
+                 not loaded; pin state change to {pinned} will not be persisted."
+            );
+            return;
+        };
+        if conversation.is_pinned() == pinned {
+            return;
+        }
+        conversation.set_pinned(pinned);
+        conversation.write_updated_conversation_state(ctx);
+        ctx.emit(BlocklistAIHistoryEvent::UpdatedConversationMetadata {
+            terminal_view_id: self.terminal_view_id_for_conversation(&conversation_id),
+            conversation_id,
+        });
+    }
+
     /// Creates a new conversation and transfers relevant exchanges from
     /// the existing conversation to the new one. If successful, returns the new conversation id.
     fn handle_conversation_split(

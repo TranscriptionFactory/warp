@@ -5,6 +5,13 @@ pub mod block;
 pub mod code_block;
 mod context_model;
 mod controller;
+// Orchestration modules are ported from warpdotdev at 8ba89e110 (QUALITY-928 M1)
+// and are wired up by later orchestration milestones (M2+); allow dead_code
+// until then.
+#[allow(dead_code)]
+pub(crate) mod orchestration_events;
+#[allow(dead_code)]
+pub(crate) mod orchestration_topology;
 mod passive_suggestions;
 pub(super) use controller::RequestInput;
 pub mod history_model;

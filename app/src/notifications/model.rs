@@ -278,7 +278,12 @@ impl NotificationsModel {
 
         match status {
             // agent 重新开始干活 → 之前的通知作废。
-            ConversationStatus::InProgress => {
+            // TransientError (recovery in flight) and WaitingForEvents
+            // (yielded, listening for inbound input) are both non-terminal:
+            // treat them like InProgress.
+            ConversationStatus::InProgress
+            | ConversationStatus::TransientError
+            | ConversationStatus::WaitingForEvents => {
                 self.remove_notification_by_source(origin, ctx);
             }
             ConversationStatus::Success => {
