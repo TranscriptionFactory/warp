@@ -307,6 +307,13 @@ pub struct AIConversation {
     /// (`AgentConversationData.pinned`) arrives with a later orchestration
     /// milestone.
     pinned: bool,
+
+    /// Execution harness for a child conversation spawned by an
+    /// orchestrator. Ported from warpdotdev 8ba89e110; upstream stores the
+    /// config-name string (`orchestration_harness_type`) for persistence
+    /// roundtrips — this fork stores the enum directly until persistence
+    /// wiring arrives with a later orchestration milestone.
+    orchestration_harness: Option<warp_cli::agent::Harness>,
 }
 
 pub(crate) fn artifact_from_fork_proto(
@@ -331,6 +338,7 @@ impl AIConversation {
             task_store: TaskStore::with_root_task(root_task),
             optimistic_cli_subagent_subtask_id: None,
             pinned: false,
+            orchestration_harness: None,
             code_review: None,
             is_viewing_shared_session,
             todo_lists: vec![],
@@ -588,6 +596,7 @@ impl AIConversation {
             status_error_message: None,
             todo_lists,
             pinned: false,
+            orchestration_harness: None,
             // TODO(alokedesai): Support session restoration for code review comments.
             code_review: None,
             has_opened_code_review: false,
@@ -924,10 +933,33 @@ impl AIConversation {
         self.run_id()
     }
 
+    /// Returns the last observed v2 orchestration event sequence number,
+    /// if any. The cursor is per-conversation: the highest sequence the
+    /// streamer has seen on the run-ids this conversation watches
+    /// (`watched_run_ids` for owner-side conversations, the ancestor
+    /// subtree for viewer-mode orchestrator placeholders).
+    pub fn last_event_sequence(&self) -> Option<i64> {
+        self.last_event_sequence
+    }
+
+    /// Updates the last observed v2 orchestration event sequence number.
+    pub fn set_last_event_sequence(&mut self, sequence: i64) {
+        self.last_event_sequence = Some(sequence);
+    }
+
     /// Returns whether the user has pinned this conversation in the
     /// orchestration pill bar.
     pub fn is_pinned(&self) -> bool {
         self.pinned
+    }
+
+    /// Execution harness for an orchestrated child conversation, if known.
+    pub fn orchestration_harness(&self) -> Option<warp_cli::agent::Harness> {
+        self.orchestration_harness
+    }
+
+    pub fn set_orchestration_harness(&mut self, harness: warp_cli::agent::Harness) {
+        self.orchestration_harness = Some(harness);
     }
 
     /// Sets the pin state. Persistence of the pin arrives with a later

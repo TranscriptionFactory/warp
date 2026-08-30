@@ -13,7 +13,8 @@ pub(crate) use driver::{
 };
 pub(crate) use driver::{
     run_agent_event_driver, AgentEventConsumer, AgentEventConsumerControlFlow,
-    AgentEventDriverConfig, AgentEventSource, AgentEventSourceItem,
+    AgentEventDriverConfig, AgentEventFilter, AgentEventSource, AgentEventSourceItem,
+    AgentMessageEventMetadata, ServerApiAgentEventSource,
 };
 pub(crate) use message_hydrator::MessageHydrator;
 
@@ -44,7 +45,7 @@ impl AgentEventStreamClient for DisabledAgentEventStreamClient {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct AgentRunEvent {
     pub event_type: String,
     pub run_id: String,

@@ -29,6 +29,7 @@ fn participant_resolution_uses_the_direct_parent_as_orchestrator() {
                 surface_id,
                 "child".to_string(),
                 root_id,
+                None,
                 ctx,
             );
             history.assign_run_id_for_conversation(
@@ -42,6 +43,7 @@ fn participant_resolution_uses_the_direct_parent_as_orchestrator() {
                 surface_id,
                 "grandchild".to_string(),
                 child_id,
+                None,
                 ctx,
             );
             history.assign_run_id_for_conversation(
@@ -125,6 +127,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "oz-env-check".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -133,6 +136,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "sibling-agent".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -141,6 +145,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "codex-child".to_string(),
                 child_a,
+                None,
                 ctx,
             )
         });
@@ -149,6 +154,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "follow-up-child".to_string(),
                 child_a,
+                None,
                 ctx,
             )
         });
@@ -157,6 +163,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "sibling-grandchild".to_string(),
                 child_b,
+                None,
                 ctx,
             )
         });
@@ -191,6 +198,7 @@ fn adjacent_orchestration_child_navigation_uses_pinned_first_order() {
                 terminal_view_id,
                 "child-a".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -199,6 +207,7 @@ fn adjacent_orchestration_child_navigation_uses_pinned_first_order() {
                 terminal_view_id,
                 "child-b".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -207,6 +216,7 @@ fn adjacent_orchestration_child_navigation_uses_pinned_first_order() {
                 terminal_view_id,
                 "child-c".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -346,6 +356,7 @@ fn has_local_orchestrated_children_detects_active_local_children() {
                 terminal_view_id,
                 "local-child".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -399,6 +410,7 @@ fn has_local_orchestrated_children_ignores_remote_children() {
                 terminal_view_id,
                 "remote-child".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -518,6 +530,7 @@ fn adjacent_orchestration_child_navigation_cycles_whole_tree_from_grandchild() {
                 terminal_view_id,
                 "mid".to_string(),
                 root_id,
+                None,
                 ctx,
             )
         });
@@ -526,6 +539,7 @@ fn adjacent_orchestration_child_navigation_cycles_whole_tree_from_grandchild() {
                 terminal_view_id,
                 "grandchild".to_string(),
                 mid_id,
+                None,
                 ctx,
             )
         });
@@ -576,6 +590,7 @@ fn child_conversations_in_pill_order_returns_direct_children_only() {
                 terminal_view_id,
                 "mid".to_string(),
                 root_id,
+                None,
                 ctx,
             )
         });
@@ -584,6 +599,7 @@ fn child_conversations_in_pill_order_returns_direct_children_only() {
                 terminal_view_id,
                 "grandchild".to_string(),
                 mid_id,
+                None,
                 ctx,
             )
         });
@@ -618,6 +634,7 @@ fn adjacent_orchestration_child_navigation_noops_for_single_child() {
                 terminal_view_id,
                 "child".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -671,6 +688,7 @@ fn build_orchestrator_with_two_children(
             terminal_view_id,
             "child-a".to_string(),
             orchestrator_id,
+            None,
             ctx,
         )
     });
@@ -679,6 +697,7 @@ fn build_orchestrator_with_two_children(
             terminal_view_id,
             "child-b".to_string(),
             orchestrator_id,
+            None,
             ctx,
         )
     });

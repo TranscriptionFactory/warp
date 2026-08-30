@@ -348,6 +348,7 @@ impl BlocklistAIHistoryModel {
         terminal_view_id: EntityId,
         name: String,
         parent_conversation_id: AIConversationId,
+        orchestration_harness: Option<warp_cli::agent::Harness>,
         ctx: &mut ModelContext<Self>,
     ) -> AIConversationId {
         let parent_agent_id = self
@@ -371,6 +372,9 @@ impl BlocklistAIHistoryModel {
                 conversation.set_parent_agent_id(id);
             }
             conversation.set_agent_name(name);
+            if let Some(harness) = orchestration_harness {
+                conversation.set_orchestration_harness(harness);
+            }
         }
         self.set_parent_for_conversation(conversation_id, parent_conversation_id);
         conversation_id
@@ -946,6 +950,23 @@ impl BlocklistAIHistoryModel {
             return;
         };
         conversation.mark_as_remote_child();
+        conversation.write_updated_conversation_state(ctx);
+    }
+
+    /// Updates the persisted `last_event_sequence` for a conversation and
+    /// writes the updated conversation state to SQLite. Used by the
+    /// orchestration event streamer after draining an event batch to keep the
+    /// cursor durable across restarts.
+    pub fn update_event_sequence(
+        &mut self,
+        conversation_id: AIConversationId,
+        sequence: i64,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) else {
+            return;
+        };
+        conversation.set_last_event_sequence(sequence);
         conversation.write_updated_conversation_state(ctx);
     }
 
@@ -1529,6 +1550,10 @@ impl BlocklistAIHistoryModel {
             .conversations_by_id
             .get(&conversation_id)
             .and_then(|c| c.title().map(|t| t.to_string()));
+        let run_id = self
+            .conversations_by_id
+            .get(&conversation_id)
+            .and_then(|c| c.run_id());
 
         self.remove_conversation_from_memory(conversation_id, terminal_view_id, ctx);
 
@@ -1564,6 +1589,7 @@ impl BlocklistAIHistoryModel {
             terminal_view_id,
             conversation_id,
             conversation_title,
+            run_id,
         });
     }
 
@@ -1622,9 +1648,14 @@ impl BlocklistAIHistoryModel {
             {
                 vec.retain(|&id| id != conversation_id);
             }
+            let run_id = self
+                .conversations_by_id
+                .get(&conversation_id)
+                .and_then(|c| c.run_id());
             ctx.emit(BlocklistAIHistoryEvent::RemoveConversation {
                 terminal_view_id,
                 conversation_id,
+                run_id,
             });
         }
     }
@@ -2110,6 +2141,10 @@ pub enum BlocklistAIHistoryEvent {
     RemoveConversation {
         terminal_view_id: EntityId,
         conversation_id: AIConversationId,
+        /// Server-assigned run id of the conversation, when known. Lets the
+        /// orchestration event streamer tombstone the run so late server
+        /// events cannot resurrect it.
+        run_id: Option<String>,
     },
 
     /// This is emitted when a user explicitly deletes an existing conversation.
@@ -2120,6 +2155,10 @@ pub enum BlocklistAIHistoryEvent {
         terminal_view_id: Option<EntityId>,
         conversation_id: AIConversationId,
         conversation_title: Option<String>,
+        /// Server-assigned run id of the conversation, when known. Lets the
+        /// orchestration event streamer tombstone the run so late server
+        /// events cannot resurrect it.
+        run_id: Option<String>,
     },
 
     /// Emitted when conversations are restored in a terminal view.

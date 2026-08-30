@@ -9,6 +9,10 @@ mod controller;
 // and are wired up by later orchestration milestones (M2+); allow dead_code
 // until then.
 #[allow(dead_code)]
+pub(crate) mod orchestration_child_tracker;
+#[allow(dead_code)]
+pub(crate) mod orchestration_event_streamer;
+#[allow(dead_code)]
 pub(crate) mod orchestration_events;
 #[allow(dead_code)]
 pub(crate) mod orchestration_topology;
