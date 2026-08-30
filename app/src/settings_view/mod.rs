@@ -77,6 +77,7 @@ mod execution_profile_view;
 mod features;
 mod features_page;
 pub mod keybindings;
+mod knowledge_page;
 pub mod mcp_servers;
 pub mod mcp_servers_page;
 mod nav;

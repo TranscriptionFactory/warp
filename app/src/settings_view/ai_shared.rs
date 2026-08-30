@@ -1,4 +1,4 @@
-//! Rendering helpers and styles shared by AI settings pages.
+//! AI 设置页面共用的渲染辅助函数和样式。
 
 use std::borrow::Cow;
 use std::cell::RefCell;
