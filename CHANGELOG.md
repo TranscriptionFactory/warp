@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [v2026.08.30.1] — 2026-08-30
+
+上游(warpdotdev)2026-08-30 同步:移植 43 个上游修复(含 3 个执行中发现的前置依赖)。
+
+- **安全 / 依赖**:`serde_with` 2.0.1→3.21.0(GHSA-7gcf-g7xr-8hxj)、`h2` 0.4.12→0.4.15(debug 构建 panic)、`diesel` 2.3.9→2.3.10;PowerShell 历史读取改为内嵌转义路径而非 `$args[0]`(收敛注入面);SSH wrapper 的远端 zsh env 脚本真正禁用 rc sourcing(`unset RCS` 对 zsh 选项是 no-op,改为 `unsetopt`)
+- **终端 / Shell 集成**:POSIX shell 粘贴 CRLF 归一化;修复四个潜伏的 shell-integration bug;bash bootstrap 不再从 Bootstrapped payload 丢失 `shell_plugins`;zsh kill-buffer 在全部 keymap 重绑,修复 bootstrap 残留泄漏;zsh compadd shim 不再丢弃 `_describe` 聚簇 `-ld` 的描述;PSReadLine vi 编辑模式不再损坏提交的命令;classic completions 在用户编辑后不再陈旧;远端/SSH Tab 路径补全跟随符号链接;ctrl-/ 以 US (0x1f) 发送给终端;全局 flag(`--api-key`、`--debug`)置于子命令前不再解析报错
+- **Windows**:PTY kill 时终止 ConPTY 根进程并关闭伪控制台(修复每关闭一个 pane 泄漏一个 shell 进程);停止每会话全进程表 CPU 采样(修复 DPC_WATCHDOG_VIOLATION);修复 PowerShell 5.1 登录 shell 命令
+- **UI / Vim**:修复后台完成 block 的双光标;隐藏且不可重映射的 Alt+1 Project Explorer 绑定;Vim 模式 Enter 后 Find-in-File 输入框不可点击;代码编辑器 vim `d%`/`c%`/`y%` 与 `gg` 前置计数(`5gg` 跳第 5 行);小窗口上的非法 resizable 边界;全屏不再圆角;主窗口在另一显示器时 Quake 窗口首开即聚焦;从凭据错误打开设置时的 Circular view update(适配为本 fork 的 AWS Bedrock 凭据视图);拖动活动会话到新窗口时的终端卡顿;tab-config 生成命令中的 worktree 路径加引号
+- **Markdown / 渲染**:粗体/斜体链接在尾随标点前断裂;notebooks/plans 的链接显示文本转义;HTML 注释剥离而非渲染为文本;本地 Markdown 图片与 AI block 本地文件图片在文件变更后刷新
+- **字体 / 图形**:shaped glyph 转换应用 shaper 的 GPOS 偏移;修复 web keybinding chip 的 ⇧ 字形 fallback 错配(cosmic-text 钉到禁止 Hack 作 fallback donor 的修复);Intel ICL GT1 / TGL GT1 Vulkan 适配器在旧 Mesa 上降权、TGL GT2 加入允许列表(Linux 集显硬挂起/冻结)
+- **性能 / 内存**:AIBlock 缓存 `is_passive`,避免昂贵的历史查找;code review 对巨型未跟踪文件的 diff 内存设上限;`FileTreeState.gitignores` Arc 化,停止逐事件深拷贝;AsyncSearcher 全量索引重建合并去重以约束内存;passive suggestions 文件路径探测对 block 输出设大小上限(修复高 CPU)
+- **崩溃**:WorkflowDataSource 预览截断的 char-boundary panic
+
 ## [v2026.08.12.1] — 2026-08-12
 
 - **上下文 Chip / Git**:修复慢仓库下 `git` 子进程堆积 —— 两个 git chip 沿用默认 shell 运行策略(timeout 为 `None`,命令跑在 `Timer::never()` 下),且每次周期 tick 都会 abort 上一条命令再起一条;abort 并不保证回收子进程(阻塞在不可中断读上的进程要等 syscall 返回才响应 kill,远端 executor 更无法向子进程发信号),于是每 30s tick 累积一个并发 `git`。现在两个 git chip 统一 5s 超时(与 GitHub PR chip 一致),且上一条命令未返回时跳过本次周期 tick
