@@ -8,6 +8,7 @@ use crate::agent::{action_result::ShellCommandError, convert::ConvertToAPITypeEr
 
 use super::*;
 
+
 impl TryFrom<RequestCommandOutputResult> for api::request::input::tool_call_result::Result {
     type Error = ConvertToAPITypeError;
 
@@ -42,6 +43,7 @@ impl TryFrom<RequestCommandOutputResult> for api::request::input::tool_call_resu
                 grid_contents,
                 cursor,
                 is_alt_screen_active,
+                activity: _,
             } => Ok(
                 api::request::input::tool_call_result::Result::RunShellCommand(
                     #[allow(deprecated)]
@@ -97,7 +99,7 @@ impl TryFrom<WriteToLongRunningShellCommandResult>
 
     fn try_from(result: WriteToLongRunningShellCommandResult) -> Result<Self, Self::Error> {
         match result {
-            WriteToLongRunningShellCommandResult::Snapshot { block_id, grid_contents, cursor, is_alt_screen_active, is_preempted } => Ok(
+            WriteToLongRunningShellCommandResult::Snapshot { block_id, grid_contents, cursor, is_alt_screen_active, is_preempted, activity: _ } => Ok(
                 api::request::input::tool_call_result::Result::WriteToLongRunningShellCommand(
                     api::WriteToLongRunningShellCommandResult {
                         result: Some(api::write_to_long_running_shell_command_result::Result::LongRunningCommandSnapshot(
@@ -603,6 +605,7 @@ impl TryFrom<ReadShellCommandOutputResult> for api::request::input::tool_call_re
                 cursor,
                 is_alt_screen_active,
                 is_preempted,
+                activity: _,
             } => Ok(
                 api::request::input::tool_call_result::Result::ReadShellCommandOutput(
                     api::ReadShellCommandOutputResult {
@@ -654,6 +657,7 @@ impl TryFrom<TransferShellCommandControlToUserResult>
                 cursor,
                 is_alt_screen_active,
                 is_preempted,
+                activity: _,
             } => Ok(
                 api::request::input::tool_call_result::Result::TransferShellCommandControlToUser(
                     api::TransferShellCommandControlToUserResult {

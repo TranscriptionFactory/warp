@@ -686,6 +686,11 @@ pub enum FeatureFlag {
     /// 关闭时,UI 入口隐藏,`Client::new()` 退回 reqwest 默认(读环境变量)。
     /// 见 Issue #72。
     HttpProxySettings,
+
+    /// Attaches process-tree liveness signals to long-running command
+    /// snapshots, giving the agent evidence that a silent command is still
+    /// doing work before it decides to cancel.
+    LrcActivitySignal,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
@@ -745,6 +750,7 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::LocalDockerSandbox,
     FeatureFlag::VerticalTabsSummaryMode,
     FeatureFlag::ServerFileBrowser,
+    FeatureFlag::LrcActivitySignal,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Zap).

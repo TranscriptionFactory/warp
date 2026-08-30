@@ -607,6 +607,28 @@ pub struct TerminalModel {
     /// Next ID to use for images where the ID is not explicitly specified
     /// by the Kitty protocol
     pub next_kitty_image_id: u32,
+
+    /// The shell process backing this terminal, once it has been spawned.
+    /// Cleared on exit so that nothing reads a descriptor the pty has closed.
+    shell_process_info: Option<ShellProcessInfo>,
+}
+
+/// Identifies the shell process behind a terminal, for subsystems that need to
+/// inspect the processes it is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellProcessInfo {
+    /// Pid of the shell itself. The command it is running is somewhere in its
+    /// process tree.
+    pub pid: u32,
+
+    /// Descriptor for the pty leader, used to ask which process group is in the
+    /// foreground.
+    ///
+    /// The pty owns this descriptor, so it is only valid while the pty is alive.
+    /// It is cleared when the shell exits, but readers must still treat any
+    /// failure as "unknown" rather than trusting a possibly recycled descriptor.
+    #[cfg(unix)]
+    pub pty_leader_fd: Option<std::os::fd::RawFd>,
 }
 
 #[derive(Clone, Debug)]
@@ -1168,6 +1190,7 @@ impl TerminalModel {
             image_id_to_metadata: HashMap::new(),
             // Start mid-way through the u32 range to avoid collisions
             next_kitty_image_id: 2147483647,
+            shell_process_info: None,
         }
     }
 
@@ -1506,6 +1529,9 @@ impl TerminalModel {
         }
 
         self.handled_exit = true;
+        // The pty is going away, so its descriptor must not be read again: the
+        // OS is free to hand the same number to an unrelated file.
+        self.shell_process_info = None;
         // Forcibly exit the alt screen so that we can show the user the
         // banner informing them that the shell process exited.
         self.exit_alt_screen(true);
@@ -2068,6 +2094,16 @@ impl TerminalModel {
 
     pub fn active_shell_launch_data(&self) -> Option<&ShellLaunchData> {
         self.active_shell_launch_data.as_ref()
+    }
+
+    /// The shell process backing this terminal, or `None` before it has spawned
+    /// or after it has exited.
+    pub fn shell_process_info(&self) -> Option<&ShellProcessInfo> {
+        self.shell_process_info.as_ref()
+    }
+
+    pub fn set_shell_process_info(&mut self, shell_process_info: ShellProcessInfo) {
+        self.shell_process_info = Some(shell_process_info);
     }
 
     pub fn set_login_shell_spawned(&mut self, shell_type: ShellType) {
