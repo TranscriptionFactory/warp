@@ -9,7 +9,7 @@ use warpui::App;
 #[cfg(feature = "local_fs")]
 use super::{blocklist_image_asset_source, ResolvedBlocklistImageSources};
 use super::{
-    status_message_naming_model, warping_footer_height, LOAD_OUTPUT_MESSAGE,
+    status_message_naming_model, LOAD_OUTPUT_MESSAGE,
     LOAD_OUTPUT_MESSAGE_FOR_CREATING_DIFF, LOAD_OUTPUT_MESSAGE_FOR_GENERATING_PLAN,
 };
 use super::{

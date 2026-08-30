@@ -2058,7 +2058,14 @@ fn agent_transcript_navigable_items_include_prompts_and_user_shell_blocks() {
     let mut block_list =
         new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
     let conversation_id = AIConversationId::new();
-    block_list.enter_conversation_context(conversation_id, false, false);
+    block_list.set_agent_view_state(AgentViewState::Active {
+        conversation_id,
+        origin: AgentViewEntryOrigin::Input {
+            was_prompt_autodetected: false,
+        },
+        display_mode: AgentViewDisplayMode::FullScreen,
+        original_conversation_length: 0,
+    });
 
     // User-query AI segment (navigable).
     let prompt_1 = EntityId::new();
@@ -2144,7 +2151,14 @@ fn agent_transcript_navigable_items_include_prompts_and_user_shell_blocks() {
     agent_reply_2_item.last_laid_out_height = BlockHeight::from(2.0);
     block_list.append_rich_content(agent_reply_2_item, false);
 
-    block_list.set_transcript_scope(TranscriptScope::Conversation(conversation_id));
+    block_list.set_agent_view_state(AgentViewState::Active {
+        conversation_id,
+        origin: AgentViewEntryOrigin::Input {
+            was_prompt_autodetected: false,
+        },
+        display_mode: AgentViewDisplayMode::FullScreen,
+        original_conversation_length: 0,
+    });
 
     let items = block_list.agent_transcript_navigable_items();
     assert!(

@@ -71,6 +71,8 @@ use crate::test_util::terminal::initialize_app_for_terminal_view;
 use crate::test_util::{add_window_with_terminal, assert_eventually};
 
 use super::*;
+use crate::ai::agent::AIAgentExchange;
+use crate::ai::blocklist::ResponseStreamId;
 
 struct TestTerminalManager {
     model: Arc<FairMutex<TerminalModel>>,
@@ -6166,13 +6168,32 @@ fn append_inputs_to_conversation_and_handle_event(
         &BlocklistAIHistoryEvent::AppendedExchange {
             exchange_id,
             task_id,
-            terminal_surface_id: view.view_id,
+            terminal_view_id: view.view_id,
             conversation_id,
             is_hidden: false,
             response_stream_id: Some(response_stream_id),
         },
         ctx,
     );
+}
+
+fn exchange_with_inputs(inputs: Vec<AIAgentInput>) -> AIAgentExchange {
+    AIAgentExchange {
+        id: AIAgentExchangeId::new(),
+        input: inputs,
+        output_status: AIAgentOutputStatus::Streaming { output: None },
+        added_message_ids: HashSet::new(),
+        start_time: Local::now(),
+        finish_time: None,
+        time_to_first_token_ms: None,
+        working_directory: None,
+        model_id: LLMId::from("test-model"),
+        request_cost: None,
+        coding_model_id: LLMId::from("test-coding-model"),
+        cli_agent_model_id: LLMId::from("test-cli-agent-model"),
+        computer_use_model_id: LLMId::from("test-computer-use-model"),
+        response_initiator: None,
+    }
 }
 
 fn agent_view_user_query_input(query: &str) -> AIAgentInput {
