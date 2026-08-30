@@ -139,13 +139,13 @@ impl TerminalManager {
             log::info!("Failed to send Shutdown {e:?}");
         }
 
-        if let Some(join_handle) = self.event_loop_handle.take() {
+        match self.event_loop_handle.take() { Some(join_handle) => {
             if let Err(e) = join_handle.join() {
                 log::error!("Failed to join event loop handle {e:?}");
             }
-        } else {
+        } _ => {
             log::error!("No event loop handle to join when dropping terminal manager.")
-        }
+        }}
 
         self.inactive_pty_reads_rx.close();
     }

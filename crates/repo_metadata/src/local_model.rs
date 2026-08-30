@@ -949,21 +949,20 @@ impl LocalRepoMetadataModel {
                         let state =
                             FileTreeState::new(root_entry, gitignores_for_build, Some(repository_handle));
 
-                        if let Err(e) =
-                            model.add_repository_internal(std_repo_path.clone(), state, ctx)
-                        {
+                        match model.add_repository_internal(std_repo_path.clone(), state, ctx)
+                        { Err(e) => {
                             log::warn!("Failed to add repository {repo_path_str}: {e:?}");
                             // On failure, mark the repository as failed
                             model
                                 .repositories
                                 .insert(std_repo_path, IndexedRepoState::Failed(e));
-                        } else {
+                        } _ => {
                             log::info!(
                                 "Successfully indexed repository: {} with {} files",
                                 repo_path_str,
                                 files.len()
                             );
-                        }
+                        }}
                     }
                     Err(e) => {
                         safe_warn!(

@@ -133,7 +133,7 @@ impl ObjectStoreModel {
     }
 
     /// 等待本地 object store 可读。Zap 下该条件在 SQLite restore 后立即满足。
-    pub fn initial_load_complete(&self) -> impl Future<Output = ()> {
+    pub fn initial_load_complete(&self) -> impl Future<Output = ()> + use<> {
         self.initial_load_complete.wait()
     }
 

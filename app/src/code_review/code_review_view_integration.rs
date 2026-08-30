@@ -359,12 +359,12 @@ impl CodeReviewView {
         line_number: usize,
         ctx: &AppContext,
     ) -> Option<String> {
-        let editor = if let Some(editor) = self.editor_for_path(path, ctx) {
+        let editor = match self.editor_for_path(path, ctx) { Some(editor) => {
             editor
-        } else {
+        } _ => {
             let absolute_path = self.repo_path()?.join(path);
             self.editor_for_path(&absolute_path, ctx)?
-        };
+        }};
         let text = editor
             .as_ref(ctx)
             .editor()

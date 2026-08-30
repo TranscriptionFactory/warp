@@ -54,11 +54,11 @@ fn slot() -> &'static RwLock<ProxyConfig> {
 /// 安装全局 WebSocket 代理配置。应在启动与设置变更时同时调用
 /// `http_client::set_global_proxy_config`。
 pub fn set_global_proxy_config(cfg: ProxyConfig) {
-    if let Ok(mut guard) = slot().write() {
+    match slot().write() { Ok(mut guard) => {
         *guard = cfg;
-    } else {
+    } _ => {
         log::error!("写入 WebSocket 代理配置失败:RwLock 已 poison");
-    }
+    }}
 }
 
 fn current_proxy_config() -> ProxyConfig {

@@ -3955,9 +3955,8 @@ pub async fn generate_byop_output(
                                 }
                                 // reparse 失败(intermediate 状态):静默,等下次 chunk。
                             }
-                        } else if let Ok(parsed) =
-                            parse_incoming_tool_call(&call, mcp_context.as_ref())
-                        {
+                        } else { match parse_incoming_tool_call(&call, mcp_context.as_ref())
+                        { Ok(parsed) => {
                             // 首次 parse 成功 → 立即 emit 占位卡。
                             // 每个 chunk 在未 emit 占位前都会重 parse(即"retry on every
                             // chunk"),所以即便首帧 args 不全,后续任意 chunk 完整时
@@ -3980,7 +3979,7 @@ pub async fn generate_byop_output(
                                 &current_task_id,
                                 vec![placeholder],
                             ));
-                        }
+                        } _ => {}}}
                         // 首帧 parse 失败(args 还不完整 / 未知工具):暂不 emit,
                         // 等下次 chunk 再尝试或 End 时走老路径,避免视觉抖动。
                     }

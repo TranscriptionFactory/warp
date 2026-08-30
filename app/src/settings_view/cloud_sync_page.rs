@@ -1429,7 +1429,7 @@ impl SettingsWidget for CloudSyncPageWidget {
         // 冲突 / 下载确认 / 上传确认弹窗 — 在本 View 的 render 路径构造,
         // 用 Stack overlay child(WindowByPosition + Center)实现窗口居中,
         // 同时保证点击事件能路由回 CloudSyncPageView::handle_action。
-        if let Some(modal) = view.build_modal_element(appearance) {
+        match view.build_modal_element(appearance) { Some(modal) => {
             let mut stack = Stack::new();
             stack.add_child(content.finish());
             stack.add_positioned_overlay_child(
@@ -1442,8 +1442,8 @@ impl SettingsWidget for CloudSyncPageWidget {
                 ),
             );
             stack.finish()
-        } else {
+        } _ => {
             content.finish()
-        }
+        }}
     }
 }

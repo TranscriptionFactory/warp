@@ -439,7 +439,7 @@ impl SkillManager {
         }
 
         for skill in skills {
-            if let Ok(parent_dir) = extract_skill_parent_directory(&skill.path) {
+            match extract_skill_parent_directory(&skill.path) { Ok(parent_dir) => {
                 self.directory_skills
                     .entry(parent_dir)
                     .or_default()
@@ -450,12 +450,12 @@ impl SkillManager {
                     .or_default()
                     .insert(skill.path.clone());
                 self.skills_by_path.insert(skill.path.clone(), skill);
-            } else {
+            } _ => {
                 log::warn!(
                     "Could not extract parent directory for skill: {:?}",
                     skill.path
                 );
-            }
+            }}
         }
 
         ctx.emit(SkillManagerEvent::InventoryChanged);

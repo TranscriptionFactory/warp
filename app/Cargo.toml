@@ -2,7 +2,7 @@
 authors = ["OpenWarp Team"]
 default-run = "openwarp-oss"
 description = "The local-first agentic terminal"
-edition = "2021"
+edition = "2024"
 autobins = false
 name = "warp"
 version = "0.1.0"

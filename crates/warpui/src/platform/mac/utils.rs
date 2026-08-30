@@ -34,7 +34,7 @@ const NUMPAD_ENTER_KEY: u16 = 0x03;
 const ESCAPE_KEY: u16 = 0x1b;
 const TAB_KEY: u16 = '\t' as u16;
 const SHIFTED_TAB_KEY: u16 = 0x19;
-extern "C" {
+unsafe extern "C" {
     fn CGColorGetComponents(color: CGColorRef) -> *const CGFloat;
 }
 
@@ -90,9 +90,11 @@ pub fn unicode_char_to_key(char: u16) -> Option<&'static str> {
 pub unsafe fn nsstring_as_str<'a>(nsstring: *const Object) -> Result<&'a str, Utf8Error> {
     const UTF8_ENCODING: usize = 4;
 
-    let cstr: *const c_char = msg_send![nsstring, UTF8String];
-    let len: usize = msg_send![nsstring, lengthOfBytesUsingEncoding: UTF8_ENCODING];
-    std::str::from_utf8(slice::from_raw_parts(cstr as *const u8, len))
+    unsafe {
+        let cstr: *const c_char = msg_send![nsstring, UTF8String];
+        let len: usize = msg_send![nsstring, lengthOfBytesUsingEncoding: UTF8_ENCODING];
+        std::str::from_utf8(slice::from_raw_parts(cstr as *const u8, len))
+    }
 }
 
 pub fn color_u_to_cg_color(color: ColorU) -> CGColor {

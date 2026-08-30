@@ -15,7 +15,7 @@ use warpui::{platform::mac::make_nsstring, ApplicationBundleInfo};
 use super::*;
 
 // Functions implemented in objC files.
-extern "C" {
+unsafe extern "C" {
     fn get_default_app_bundle_for_file(file_path: id) -> id;
 }
 
@@ -388,7 +388,7 @@ fn open_with_bundle(bundle_id: &str, path: &Path) -> bool {
 // Cocoa. We wrap the call in a local pool so the autoreleased string (and the
 // one we pass in via `make_nsstring`) are drained before we return, and copy
 // the UTF-8 bytes out into an owned `String` so no dangling pointer escapes.
-unsafe fn default_app_to_open_path(file_path: &Path) -> Option<String> {
+unsafe fn default_app_to_open_path(file_path: &Path) -> Option<String> { unsafe {
     let pool = NSAutoreleasePool::new(nil);
     let bundle_id = get_default_app_bundle_for_file(make_nsstring(file_path.to_string_lossy()));
     let result = if bundle_id == nil {
@@ -401,7 +401,7 @@ unsafe fn default_app_to_open_path(file_path: &Path) -> Option<String> {
     };
     pool.drain();
     result
-}
+}}
 
 #[cfg(test)]
 #[path = "mac_test.rs"]
