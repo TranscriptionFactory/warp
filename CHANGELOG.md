@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [v2026.08.30.3] — 2026-08-31
+
+- **构建修复**:v2026.08.30.2 的发布构建在 Linux/Windows 上编译失败(Rust 2024 edition 迁移在 macOS 上执行,未覆盖 cfg 平台专属代码):为 `env::set_var`/`remove_var` 补上 `unsafe` 块,平台 `extern` 块改为 `unsafe extern`,`#[no_mangle]` 改为 `#[unsafe(no_mangle)]`。v2026.08.30.2 未产出发布成品,其全部变更随本版本首次发布。
+
 ## [v2026.08.30.2] — 2026-08-30
 
 - **Agent 体验**:Agent Mode 支持 Cmd-Up 浏览历史提示;原生输入工具栏新增文件浏览器 chip;运行状态展示当前模型;用户查询显示可复制的时间戳;`create_file` 支持显式覆盖已有文件。
