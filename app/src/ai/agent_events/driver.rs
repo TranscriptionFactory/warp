@@ -14,11 +14,51 @@ pub(crate) const DEFAULT_AGENT_EVENT_RECONNECT_BACKOFF_STEPS: &[u64] = &[1, 2, 5
 pub(crate) const DEFAULT_AGENT_EVENT_PROACTIVE_RECONNECT: Duration = Duration::from_secs(14 * 60);
 pub(crate) const DEFAULT_AGENT_EVENT_FAILURES_BEFORE_ERROR_LOG: usize = 5;
 
+/// Wire-level filter selecting which run IDs an agent-event stream serves.
+///
+/// `RunIds` maps to the `?run_ids[]=` query parameter on the SSE endpoint
+/// and is used by child-only per-conversation streams and the dormant
+/// Claude wake listener. `AncestorRunId` maps to the `?ancestor_run_id=`
+/// shape: with `include_self=false` it streams events for every direct
+/// child of the supplied parent run (the shared-session viewer's pill bar),
+/// and with `include_self=true` it additionally streams the parent run's
+/// own events so an owner-side orchestrator can receive child lifecycle
+/// events plus its own inbox on one ordered stream.
+#[derive(Clone, Debug)]
+pub(crate) enum AgentEventFilter {
+    /// One stream per multiplexed set of run IDs. Matches today's
+    /// `?run_ids[]=` endpoint.
+    RunIds(Vec<String>),
+    /// Stream events for every direct child of the supplied parent run, and
+    /// (when `include_self` is true) the parent run itself. Matches the
+    /// `?ancestor_run_id=` endpoint.
+    AncestorRunId {
+        ancestor_run_id: String,
+        include_self: bool,
+    },
+}
+
+impl AgentEventFilter {
+    /// Returns a short debug label used in driver log lines so we don't have
+    /// to format the full `Vec<String>` payload on every retry.
+    pub(crate) fn log_label(&self) -> String {
+        match self {
+            AgentEventFilter::RunIds(ids) => format!("run_ids={ids:?}"),
+            AgentEventFilter::AncestorRunId {
+                ancestor_run_id,
+                include_self,
+            } => format!("ancestor_run_id={ancestor_run_id} include_self={include_self}"),
+        }
+    }
+}
+
 /// Configuration for the shared agent-event stream driver.
 #[derive(Clone, Debug)]
 pub(crate) struct AgentEventDriverConfig {
-    /// Run IDs whose events should be multiplexed into a single stream.
-    pub run_ids: Vec<String>,
+    /// Wire-level filter selecting which run IDs the stream serves. Either a
+    /// concrete multiplexed list of run IDs or an ancestor-scoped child set;
+    /// see [`AgentEventFilter`].
+    pub filter: AgentEventFilter,
     /// Last fully handled event sequence. Events at or below this cursor are
     /// ignored on reconnect so the consumer only sees new work.
     pub since_sequence: i64,
@@ -35,15 +75,22 @@ pub(crate) struct AgentEventDriverConfig {
 }
 
 impl AgentEventDriverConfig {
-    /// Build the production reconnecting configuration used by long-lived harness listeners.
-    pub(crate) fn retry_forever(run_ids: Vec<String>, since_sequence: i64) -> Self {
+    /// Build the production reconnecting configuration used by long-lived
+    /// orchestration and harness listeners, parameterised on the wire filter.
+    pub(crate) fn retry_forever(filter: AgentEventFilter, since_sequence: i64) -> Self {
         Self {
-            run_ids,
+            filter,
             since_sequence,
             reconnect_backoff_steps: DEFAULT_AGENT_EVENT_RECONNECT_BACKOFF_STEPS,
             proactive_reconnect_after: Some(DEFAULT_AGENT_EVENT_PROACTIVE_RECONNECT),
             failures_before_error_log: DEFAULT_AGENT_EVENT_FAILURES_BEFORE_ERROR_LOG,
         }
+    }
+
+    /// Convenience: build a `retry_forever` config from a concrete list of
+    /// run IDs. Lets existing call sites keep their current ergonomics.
+    pub(crate) fn retry_forever_run_ids(run_ids: Vec<String>, since_sequence: i64) -> Self {
+        Self::retry_forever(AgentEventFilter::RunIds(run_ids), since_sequence)
     }
 }
 
@@ -73,6 +120,27 @@ pub(crate) enum AgentEventDriverState {
     ProactiveReconnect,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AgentMessageEventMetadata {
+    pub sequence: i64,
+    pub message_id: String,
+    pub occurred_at: String,
+}
+
+impl AgentMessageEventMetadata {
+    pub(crate) fn from_event(event: &AgentRunEvent) -> Option<Self> {
+        if event.event_type != "new_message" {
+            return None;
+        }
+
+        Some(Self {
+            sequence: event.sequence,
+            message_id: event.ref_id.clone()?,
+            occurred_at: event.occurred_at.clone(),
+        })
+    }
+}
+
 /// Parsed items emitted by an [`AgentEventSource`].
 pub(crate) enum AgentEventSourceItem {
     Open,
@@ -89,15 +157,69 @@ cfg_if::cfg_if! {
     }
 }
 
-/// Opens a stream of parsed agent events for one or more run IDs.
+/// Opens a stream of parsed agent events for the supplied filter.
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 pub(crate) trait AgentEventSource: Send + Sync {
     async fn open_stream(
         &self,
-        run_ids: &[String],
+        filter: &AgentEventFilter,
         since_sequence: i64,
     ) -> Result<AgentEventSourceStream>;
+}
+
+/// [`AgentEventSource`] backed by [`ServerApi::stream_agent_events`].
+///
+/// Ported from warpdotdev 8ba89e110; in this fork `ServerApi` is a minimal
+/// local stand-in whose stream endpoint is disabled, so opening a stream
+/// through this source always errors until a local transport exists.
+pub(crate) struct ServerApiAgentEventSource {
+    server_api: Arc<crate::server::server_api::ServerApi>,
+}
+
+impl ServerApiAgentEventSource {
+    pub(crate) fn new(server_api: Arc<crate::server::server_api::ServerApi>) -> Self {
+        Self { server_api }
+    }
+}
+
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
+impl AgentEventSource for ServerApiAgentEventSource {
+    async fn open_stream(
+        &self,
+        filter: &AgentEventFilter,
+        since_sequence: i64,
+    ) -> Result<AgentEventSourceStream> {
+        let stream = self
+            .server_api
+            .stream_agent_events(filter, since_sequence)
+            .await?;
+
+        let stream = stream.filter_map(|event_result| async move {
+            match event_result {
+                Ok(reqwest_eventsource::Event::Open) => Some(Ok(AgentEventSourceItem::Open)),
+                Ok(reqwest_eventsource::Event::Message(message)) => {
+                    match serde_json::from_str::<AgentRunEvent>(&message.data) {
+                        Ok(event) => Some(Ok(AgentEventSourceItem::Event(event))),
+                        Err(err) => {
+                            log::warn!("Skipping malformed agent event from SSE stream: {err}");
+                            None
+                        }
+                    }
+                }
+                Err(err) => Some(Err(anyhow!("SSE stream error: {err:?}"))),
+            }
+        });
+
+        cfg_if::cfg_if! {
+            if #[cfg(target_family = "wasm")] {
+                Ok(stream.boxed_local())
+            } else {
+                Ok(stream.boxed())
+            }
+        }
+    }
 }
 
 /// 由 [`AgentEventStreamClient`] 提供底层流的 [`AgentEventSource`]。
@@ -116,9 +238,21 @@ impl AgentEventStreamClientEventSource {
 impl AgentEventSource for AgentEventStreamClientEventSource {
     async fn open_stream(
         &self,
-        run_ids: &[String],
+        filter: &AgentEventFilter,
         since_sequence: i64,
     ) -> Result<AgentEventSourceStream> {
+        let run_ids = match filter {
+            AgentEventFilter::RunIds(run_ids) => run_ids,
+            AgentEventFilter::AncestorRunId { .. } => {
+                // The local agent event stream client only understands run-id
+                // lists; ancestor-scoped family streams have no local
+                // transport yet.
+                return Err(anyhow!(
+                    "ancestor-scoped agent event streams are not supported by the local \
+                     agent event stream client"
+                ));
+            }
+        };
         let stream = self
             .client
             .stream_agent_events(run_ids, since_sequence)
@@ -186,7 +320,7 @@ where
     let mut has_connected_once = false;
 
     loop {
-        let mut stream = match source.open_stream(&config.run_ids, since_sequence).await {
+        let mut stream = match source.open_stream(&config.filter, since_sequence).await {
             Ok(stream) => {
                 failures = 0;
                 has_connected_once = true;
@@ -197,7 +331,7 @@ where
                 failures += 1;
                 let backoff = agent_event_backoff(failures, config.reconnect_backoff_steps);
                 log_stream_failure(
-                    &config.run_ids,
+                    &config.filter,
                     failures,
                     backoff,
                     &err,
@@ -247,7 +381,7 @@ where
                 }
                 NextDriverItem::StreamItem(Some(Ok(AgentEventSourceItem::Open))) => {
                     failures = 0;
-                    log::info!("Agent event stream opened for {:?}", config.run_ids);
+                    log::info!("Agent event stream opened for {}", config.filter.log_label());
                 }
                 NextDriverItem::StreamItem(Some(Ok(AgentEventSourceItem::Event(event)))) => {
                     failures = 0;
@@ -273,7 +407,7 @@ where
                     failures += 1;
                     let backoff = agent_event_backoff(failures, config.reconnect_backoff_steps);
                     log_stream_failure(
-                        &config.run_ids,
+                        &config.filter,
                         failures,
                         backoff,
                         &err,
@@ -295,8 +429,8 @@ where
                     failures += 1;
                     let backoff = agent_event_backoff(failures, config.reconnect_backoff_steps);
                     log::warn!(
-                        "Agent event stream closed for {:?}, reconnecting in {backoff:?}",
-                        config.run_ids
+                        "Agent event stream closed for {}, reconnecting in {backoff:?}",
+                        config.filter.log_label()
                     );
                     notify_driver_state(
                         consumer,
@@ -330,7 +464,7 @@ async fn notify_driver_state<C: AgentEventConsumer>(
 }
 
 fn log_stream_failure(
-    run_ids: &[String],
+    filter: &AgentEventFilter,
     failures: usize,
     backoff: Duration,
     err: &anyhow::Error,
@@ -338,13 +472,13 @@ fn log_stream_failure(
 ) {
     if agent_event_failures_exceeded_threshold(failures, failures_before_error_log) {
         log::error!(
-            "Agent event stream failed {failures} consecutive times for {:?}, retrying in {backoff:?}: {err:#}",
-            run_ids
+            "Agent event stream failed {failures} consecutive times for {}, retrying in {backoff:?}: {err:#}",
+            filter.log_label()
         );
     } else {
         log::warn!(
-            "Agent event stream failed for {:?}, retrying in {backoff:?}: {err:#}",
-            run_ids
+            "Agent event stream failed for {}, retrying in {backoff:?}: {err:#}",
+            filter.log_label()
         );
     }
 }

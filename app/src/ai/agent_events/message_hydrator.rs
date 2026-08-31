@@ -1,13 +1,35 @@
+use std::sync::Arc;
+
 use crate::ai::agent::ReceivedMessageInput;
 use crate::ai::agent_events::AgentRunEvent;
+use crate::ai::ambient_agents::AmbientAgentTaskId;
+use crate::server::server_api::ai::AIClient;
+use crate::server::server_api::ServerApi;
 
 /// Zap 本地构建不再从云端 mailbox 拉取消息正文或发送 delivered 回执。
 /// 该类型保留本地 harness 桥接调用面的无副作用兼容语义。
+///
+/// The constructor surface mirrors upstream (warpdotdev 8ba89e110) so the
+/// orchestration event streamer can be ported faithfully: the supplied
+/// clients are ignored because hydration is a no-op in this fork.
 #[derive(Clone)]
 pub(crate) struct MessageHydrator;
 
 impl MessageHydrator {
-    pub(crate) fn new() -> Self {
+    /// Local no-op hydrator with no client. Used by harness bridges.
+    pub(crate) fn disabled() -> Self {
+        Self
+    }
+
+    /// Upstream shape: hydrator backed by an [`AIClient`]. The client is
+    /// unused in this fork.
+    pub(crate) fn new(_ai_client: Arc<dyn AIClient>) -> Self {
+        Self
+    }
+
+    /// Upstream shape: hydrator scoped to one task via [`ServerApi`]. Both
+    /// arguments are unused in this fork.
+    pub(crate) fn for_task(_server_api: Arc<ServerApi>, _task_id: AmbientAgentTaskId) -> Self {
         Self
     }
 

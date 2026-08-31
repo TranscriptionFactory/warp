@@ -2659,6 +2659,12 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::TrimTrailingBlankLines,
         #[cfg(feature = "configurable_context_window")]
         FeatureFlag::ConfigurableContextWindow,
+        #[cfg(feature = "orchestration_launch_modal")]
+        FeatureFlag::OrchestrationLaunchModal,
+        #[cfg(feature = "local_claude_codex_child_harnesses")]
+        FeatureFlag::LocalClaudeCodexChildHarnesses,
+        #[cfg(feature = "wait_for_events_parent_registration")]
+        FeatureFlag::WaitForEventsParentRegistration,
     ];
     flags.extend(extra_flags.iter().copied());
 

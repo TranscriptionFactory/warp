@@ -839,6 +839,9 @@ git_operations_in_code_review = []
 hoa_remote_control = []
 codex_notifications = []
 configurable_context_window = []
+orchestration_launch_modal = []
+local_claude_codex_child_harnesses = []
+wait_for_events_parent_registration = []
 
 [package.metadata.bundle.bin.openwarp-oss]
 category = "public.app-category.developer-tools"

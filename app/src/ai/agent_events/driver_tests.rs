@@ -28,7 +28,7 @@ impl FakeAgentEventSource {
 impl AgentEventSource for FakeAgentEventSource {
     async fn open_stream(
         &self,
-        _run_ids: &[String],
+        _filter: &AgentEventFilter,
         _since_sequence: i64,
     ) -> anyhow::Result<BoxStream<'static, anyhow::Result<AgentEventSourceItem>>> {
         let response = self
@@ -136,7 +136,7 @@ async fn driver_skips_duplicate_sequences_and_persists_new_cursor() {
     };
 
     let config = AgentEventDriverConfig {
-        run_ids: vec!["child-run".to_string()],
+        filter: AgentEventFilter::RunIds(vec!["child-run".to_string()]),
         since_sequence: 2,
         reconnect_backoff_steps: DEFAULT_AGENT_EVENT_RECONNECT_BACKOFF_STEPS,
         proactive_reconnect_after: None,
@@ -181,7 +181,7 @@ async fn driver_resets_failures_after_successful_event_delivery() {
     };
 
     let config = AgentEventDriverConfig {
-        run_ids: vec!["child-run".to_string()],
+        filter: AgentEventFilter::RunIds(vec!["child-run".to_string()]),
         since_sequence: 0,
         reconnect_backoff_steps: ZERO_BACKOFF_STEPS,
         proactive_reconnect_after: None,
@@ -225,7 +225,7 @@ async fn driver_ignores_persist_cursor_errors() {
     };
 
     let config = AgentEventDriverConfig {
-        run_ids: vec!["child-run".to_string()],
+        filter: AgentEventFilter::RunIds(vec!["child-run".to_string()]),
         since_sequence: 0,
         reconnect_backoff_steps: ZERO_BACKOFF_STEPS,
         proactive_reconnect_after: None,
@@ -258,7 +258,7 @@ async fn driver_ignores_driver_state_errors() {
     };
 
     let config = AgentEventDriverConfig {
-        run_ids: vec!["child-run".to_string()],
+        filter: AgentEventFilter::RunIds(vec!["child-run".to_string()]),
         since_sequence: 0,
         reconnect_backoff_steps: ZERO_BACKOFF_STEPS,
         proactive_reconnect_after: None,
@@ -293,7 +293,7 @@ async fn driver_retries_initial_connection_until_stream_opens() {
     };
 
     let config = AgentEventDriverConfig {
-        run_ids: vec!["child-run".to_string()],
+        filter: AgentEventFilter::RunIds(vec!["child-run".to_string()]),
         since_sequence: 0,
         reconnect_backoff_steps: ZERO_BACKOFF_STEPS,
         proactive_reconnect_after: None,

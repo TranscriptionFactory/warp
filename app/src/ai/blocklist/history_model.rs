@@ -348,6 +348,7 @@ impl BlocklistAIHistoryModel {
         terminal_view_id: EntityId,
         name: String,
         parent_conversation_id: AIConversationId,
+        orchestration_harness: Option<warp_cli::agent::Harness>,
         ctx: &mut ModelContext<Self>,
     ) -> AIConversationId {
         let parent_agent_id = self
@@ -371,6 +372,9 @@ impl BlocklistAIHistoryModel {
                 conversation.set_parent_agent_id(id);
             }
             conversation.set_agent_name(name);
+            if let Some(harness) = orchestration_harness {
+                conversation.set_orchestration_harness(harness);
+            }
         }
         self.set_parent_for_conversation(conversation_id, parent_conversation_id);
         conversation_id
@@ -910,6 +914,87 @@ impl BlocklistAIHistoryModel {
     /// The identifier may be a server conversation token (v1) or a run_id (v2).
     pub fn conversation_id_for_agent_id(&self, agent_id: &str) -> Option<AIConversationId> {
         self.agent_id_to_conversation_id.get(agent_id).copied()
+    }
+
+    /// Single canonical parent resolution: the explicit local parent
+    /// conversation id wins, otherwise the parent agent id resolved through
+    /// [`Self::conversation_id_for_agent_id`]. Child indexing, the
+    /// orchestration root walk, breadcrumbs, and UI parent lookups all
+    /// resolve through here so they cannot disagree.
+    fn resolved_parent_conversation_id_from_refs(
+        &self,
+        parent_conversation_id: Option<AIConversationId>,
+        parent_agent_id: Option<&str>,
+    ) -> Option<AIConversationId> {
+        parent_conversation_id.or_else(|| {
+            parent_agent_id.and_then(|agent_id| self.conversation_id_for_agent_id(agent_id))
+        })
+    }
+
+    pub fn resolved_parent_conversation_id_for_conversation(
+        &self,
+        conversation: &AIConversation,
+    ) -> Option<AIConversationId> {
+        self.resolved_parent_conversation_id_from_refs(
+            conversation.parent_conversation_id(),
+            conversation.parent_agent_id(),
+        )
+    }
+
+    pub fn mark_conversation_as_remote_child(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) else {
+            return;
+        };
+        conversation.mark_as_remote_child();
+        conversation.write_updated_conversation_state(ctx);
+    }
+
+    /// Updates the persisted `last_event_sequence` for a conversation and
+    /// writes the updated conversation state to SQLite. Used by the
+    /// orchestration event streamer after draining an event batch to keep the
+    /// cursor durable across restarts.
+    pub fn update_event_sequence(
+        &mut self,
+        conversation_id: AIConversationId,
+        sequence: i64,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) else {
+            return;
+        };
+        conversation.set_last_event_sequence(sequence);
+        conversation.write_updated_conversation_state(ctx);
+    }
+
+    /// Sets the persisted pin state for a conversation and writes
+    /// the change to SQLite. Used by the orchestration pin singleton to
+    /// keep the per-conversation source of truth in sync with toggles.
+    pub fn set_conversation_pinned(
+        &mut self,
+        conversation_id: AIConversationId,
+        pinned: bool,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) else {
+            log::warn!(
+                "set_conversation_pinned called for conversation {conversation_id:?} that is \
+                 not loaded; pin state change to {pinned} will not be persisted."
+            );
+            return;
+        };
+        if conversation.is_pinned() == pinned {
+            return;
+        }
+        conversation.set_pinned(pinned);
+        conversation.write_updated_conversation_state(ctx);
+        ctx.emit(BlocklistAIHistoryEvent::UpdatedConversationMetadata {
+            terminal_view_id: self.terminal_view_id_for_conversation(&conversation_id),
+            conversation_id,
+        });
     }
 
     /// Creates a new conversation and transfers relevant exchanges from
@@ -1465,6 +1550,10 @@ impl BlocklistAIHistoryModel {
             .conversations_by_id
             .get(&conversation_id)
             .and_then(|c| c.title().map(|t| t.to_string()));
+        let run_id = self
+            .conversations_by_id
+            .get(&conversation_id)
+            .and_then(|c| c.run_id());
 
         self.remove_conversation_from_memory(conversation_id, terminal_view_id, ctx);
 
@@ -1500,6 +1589,7 @@ impl BlocklistAIHistoryModel {
             terminal_view_id,
             conversation_id,
             conversation_title,
+            run_id,
         });
     }
 
@@ -1558,9 +1648,14 @@ impl BlocklistAIHistoryModel {
             {
                 vec.retain(|&id| id != conversation_id);
             }
+            let run_id = self
+                .conversations_by_id
+                .get(&conversation_id)
+                .and_then(|c| c.run_id());
             ctx.emit(BlocklistAIHistoryEvent::RemoveConversation {
                 terminal_view_id,
                 conversation_id,
+                run_id,
             });
         }
     }
@@ -2046,6 +2141,10 @@ pub enum BlocklistAIHistoryEvent {
     RemoveConversation {
         terminal_view_id: EntityId,
         conversation_id: AIConversationId,
+        /// Server-assigned run id of the conversation, when known. Lets the
+        /// orchestration event streamer tombstone the run so late server
+        /// events cannot resurrect it.
+        run_id: Option<String>,
     },
 
     /// This is emitted when a user explicitly deletes an existing conversation.
@@ -2056,6 +2155,10 @@ pub enum BlocklistAIHistoryEvent {
         terminal_view_id: Option<EntityId>,
         conversation_id: AIConversationId,
         conversation_title: Option<String>,
+        /// Server-assigned run id of the conversation, when known. Lets the
+        /// orchestration event streamer tombstone the run so late server
+        /// events cannot resurrect it.
+        run_id: Option<String>,
     },
 
     /// Emitted when conversations are restored in a terminal view.

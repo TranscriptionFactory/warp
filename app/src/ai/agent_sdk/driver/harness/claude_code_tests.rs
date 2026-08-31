@@ -123,7 +123,7 @@ async fn prepare_parent_bridge_hook_output_moves_selected_messages_to_surfaced_d
     )
     .unwrap();
 
-    let hydrator = MessageHydrator::new();
+    let hydrator = MessageHydrator::disabled();
 
     let max_context_chars = parent_bridge_char_count(MESSAGE_BRIDGE_CONTEXT_PREAMBLE)
         + parent_bridge_char_count(&render_parent_bridge_message_block(&first));
@@ -173,7 +173,7 @@ async fn acknowledge_parent_bridge_hook_output_marks_messages_delivered_and_clea
     .unwrap();
     fs::write(parent_bridge_hook_output_ack_file(&state_dir), "").unwrap();
 
-    let hydrator = MessageHydrator::new();
+    let hydrator = MessageHydrator::disabled();
 
     acknowledge_parent_bridge_hook_output(&hydrator, &state_dir)
         .await
@@ -198,7 +198,7 @@ async fn prepare_parent_bridge_hook_output_reuses_surfaced_records_without_rehyd
     );
     write_surfaced_parent_bridge_message(&state_dir, &record);
 
-    let hydrator = MessageHydrator::new();
+    let hydrator = MessageHydrator::disabled();
 
     let max_context_chars = parent_bridge_char_count(MESSAGE_BRIDGE_CONTEXT_PREAMBLE)
         + parent_bridge_char_count(&render_parent_bridge_message_block(&record));
@@ -225,7 +225,7 @@ async fn prepare_parent_bridge_hook_output_truncates_single_large_message() {
         &sample_parent_bridge_message(42, "msg-123", "Please pivot", &long_body),
     )
     .unwrap();
-    let hydrator = MessageHydrator::new();
+    let hydrator = MessageHydrator::disabled();
 
     let max_context_chars = parent_bridge_char_count(MESSAGE_BRIDGE_CONTEXT_PREAMBLE) + 48;
     prepare_parent_bridge_hook_output(&hydrator, &state_dir, max_context_chars)
@@ -258,7 +258,7 @@ async fn acknowledge_parent_bridge_hook_output_ignores_missing_ack_marker() {
     );
     write_surfaced_parent_bridge_message(&state_dir, &record);
 
-    let hydrator = MessageHydrator::new();
+    let hydrator = MessageHydrator::disabled();
 
     acknowledge_parent_bridge_hook_output(&hydrator, &state_dir)
         .await

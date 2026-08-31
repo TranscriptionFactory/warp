@@ -696,6 +696,31 @@ pub enum FeatureFlag {
     /// snapshots, giving the agent evidence that a silent command is still
     /// doing work before it decides to cancel.
     LrcActivitySignal,
+
+    /// Enables the orchestration launch modal announcing multi-agent orchestration features.
+    OrchestrationLaunchModal,
+
+    /// Re-enables local Claude Code and Codex child harnesses in orchestration
+    /// flows while the default behavior temporarily keeps them disabled.
+    LocalClaudeCodexChildHarnesses,
+
+    /// On `wait_for_events`, confirms parent status against the server and
+    /// registers an orchestrator for the owner-side ancestor stream so it
+    /// receives events for children created out-of-band (Oz CLI / web API).
+    WaitForEventsParentRegistration,
+
+    /// Gates the client-side multi-level orchestration surfaces: child
+    /// conversations auto-executing their own `run_agents` calls and the
+    /// confirmation-card disclosure that launched agents may start
+    /// children of their own. When disabled, a child's `run_agents` call
+    /// fails gracefully instead of presenting a card in a hidden pane.
+    MultiLevelOrchestration,
+
+    /// Gates the unified orchestration child-tracking stack: a single
+    /// `OrchestrationChildTracker` as the sole entry point for child state,
+    /// one `include_self` ancestor SSE per parent family, and a single
+    /// `is_remote_child` placeholder flavor for both owner and viewer.
+    OrchestrationUnifiedStack,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
@@ -757,6 +782,9 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::ServerFileBrowser,
     FeatureFlag::LrcActivitySignal,
     FeatureFlag::WarpingModelName,
+    FeatureFlag::WaitForEventsParentRegistration,
+    FeatureFlag::MultiLevelOrchestration,
+    FeatureFlag::OrchestrationUnifiedStack,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Zap).
@@ -785,7 +813,7 @@ pub const RELEASE_FLAGS: &[FeatureFlag] = &[
 ];
 
 /// Flags that we want to allow to switch at runtime (assuming RuntimeFeatureFlags is set)
-pub const RUNTIME_FEATURE_FLAGS: &[FeatureFlag] = &[];
+pub const RUNTIME_FEATURE_FLAGS: &[FeatureFlag] = &[FeatureFlag::LocalClaudeCodexChildHarnesses];
 
 impl FeatureFlag {
     pub fn is_enabled(&self) -> bool {

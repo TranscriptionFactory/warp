@@ -226,6 +226,10 @@ impl View for AgentViewEntryBlock {
             ConversationStatus::InProgress => {
                 with_opacity(appearance.theme().ansi_fg_magenta(), 25)
             }
+            // Recovery pending / yielded: keep the in-progress treatment.
+            ConversationStatus::TransientError | ConversationStatus::WaitingForEvents => {
+                with_opacity(appearance.theme().ansi_fg_magenta(), 25)
+            }
             ConversationStatus::Success => with_opacity(appearance.theme().ansi_fg_green(), 25),
             ConversationStatus::Error => with_opacity(appearance.theme().ansi_fg_red(), 25),
             ConversationStatus::Cancelled => {
