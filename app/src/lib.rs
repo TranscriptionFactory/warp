@@ -537,7 +537,8 @@ pub fn run() -> Result<()> {
         && std::env::var_os("LC_ALL").is_none()
         && std::env::var_os("LC_CTYPE").is_none()
     {
-        std::env::set_var("LANG", "en_US.UTF-8");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("LANG", "en_US.UTF-8") };
     }
 
     // Perform any necessary platform-specific initialization.
