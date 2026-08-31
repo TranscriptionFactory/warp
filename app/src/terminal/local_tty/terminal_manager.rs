@@ -45,6 +45,7 @@ use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::shared_session::SharedSessionStatus;
 #[cfg(unix)]
 use crate::terminal::view::Event as TerminalViewEvent;
+use crate::terminal::model::terminal_model::ShellProcessInfo;
 use crate::terminal::writeable_pty::pty_controller::{EventLoopSendError, EventLoopSender};
 use crate::terminal::writeable_pty::terminal_manager_util::{
     init_pty_controller_model, init_remote_server_controller, wire_up_pty_controller_with_view,
@@ -508,10 +509,15 @@ impl TerminalManager {
             }
         };
 
-        #[cfg(feature = "integration_tests")]
         let pid = pty.get_pid();
         #[cfg(unix)]
         let fd = pty.get_fd();
+
+        model.lock().set_shell_process_info(ShellProcessInfo {
+            pid,
+            #[cfg(unix)]
+            pty_leader_fd: Some(fd),
+        });
 
         // Create the channel above and pass the receving side to the event loop.
         let event_loop_handle = Self::start_pty_event_loop(

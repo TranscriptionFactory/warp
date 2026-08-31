@@ -13,6 +13,7 @@ pub mod status_bar;
 pub mod toggleable_items;
 pub mod view_impl;
 
+use chrono::{DateTime, Local};
 pub use pending_user_query_block::{PendingUserQueryBlock, PendingUserQueryBlockEvent};
 
 #[cfg(feature = "agent_mode_debug")]
@@ -167,6 +168,7 @@ use crate::notebooks::editor::view::{EditorViewEvent, RichTextEditorView};
 use crate::settings_view::SettingsSection;
 use crate::terminal::model::session::active_session::{ActiveSession, ActiveSessionEvent};
 use crate::terminal::{ShellLaunchData, TerminalView};
+use crate::util::time_format::format_message_timestamp;
 use crate::view_components::DismissibleToast;
 use crate::workspace::{ForkAIConversationParams, ForkedConversationDestination, WorkspaceAction};
 use crate::{report_error, report_if_error, ToastStack};
@@ -378,6 +380,7 @@ pub(super) struct AIBlockStateHandles {
 
     /// Mouse state handle for the overflow menu button
     overflow_menu_handle: MouseStateHandle,
+    query_timestamp_tooltip_handle: MouseStateHandle,
 
     menu_accept_button_handle: MouseStateHandle,
     menu_reject_button_handle: MouseStateHandle,
@@ -815,6 +818,11 @@ pub struct AIBlock {
     /// requested actions and requested commands are completed or cancelled.
     finish_reason: Option<FinishReason>,
 
+    /// `true` while agent-view Cmd-Up/Cmd-Down transcript navigation targets this block's user
+    /// query. Renders a navigation ring around the query row so the stop stays visibly
+    /// identifiable even when the viewport doesn't move.
+    is_agent_transcript_navigation_target: bool,
+
     directory_context: DirectoryContext,
     view_id: EntityId,
 
@@ -1229,6 +1237,7 @@ impl AIBlock {
             num_attached_context_blocks,
             has_attached_context_selected_text,
             finish_reason: None,
+            is_agent_transcript_navigation_target: false,
             directory_context: DirectoryContext { pwd, home_dir },
             view_id: ctx.view_id(),
             detected_links_state,
@@ -3676,12 +3685,33 @@ impl AIBlock {
         self.model.status(app)
     }
 
+    pub fn query_sent_at(&self, app: &AppContext) -> Option<DateTime<Local>> {
+        self.model.query_sent_at(app)
+    }
+
     /// Returns `true` if this AI block contains user input.
     pub fn has_user_input(&self, app: &AppContext) -> bool {
         self.model
             .inputs_to_render(app)
             .iter()
             .any(|input| input.user_query().is_some())
+    }
+
+    /// `true` while agent-view transcript navigation targets this block's user query.
+    pub fn is_agent_transcript_navigation_target(&self) -> bool {
+        self.is_agent_transcript_navigation_target
+    }
+
+    /// Flags or unflags this block as the transcript navigation target.
+    pub fn set_agent_transcript_navigation_target(
+        &mut self,
+        is_target: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if self.is_agent_transcript_navigation_target != is_target {
+            self.is_agent_transcript_navigation_target = is_target;
+            ctx.notify();
+        }
     }
 
     /// `true` if the AI block is "finished".
@@ -5318,6 +5348,7 @@ pub enum AIBlockAction {
     /// Copy the content from the previous user query.
     /// Note that this block may not have the user query.
     CopyQuery,
+    CopyTimestamp,
     /// Copy all AI output from the previous user query to the next user query.
     /// Note that this contains more than just this block, since from the user perspective everything after the user query appears like one block.
     CopyOutput,
@@ -5688,6 +5719,14 @@ impl TypedActionView for AIBlock {
                 let prompt_text = self.get_preceding_user_query(ctx);
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(prompt_text));
+            }
+            AIBlockAction::CopyTimestamp => {
+                if let Some(timestamp) = self.query_sent_at(ctx) {
+                    ctx.clipboard()
+                        .write(ClipboardContent::plain_text(format_message_timestamp(
+                            &timestamp,
+                        )));
+                }
             }
             AIBlockAction::CopyOutput => {
                 // Copy all AI output from preceding user query until the next user query

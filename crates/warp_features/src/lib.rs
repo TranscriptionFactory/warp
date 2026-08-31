@@ -306,6 +306,11 @@ pub enum FeatureFlag {
     /// Enables fallback model load output messaging in the warping indicator.
     FallbackModelLoadOutputMessaging,
 
+    /// Names the model doing the work in the warping indicator (e.g. "Warping with
+    /// Claude Sonnet 4.5.") once the server reports which model a response is
+    /// running on, rather than only naming it when the model is a fallback.
+    WarpingModelName,
+
     /// Enables close button on left side of tabs
     TabCloseButtonOnLeft,
 
@@ -686,6 +691,11 @@ pub enum FeatureFlag {
     /// 关闭时,UI 入口隐藏,`Client::new()` 退回 reqwest 默认(读环境变量)。
     /// 见 Issue #72。
     HttpProxySettings,
+
+    /// Attaches process-tree liveness signals to long-running command
+    /// snapshots, giving the agent evidence that a silent command is still
+    /// doing work before it decides to cancel.
+    LrcActivitySignal,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
@@ -745,6 +755,8 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::LocalDockerSandbox,
     FeatureFlag::VerticalTabsSummaryMode,
     FeatureFlag::ServerFileBrowser,
+    FeatureFlag::LrcActivitySignal,
+    FeatureFlag::WarpingModelName,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Zap).

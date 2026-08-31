@@ -501,6 +501,7 @@ pub(crate) fn convert_tool_call_result_to_input(
                     grid_contents: snapshot.output.clone(),
                     cursor: snapshot.cursor.clone(),
                     is_alt_screen_active: snapshot.is_alt_screen_active,
+                    activity: None,
                 },
                 Some(api::run_shell_command_result::Result::PermissionDenied(
                     api::PermissionDenied { .. },
@@ -530,6 +531,7 @@ pub(crate) fn convert_tool_call_result_to_input(
                         cursor: snapshot.cursor.clone(),
                         is_alt_screen_active: snapshot.is_alt_screen_active,
                         is_preempted: snapshot.is_preempted,
+                        activity: None,
                     },
                     Some(api::write_to_long_running_shell_command_result::Result::CommandFinished(
                         finished,
@@ -1090,6 +1092,7 @@ pub(crate) fn convert_tool_call_result_to_input(
                     cursor: snapshot.cursor.clone(),
                     is_alt_screen_active: snapshot.is_alt_screen_active,
                     is_preempted: snapshot.is_preempted,
+                    activity: None,
                 },
                 Some(api::read_shell_command_output_result::Result::Error(
                     api::ShellCommandError {
@@ -1120,6 +1123,7 @@ pub(crate) fn convert_tool_call_result_to_input(
                     cursor: snapshot.cursor.clone(),
                     is_alt_screen_active: snapshot.is_alt_screen_active,
                     is_preempted: snapshot.is_preempted,
+                    activity: None,
                 },
                 Some(
                     api::transfer_shell_command_control_to_user_result::Result::CommandFinished(finished),

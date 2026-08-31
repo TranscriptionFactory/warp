@@ -2280,6 +2280,7 @@ menu-ai-block-copy-command = コマンドをコピー
 menu-ai-block-copy-git-branch = git ブランチをコピー
 menu-ai-block-save-as-prompt = プロンプトとして保存
 menu-ai-block-copy-conversation-text = 会話テキストをコピー
+menu-ai-block-copy-timestamp = タイムスタンプをコピー
 menu-ai-block-fork-from-here = ここからフォーク
 menu-ai-block-rewind-to-before-here = ここの直前まで巻き戻し
 menu-ai-block-fork-from-last-query = 直前のクエリからフォーク

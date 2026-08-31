@@ -2302,6 +2302,7 @@ menu-ai-block-copy-command = 复制命令
 menu-ai-block-copy-git-branch = 复制 git 分支
 menu-ai-block-save-as-prompt = 另存为提示词
 menu-ai-block-copy-conversation-text = 复制对话文本
+menu-ai-block-copy-timestamp = 复制时间戳
 menu-ai-block-fork-from-here = 从此处分叉
 menu-ai-block-rewind-to-before-here = 回退到此处之前
 menu-ai-block-fork-from-last-query = 从上一次提问分叉

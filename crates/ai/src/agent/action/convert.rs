@@ -116,6 +116,9 @@ impl From<api::message::tool_call::ApplyFileDiffs> for AIAgentActionType {
             .map(|new_file| FileEdit::Create {
                 file: new_file.file_path.none_if_default(),
                 content: new_file.content.none_if_default(),
+                // Our pinned warp-proto-apis rev has no `allow_overwrite` on `NewFile`
+                // yet, so requests arriving over the wire cannot carry the flag.
+                allow_overwrite: false,
             });
 
         AIAgentActionType::RequestFileEdits {
