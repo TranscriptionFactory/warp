@@ -66,7 +66,8 @@ use crate::{
     CurrentRenderWindowGuard, Effect, Element, Entity, EntityId, Event, GetSingletonModelHandle,
     ModelAsRef, ModelContext, ModelHandle, NextNewWindowsHasThisWindowsBoundsUponClose, Presenter,
     ReadModel, ReadView, SingletonEntity, SpawnedFuture, TaskId, TypedActionView, UpdateModel,
-    UpdateView, View, ViewAsRef, ViewContext, ViewHandle, WindowId, WindowInvalidation,
+    UpdateView, View, ViewAsRef, ViewContext, ViewHandle, ViewUpdateError, WindowId,
+    WindowInvalidation,
 };
 
 use super::{
@@ -475,6 +476,18 @@ impl UpdateView for App {
         F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
     {
         self.as_mut().update_view(handle, update)
+    }
+
+    fn try_update_view<T, F, S>(
+        &mut self,
+        handle: &ViewHandle<T>,
+        update: F,
+    ) -> Result<S, ViewUpdateError>
+    where
+        T: View,
+        F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
+    {
+        self.as_mut().try_update_view(handle, update)
     }
 }
 
@@ -3296,6 +3309,11 @@ impl AppContext {
             .handled
     }
 
+    #[cfg(any(test, feature = "test-util"))]
+    pub fn simulate_window_closed(&mut self, window_id: WindowId) {
+        let _ = self.handle_window_closed(window_id);
+    }
+
     fn handle_window_event(
         &mut self,
         mut event: Event,
@@ -4504,37 +4522,64 @@ impl UpdateView for AppContext {
         T: View,
         F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
     {
-        self.pending_flushes += 1;
+        match self.try_update_view(handle, update) {
+            Ok(result) => result,
+            Err(err) => {
+                // Recompute the diagnostic context only on the panic path, so the
+                // common case stays a single window lookup.
+                let view_id = handle.id();
+                let view_type = std::any::type_name::<T>();
+                let resolved = self.resolve_view_window(view_id, handle.creation_window_id());
+                match err {
+                    ViewUpdateError::CircularUpdate => panic!(
+                        "Circular view update: {}",
+                        self.describe_missing_view(view_id, view_type, resolved)
+                    ),
+                    ViewUpdateError::WindowClosed => panic!(
+                        "Window does not exist: view {view_type} ({view_id:?}) resolved to window \
+                         {:?}{}",
+                        resolved.window_id(),
+                        match resolved {
+                            ViewWindow::Fallback(_) =>
+                                ", its creation window, because the view has no window mapping",
+                            ViewWindow::Mapped(_) => "",
+                        }
+                    ),
+                }
+            }
+        }
+    }
+
+    fn try_update_view<T, F, S>(
+        &mut self,
+        handle: &ViewHandle<T>,
+        update: F,
+    ) -> Result<S, ViewUpdateError>
+    where
+        T: View,
+        F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
+    {
         let view_id = handle.id();
-        let view_type = std::any::type_name::<T>();
         let resolved = self.resolve_view_window(view_id, handle.creation_window_id());
         let window_id = resolved.window_id();
         if let ViewWindow::Fallback(creation_window_id) = resolved {
-            self.warn_view_window_fallback(view_id, view_type, creation_window_id);
+            self.warn_view_window_fallback(view_id, std::any::type_name::<T>(), creation_window_id);
         }
 
         // Take the view out in its own statement so the borrow of `self.windows`
-        // ends before we build a panic message from the rest of `self`.
+        // ends before the caller builds a message from the rest of `self`.
         let removed = self
             .windows
             .get_mut(&window_id)
             .map(|window| window.views.remove(&view_id));
         let mut view = match removed {
             Some(Some(view)) => view,
-            Some(None) => panic!(
-                "Circular view update: {}",
-                self.describe_missing_view(view_id, view_type, resolved)
-            ),
-            None => panic!(
-                "Window does not exist: view {view_type} ({view_id:?}) resolved to window \
-                 {window_id:?}{}",
-                match resolved {
-                    ViewWindow::Fallback(_) =>
-                        ", its creation window, because the view has no window mapping",
-                    ViewWindow::Mapped(_) => "",
-                }
-            ),
+            Some(None) => return Err(ViewUpdateError::CircularUpdate),
+            None => return Err(ViewUpdateError::WindowClosed),
         };
+        // Only count a flush once the view is actually checked out, so a failed
+        // checkout cannot leave `pending_flushes` permanently raised.
+        self.pending_flushes += 1;
 
         let mut ctx = ViewContext::new(self, window_id, view_id);
         let result = update(
@@ -4547,7 +4592,7 @@ impl UpdateView for AppContext {
             window.views.insert(view_id, view);
         }
         self.flush_effects();
-        result
+        Ok(result)
     }
 }
 
