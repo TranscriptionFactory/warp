@@ -28,7 +28,7 @@ use warpui::{r#async::SpawnedFutureHandle, ModelContext};
 use crate::code_review::diff_size_limits::{DiffSize, MAX_DIFF_SIZE};
 use crate::features::FeatureFlag;
 #[cfg(feature = "local_fs")]
-use crate::util::git::get_pr_for_branch;
+use crate::util::git::{get_pr_for_branch, probe_remote_git_operation_blocked};
 use crate::util::git::{
     detect_current_branch, detect_main_branch, get_unpushed_commits, Commit, GitExecTarget, PrInfo,
 };
@@ -350,6 +350,15 @@ struct DiffMetadata {
     unpushed_commits: Vec<Commit>,
     upstream_ref: Option<String>,
     pr_info: Option<PrInfo>,
+    /// Host whose `gh` PR lookup failed (e.g. `user@host`), if the last lookup
+    /// errored. Distinguishes "no PR for this branch" (`None` here and no
+    /// `pr_info`) from "could not ask GitHub".
+    pr_lookup_failed_on: Option<String>,
+    /// Whether an in-progress git operation (or a stale `index.lock`) blocks
+    /// writes. Local targets evaluate this synchronously off the filesystem;
+    /// remote targets cannot, so one shell probe runs per metadata refresh and
+    /// the result is cached here.
+    git_operation_blocked: bool,
 }
 
 #[derive(Default, Debug)]
@@ -588,10 +597,29 @@ impl DiffStateModel {
             .and_then(|metadata| metadata.pr_info.as_ref())
     }
 
+    /// The host whose `gh` PR lookup failed most recently (e.g. `user@host`),
+    /// or `None` if the last lookup either succeeded or found no PR. Lets the
+    /// UI distinguish "no PR for this branch" from "could not ask GitHub".
+    pub fn pr_lookup_failed_on(&self) -> Option<&str> {
+        self.metadata
+            .as_ref()
+            .and_then(|metadata| metadata.pr_lookup_failed_on.as_deref())
+    }
+
     /// Checks if git operations like stash or reset would be blocked due to repository state.
     /// This performs quick file existence checks to detect if git is in the middle of an operation.
+    ///
+    /// Remote targets have no local working copy to stat, so they report the
+    /// result of the probe cached by the last metadata refresh
+    /// (`load_metadata_for_repo` → `git_operation_blocked`).
     #[cfg(feature = "local_fs")]
     pub fn is_git_operation_blocked(&self, app: &AppContext) -> bool {
+        if self.remote_target.is_some() {
+            return self
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.git_operation_blocked);
+        }
         let Some(repo) = &self.repository else {
             return false;
         };
@@ -1114,6 +1142,7 @@ impl DiffStateModel {
         &mut self,
         client: Arc<RemoteServerClient>,
         session_id: SessionId,
+        host: String,
         repo_path: String,
         ctx: &mut ModelContext<Self>,
     ) {
@@ -1141,6 +1170,7 @@ impl DiffStateModel {
             client,
             session_id,
             repo_path,
+            host,
         };
         self.remote_target = Some(target.clone());
         ctx.emit(DiffStateModelEvent::RepositoryChanged);
@@ -1483,6 +1513,11 @@ impl DiffStateModel {
                 (Vec::new(), None)
             };
 
+        // Local targets stat `.git` synchronously at render time; remote targets
+        // cannot, so probe the host once per metadata refresh and cache it.
+        let git_operation_blocked =
+            probe_remote_git_operation_blocked(&repo_path).await;
+
         Ok(DiffMetadata {
             main_branch_name,
             current_branch_name,
@@ -1492,6 +1527,8 @@ impl DiffStateModel {
             unpushed_commits,
             upstream_ref,
             pr_info: None,
+            pr_lookup_failed_on: None,
+            git_operation_blocked,
         })
     }
 
@@ -1745,22 +1782,10 @@ impl DiffStateModel {
                 .flatten()
                 .unwrap_or(0);
         }
-        // Remote: `git diff --no-index --numstat -- /dev/null <path>` emits
-        // "<added>\t0\t<path>" for text (added == line count) or "-\t-\t<path>"
-        // for binary. Differences yield exit code 1, which `run_git` accepts.
         let Some(rel_str) = rel_path.to_str() else {
             return 0;
         };
-        let output = target
-            .run_git(&["diff", "--no-index", "--numstat", "--", "/dev/null", rel_str])
-            .await
-            .unwrap_or_default();
-        output
-            .lines()
-            .next()
-            .and_then(|line| line.split('\t').next())
-            .and_then(|added| added.parse::<usize>().ok())
-            .unwrap_or(0)
+        crate::util::git::count_untracked_lines_via_git(target, rel_str).await
     }
 
     async fn file_statuses_against_head(repo_path: &GitExecTarget) -> Result<Vec<(PathBuf, GitFileStatus)>> {
@@ -2994,11 +3019,19 @@ impl DiffStateModel {
 
     /// Fetches PR info for the current branch via `gh pr view` (network call).
     /// Call this on branch change or after push — not on every metadata refresh.
+    ///
+    /// Runs against the active exec target, so a remote session asks `gh` on the
+    /// remote host. Failures are recorded on the metadata (`pr_lookup_failed_on`)
+    /// so the UI can say *which host* could not answer instead of silently
+    /// showing no PR.
     #[cfg(feature = "local_fs")]
     pub fn refresh_pr_info(&mut self, ctx: &mut ModelContext<Self>) {
-        let Some(repo_path) = self.active_repository_path(ctx) else {
+        let Some(target) = self.exec_target(ctx) else {
             return;
         };
+        // Only remote lookups surface failures: a missing or unauthenticated
+        // `gh` on the host is otherwise indistinguishable from "no PR".
+        let remote_host = target.remote_host().map(str::to_string);
         #[cfg(feature = "local_tty")]
         let path_future = LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
             shell_state.get_interactive_path_env_var(ctx)
@@ -3011,17 +3044,26 @@ impl DiffStateModel {
         ctx.spawn(
             async move {
                 let path_env = path_future.await;
-                get_pr_for_branch(&repo_path, path_env.as_deref())
-                    .await
-                    .unwrap_or(None)
+                let result = get_pr_for_branch(&target, path_env.as_deref()).await;
+                (remote_host, result)
             },
-            |me, pr_info, ctx| {
-                if let Some(metadata) = &mut me.metadata {
-                    metadata.pr_info = pr_info;
-                    ctx.emit(DiffStateModelEvent::DiffMetadataChanged(
-                        InvalidationBehavior::PromptRefresh,
-                    ));
+            |me, (remote_host, result), ctx| {
+                let Some(metadata) = &mut me.metadata else {
+                    return;
+                };
+                match result {
+                    Ok(pr_info) => {
+                        metadata.pr_info = pr_info;
+                        metadata.pr_lookup_failed_on = None;
+                    }
+                    Err(e) => {
+                        metadata.pr_lookup_failed_on = remote_host;
+                        log::warn!("PR lookup failed: {e}");
+                    }
                 }
+                ctx.emit(DiffStateModelEvent::DiffMetadataChanged(
+                    InvalidationBehavior::PromptRefresh,
+                ));
             },
         );
     }

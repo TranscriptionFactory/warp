@@ -293,3 +293,78 @@ the unsupported message for that case.
   **Phase B: flip gate + messaging.**
 - `app/i18n/en/warp.ftl` `code-review-diffs-local-workspaces-only` — **Phase B:
   reword (optional).**
+
+## Phase C: write path + PR integration (2026-09-12)
+
+Phase B made diffs *render* over a warpified SSH session, but every path that
+*writes* to the repo (commit / push / create PR) and everything that shells out
+to the `gh` CLI still ran locally with the remote path as cwd, so they failed or
+silently did nothing. Phase C makes the whole panel transport-agnostic:
+
+- **`util/git.rs`** — one generic remote runner replaces the git-only one.
+  `build_remote_command(program, args)` is the single quoting implementation;
+  `build_remote_git_command` is it plus the `git -c diff.autoRefreshIndex=false`
+  prefix. `GitExecTarget::run_program(program, args, path_env)` executes a
+  foreign CLI (local subprocess or one remote command with the repo root as
+  cwd), and `GitExecTarget::run_git_with_env` forwards `path_env` on the local
+  arm only (hooks like LFS `pre-push` need it; the remote shell's own `PATH`
+  applies remotely). `map_remote_output(label, …)` labels failures by program so
+  a missing remote `gh` is distinguishable from a git failure.
+- **Write/PR helpers now take `&GitExecTarget`**: `run_commit`, `run_push`,
+  `create_pr`, `get_file_change_entries`, `get_commit_files`,
+  `get_branch_diff_entries`, plus the previously local-only
+  `get_diff_for_commit_message`, `get_branch_commit_messages`, `get_diff_for_pr`
+  and `get_pr_for_branch`. `path_env` stays a parameter but is meaningful only
+  for `Local` (documented at each signature).
+- **Untracked counts never touch the local FS from a remote target**: the
+  `git diff --no-index --numstat -- /dev/null <path>` trick is now a shared
+  helper (`count_untracked_lines_via_git`) used by both
+  `get_file_change_entries` and `DiffStateModel::count_untracked_additions`, and
+  `get_diff_for_commit_message` synthesises remote untracked hunks from
+  `git diff --no-index -- /dev/null <path>` instead of `std::fs`.
+- **PR lookup** runs `gh pr view` on the exec target. Errors are no longer
+  swallowed with `.unwrap_or(None)`: for remote targets
+  `DiffMetadata::pr_lookup_failed_on` records the host, the git-operations
+  dropdown shows a disabled "Could not check for a PR on `<host>`" item, and the
+  primary Create-PR button is disabled with a tooltip naming the host — instead
+  of pretending the branch has no PR.
+- **`GitDialog`** holds a `GitExecTarget` (not a `PathBuf`) and derives all mode
+  ops from it, so commit / commit-and-push / publish / create-PR mutate the
+  remote repository. `open_git_dialog` passes `CodeReviewView::git_exec_target`.
+- **Per-file invalidation** carries the target:
+  `FileInvalidationTask.exec_target` replaces its `repo_path`, so incremental
+  updates no longer build a local target from a remote path. `PendingFileUpdate`
+  still uses `repo_path` for identity comparison only.
+- **Merge/rebase guard** is remote-aware: the local arm keeps its `.git` stat,
+  and the remote arm caches the result of one shell probe
+  (`probe_remote_git_operation_blocked`, a single `git rev-parse --git-dir` plus
+  `test -e` chain covering `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`,
+  `rebase-merge`, `rebase-apply`, `index.lock`) taken during metadata refresh.
+- **Error wording** is host-aware: `user_facing_git_error(raw, host)` reports
+  "GitHub CLI (gh) not installed on `<host>`" / "not authenticated on `<host>`"
+  for remote sessions.
+
+**Decision — PR body transport.** `create_pr` keeps `gh pr create --body <text>`
+rather than writing a temp file on the host and using `--body-file`. The body is
+shell-quoted (verified by a unit test for quotes, newlines, `$`, and unicode),
+and a `MAX_PR_BODY_BYTES = 64 KiB` guard rejects larger bodies with a clear error
+before the command is built, keeping well clear of the host's `ARG_MAX` /
+`MAX_ARG_STRLEN`. This avoids creating and cleaning up host-side temp files while
+still bounding the payload. If PR descriptions over 64 KiB become a real use
+case, switch to `--body-file` over a remote write.
+
+**Test evidence (no live host required).**
+`app/src/util/git_tests.rs` gained: `local_target` (untracked counting +
+staged-only selection + commit/push on a real temp repo, pinning unchanged local
+behavior), `remote_exec::build_remote_command_prefixes_program_and_quotes_args`
+(shell argv round-trip incl. quotes/newlines/`$`/unicode), and `remote_commands`
+— a mock `RemoteServerClient` over a duplex stream that asserts the *exact*
+command strings a host would run for commit, push, `gh pr view`, and
+`gh pr create`.
+
+**Still open (unchanged non-goals):** server-side batching of the sequential git
+round trips; live remote FS watching / `NavigatedToDirectory`-driven refresh; the
+git status chip path (`code_review/git_status_update.rs`) and remote global
+search. The wasm build could not be compiled in this environment (target not
+installed); all new remote code is `#[cfg(feature = "local_fs")]` or routes to
+the existing `Not supported on wasm` stubs.

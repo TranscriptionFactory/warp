@@ -90,15 +90,15 @@ pub(super) fn handle_sub_action(
 ) {
     match action {
         PushSubAction::ToggleCommit(hash) => {
-            let (should_fetch, repo_path) = {
-                let repo_path = me.repo_path().clone();
+            let (should_fetch, exec_target) = {
+                let exec_target = me.exec_target().clone();
                 let GitDialogMode::Push(state) = me.mode_mut() else {
                     return;
                 };
                 let is_expanded = state.expanded.entry(hash.clone()).or_insert(false);
                 *is_expanded = !*is_expanded;
                 let should_fetch = *is_expanded && !state.commit_files.contains_key(hash);
-                (should_fetch, repo_path)
+                (should_fetch, exec_target)
             };
 
             if should_fetch {
@@ -106,7 +106,7 @@ pub(super) fn handle_sub_action(
                 let hash_for_async = hash.clone();
                 ctx.spawn(
                     async move {
-                        crate::util::git::get_commit_files(&repo_path, &hash_for_async).await
+                        crate::util::git::get_commit_files(&exec_target, &hash_for_async).await
                     },
                     move |me, result, ctx| {
                         if let GitDialogMode::Push(state) = &mut me.mode {
@@ -136,7 +136,7 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
         GitDialogMode::Push(state) => state.publish,
         _ => return,
     };
-    let repo_path = me.repo_path().clone();
+    let exec_target = me.exec_target().clone();
     let branch = me.branch_name().to_string();
 
     me.set_loading(loading_label(publish), ctx);
@@ -146,7 +146,7 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
     ctx.spawn(
         async move {
             let path_env = path_future.await;
-            crate::util::git::run_push(&repo_path, &branch, path_env.as_deref()).await
+            crate::util::git::run_push(&exec_target, &branch, path_env.as_deref()).await
         },
         move |me, result, ctx| {
             match result {
@@ -160,10 +160,10 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
                 }
                 Err(e) => {
                     log::error!("Push failed: {e}");
-                    show_toast(user_facing_git_error(&e.to_string()), ctx);
+                    let host = me.exec_target().remote_host().map(str::to_string);
+                    show_toast(user_facing_git_error(&e.to_string(), host.as_deref()), ctx);
                 }
             }
-            let _ = me;
             ctx.emit(GitDialogEvent::Completed);
         },
     );

@@ -2372,12 +2372,14 @@ impl CodeReviewView {
             }
         }
 
+        let Some(exec_target) = self.git_exec_target(ctx) else {
+            return;
+        };
         let Some(repo) = self.active_repo.as_ref() else {
             return;
         };
-        let repo_path = repo.repo_path.clone();
         let merge_base = repo.file_invalidation.merge_base.clone();
-        self.enqueue_file_invalidations(files, diff_mode, merge_base, repo_path);
+        self.enqueue_file_invalidations(files, diff_mode, merge_base, exec_target);
     }
 
     /// Processes any pending file invalidations that occurred during a full refresh.
@@ -2429,7 +2431,7 @@ impl CodeReviewView {
         files: Vec<PathBuf>,
         mode: DiffMode,
         merge_base: Option<String>,
-        repo_path: PathBuf,
+        exec_target: crate::util::git::GitExecTarget,
     ) {
         let Some(repo) = self.active_repo.as_ref() else {
             return;
@@ -2438,7 +2440,7 @@ impl CodeReviewView {
         for file in files {
             let task = FileInvalidationTask {
                 file,
-                repo_path: repo_path.clone(),
+                exec_target: exec_target.clone(),
                 mode: mode.clone(),
                 merge_base: merge_base.clone(),
             };
@@ -6493,7 +6495,7 @@ impl CodeReviewView {
         {
             return;
         }
-        let Some(repo_path) = self.repo_path().cloned() else {
+        let Some(exec_target) = self.git_exec_target(ctx) else {
             return;
         };
         let branch_name = self
@@ -6514,7 +6516,7 @@ impl CodeReviewView {
                 let has_upstream = diff_state.upstream_ref().is_some();
                 ctx.add_typed_action_view(|ctx| {
                     GitDialog::new_for_commit(
-                        repo_path,
+                        exec_target,
                         branch_name,
                         allow_create_pr,
                         has_upstream,
@@ -6527,7 +6529,7 @@ impl CodeReviewView {
                     .diff_state_model
                     .read(ctx, |model, _| model.unpushed_commits().to_vec());
                 ctx.add_typed_action_view(|ctx| {
-                    GitDialog::new_for_push(repo_path, branch_name, publish, commits, ctx)
+                    GitDialog::new_for_push(exec_target, branch_name, publish, commits, ctx)
                 })
             }
             GitDialogKind::CreatePr => {
@@ -6535,7 +6537,7 @@ impl CodeReviewView {
                     .diff_state_model
                     .read(ctx, |model, _| model.get_main_branch_name());
                 ctx.add_typed_action_view(|ctx| {
-                    GitDialog::new_for_pr(repo_path, branch_name, base_branch_name, ctx)
+                    GitDialog::new_for_pr(exec_target, branch_name, base_branch_name, ctx)
                 })
             }
         };
@@ -6629,14 +6631,39 @@ impl CodeReviewView {
                 });
             }
             PrimaryGitActionMode::CreatePr => {
+                // A failed remote `gh` lookup is indistinguishable from "no PR"
+                // by the button alone. Say so rather than offering a Create PR
+                // that may duplicate an existing one.
+                let lookup_failed_on = self
+                    .diff_state_model
+                    .as_ref(ctx)
+                    .pr_lookup_failed_on()
+                    .map(str::to_string);
                 self.git_primary_action_button.update(ctx, |button, ctx| {
                     button.set_label(crate::t!("code-review-create-pr"), ctx);
                     button.set_icon(Some(Icon::Github), ctx);
-                    button.set_disabled(false, ctx);
-                    button.set_on_click(
-                        |ctx| ctx.dispatch_typed_action(CodeReviewAction::OpenCreatePrDialog),
-                        ctx,
-                    );
+                    match &lookup_failed_on {
+                        Some(host) => {
+                            button.set_disabled(true, ctx);
+                            button.set_tooltip(
+                                Some(format!(
+                                    "Could not check for an existing pull request on {host}. \
+                                     Install and authenticate the GitHub CLI (gh) there."
+                                )),
+                                ctx,
+                            );
+                        }
+                        None => {
+                            button.set_disabled(false, ctx);
+                            button.set_tooltip(Option::<String>::None, ctx);
+                            button.set_on_click(
+                                |ctx| {
+                                    ctx.dispatch_typed_action(CodeReviewAction::OpenCreatePrDialog)
+                                },
+                                ctx,
+                            );
+                        }
+                    }
                     button.clear_adjoined_side(ctx);
                 });
             }
@@ -6711,12 +6738,24 @@ impl CodeReviewView {
     /// "Create PR" to open the dialog. Create PR is disabled on main, when the
     /// branch has no upstream, or when the upstream is the same ref as main
     /// (e.g. a worktree branch whose tracking was auto-set to origin/master).
+    ///
+    /// When the last `gh` lookup failed on a remote host, the item says so
+    /// instead: "no PR" and "could not ask GitHub" are different states, and
+    /// silently offering Create PR hides a missing/unauthenticated remote `gh`.
     fn pr_menu_item(&self, app: &AppContext) -> MenuItem<CodeReviewAction> {
         let diff_state = self.diff_state_model.as_ref(app);
         if let Some(pr_info) = diff_state.pr_info().cloned() {
             MenuItemFields::new(format!("PR #{}", pr_info.number))
                 .with_icon(Icon::Github)
                 .with_on_select_action(CodeReviewAction::ViewPr(pr_info.url))
+                .into_item()
+        } else if let Some(host) = diff_state.pr_lookup_failed_on() {
+            MenuItemFields::new(format!("Could not check for a PR on {host}"))
+                .with_icon(Icon::Github)
+                .with_disabled(true)
+                .with_tooltip(format!(
+                    "GitHub CLI (gh) could not be reached on {host}. Install and authenticate it there to see PR status."
+                ))
                 .into_item()
         } else {
             let is_on_main = diff_state.is_on_main_branch();

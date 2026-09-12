@@ -6454,6 +6454,13 @@ impl TerminalView {
         })
     }
 
+    /// User-facing label (`user@hostname`) for the active remote session, or
+    /// `None` for a local session. Used to word messages about host-local
+    /// tooling (e.g. a missing remote `gh`).
+    pub fn active_remote_host_label<C: ModelAsRef>(&self, ctx: &C) -> Option<String> {
+        self.active_session_remote_host(ctx)
+    }
+
     /// Returns whether or not the active session is a local session.  Returns
     /// None if there is no active session.
     pub fn active_session_is_local<C: ModelAsRef>(&self, ctx: &C) -> Option<bool> {
@@ -10677,10 +10684,23 @@ impl TerminalView {
                                                         ))
                                             });
                                         if !already_inside {
+                                            let host_label = self
+                                                .sessions
+                                                .as_ref(ctx)
+                                                .get(session_id)
+                                                .map(|session| {
+                                                    format!(
+                                                        "{}@{}",
+                                                        session.user(),
+                                                        session.hostname()
+                                                    )
+                                                })
+                                                .unwrap_or_default();
                                             let target = crate::util::git::GitExecTarget::Remote {
                                                 client,
                                                 session_id,
                                                 repo_path: active_directory.to_string(),
+                                                host: host_label,
                                             };
                                             let fut = async move {
                                                 target

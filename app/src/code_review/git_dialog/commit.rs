@@ -2,8 +2,6 @@
 //! then on confirm runs `run_commit` and optionally chains `run_push` /
 //! `create_pr` per the selected intent.
 
-use std::path::Path;
-
 use warp_core::ui::appearance::Appearance;
 use warpui::{
     elements::{
@@ -29,7 +27,8 @@ use crate::{
     },
     ui_components::icons::Icon,
     util::git::{
-        create_pr, get_file_change_entries, run_commit, run_push, FileChangeEntry, PrInfo,
+        create_pr, get_file_change_entries, run_commit, run_push, FileChangeEntry, GitExecTarget,
+        PrInfo,
     },
     view_components::action_button::{ActionButton, ButtonSize, SecondaryTheme},
 };
@@ -83,7 +82,7 @@ pub struct CommitState {
 }
 
 pub(super) fn new_state(
-    repo_path: &Path,
+    exec_target: &GitExecTarget,
     allow_create_pr: bool,
     has_upstream: bool,
     ctx: &mut ViewContext<GitDialog>,
@@ -171,9 +170,9 @@ pub(super) fn new_state(
     };
 
     let include_unstaged = true;
-    let repo_path_for_load = repo_path.to_path_buf();
+    let target_for_load = exec_target.clone();
     ctx.spawn(
-        async move { get_file_change_entries(&repo_path_for_load, include_unstaged).await },
+        async move { get_file_change_entries(&target_for_load, include_unstaged).await },
         move |me, result, ctx| {
             let GitDialogMode::Commit(state) = &mut me.mode else {
                 return;
@@ -278,7 +277,7 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
     let intent = state.intent;
     let include_unstaged = state.include_unstaged;
     let message_editor = state.message_editor.clone();
-    let repo_path = me.repo_path().clone();
+    let exec_target = me.exec_target().clone();
     let branch_name = me.branch_name().to_string();
 
     me.set_loading(LOADING_LABEL, ctx);
@@ -294,22 +293,22 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
         async move {
             let path_env = path_future.await;
             let path_env_ref = path_env.as_deref();
-            run_commit(&repo_path, &message, include_unstaged, path_env_ref).await?;
+            run_commit(&exec_target, &message, include_unstaged, path_env_ref).await?;
             let outcome = match intent {
                 CommitIntent::CommitOnly => CommitOutcome::Committed,
                 CommitIntent::CommitAndPush => {
-                    run_push(&repo_path, &branch_name, path_env_ref).await?;
+                    run_push(&exec_target, &branch_name, path_env_ref).await?;
                     CommitOutcome::Pushed
                 }
                 CommitIntent::CommitAndCreatePr => {
-                    run_push(&repo_path, &branch_name, path_env_ref).await?;
-                    let pr = create_pr(&repo_path, None, None, path_env_ref).await?;
+                    run_push(&exec_target, &branch_name, path_env_ref).await?;
+                    let pr = create_pr(&exec_target, None, None, path_env_ref).await?;
                     CommitOutcome::PrCreated(pr)
                 }
             };
             anyhow::Ok(outcome)
         },
-        move |_me, result, ctx| {
+        move |me, result, ctx| {
             match result {
                 Ok(CommitOutcome::Committed) => {
                     show_toast("Changes successfully committed.", ctx);
@@ -322,7 +321,8 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
                 }
                 Err(err) => {
                     log::error!("Commit failed: {err}");
-                    show_toast(user_facing_git_error(&err.to_string()), ctx);
+                    let host = me.exec_target().remote_host().map(str::to_string);
+                    show_toast(user_facing_git_error(&err.to_string(), host.as_deref()), ctx);
                 }
             }
             // Success or failure, the dialog is done and the parent should
@@ -362,13 +362,13 @@ fn apply_intent_selector(state: &CommitState, ctx: &mut ViewContext<GitDialog>) 
 }
 
 fn reload_file_changes(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>) {
-    let repo_path = me.repo_path().clone();
+    let exec_target = me.exec_target().clone();
     let include_unstaged = match me.mode() {
         GitDialogMode::Commit(state) => state.include_unstaged,
         _ => return,
     };
     ctx.spawn(
-        async move { get_file_change_entries(&repo_path, include_unstaged).await },
+        async move { get_file_change_entries(&exec_target, include_unstaged).await },
         |me, result, ctx| {
             if let GitDialogMode::Commit(state) = &mut me.mode {
                 match result {

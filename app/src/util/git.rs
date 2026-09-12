@@ -36,6 +36,9 @@ pub enum GitExecTarget {
         session_id: SessionId,
         /// Remote repository root, rendered as a path string for the remote shell.
         repo_path: String,
+        /// User-facing label for the host (e.g. `user@host`), used to word
+        /// errors about host-local tooling such as `gh`.
+        host: String,
     },
 }
 
@@ -68,21 +71,93 @@ impl GitExecTarget {
         }
     }
 
+    /// Whether this target executes on a remote SSH host.
+    pub fn is_remote(&self) -> bool {
+        match self {
+            Self::Local { .. } => false,
+            #[cfg(feature = "local_fs")]
+            Self::Remote { .. } => true,
+        }
+    }
+
+    /// The remote host label (e.g. `user@host`), or `None` for local targets.
+    pub fn remote_host(&self) -> Option<&str> {
+        match self {
+            Self::Local { .. } => None,
+            #[cfg(feature = "local_fs")]
+            Self::Remote { host, .. } => Some(host),
+        }
+    }
+
     /// Runs `git <args>` against this target and returns stdout as a (lossy)
     /// String. Identical contract to [`run_git_command`]: exit code 0 is ok,
     /// exit code 1 with non-empty stdout is ok (diff "differences found"),
     /// anything else is an error.
     pub async fn run_git(&self, args: &[&str]) -> Result<String> {
+        self.run_git_with_env(args, None).await
+    }
+
+    /// Like [`Self::run_git`] but forwards `path_env` on the local arm so hooks
+    /// can find user-installed binaries (e.g. the LFS `pre-push` hook). `path_env`
+    /// exists because macOS GUI launches inherit launchd's minimal `PATH`; it is
+    /// ignored on the remote arm, where the remote shell's own `PATH` applies.
+    pub async fn run_git_with_env(&self, args: &[&str], path_env: Option<&str>) -> Result<String> {
         match self {
-            Self::Local { repo_path } => run_git_command(repo_path, args).await,
+            Self::Local { repo_path } => run_git_command_with_env(repo_path, args, path_env).await,
             #[cfg(feature = "local_fs")]
             Self::Remote {
                 client,
                 session_id,
                 repo_path,
+                ..
             } => run_git_remote(client, *session_id, repo_path, args).await,
         }
     }
+
+    /// Runs a foreign CLI against the repo at this target and returns stdout.
+    ///
+    /// Local: a subprocess in the repo directory; `path_env` overrides the
+    /// child's `PATH` so a Homebrew-installed binary is findable from a GUI
+    /// launch. Remote: one POSIX-quoted command over the session, run with the
+    /// repo root as the working directory; `path_env` is ignored.
+    pub async fn run_program(
+        &self,
+        program: &str,
+        args: &[&str],
+        path_env: Option<&str>,
+    ) -> Result<String> {
+        match self {
+            Self::Local { repo_path } => {
+                run_local_program(repo_path, program, args, path_env).await
+            }
+            #[cfg(feature = "local_fs")]
+            Self::Remote {
+                client,
+                session_id,
+                repo_path,
+                ..
+            } => run_remote_program(client, *session_id, repo_path, program, args).await,
+        }
+    }
+}
+
+/// Appends each arg to `cmd`, shell-quoted, separated by a space.
+#[cfg(feature = "local_fs")]
+fn push_shell_quoted_args(cmd: &mut String, args: &[&str]) {
+    for arg in args {
+        cmd.push(' ');
+        cmd.push_str(&shell_quote(arg));
+    }
+}
+
+/// Builds the shell command string for a remote invocation of an arbitrary
+/// program: `<program> <quoted args...>`. Shared by the git and foreign-CLI
+/// (e.g. `gh`) remote arms so quoting rules cannot drift between them.
+#[cfg(feature = "local_fs")]
+fn build_remote_command(program: &str, args: &[&str]) -> String {
+    let mut cmd = String::from(program);
+    push_shell_quoted_args(&mut cmd, args);
+    cmd
 }
 
 /// Builds the shell command string for a remote git invocation:
@@ -91,11 +166,8 @@ impl GitExecTarget {
 /// survive transport to the remote shell intact.
 #[cfg(feature = "local_fs")]
 fn build_remote_git_command(args: &[&str]) -> String {
-    let mut cmd = String::from("git -c diff.autoRefreshIndex=false");
-    for arg in args {
-        cmd.push(' ');
-        cmd.push_str(&shell_quote(arg));
-    }
+    let mut cmd = build_remote_command("git", &["-c", "diff.autoRefreshIndex=false"]);
+    push_shell_quoted_args(&mut cmd, args);
     cmd
 }
 
@@ -103,8 +175,16 @@ fn build_remote_git_command(args: &[&str]) -> String {
 /// contract as the local subprocess path. Extracted as a pure function so the
 /// exit-code / stdout rules can be unit-tested against canned bytes (binary
 /// diff, `-z` null-delimited status) without a live client.
+///
+/// `label` names the program in the error text (e.g. `Git`, `gh`) so the
+/// failure classifier can tell a missing remote `gh` from a git failure.
 #[cfg(feature = "local_fs")]
-fn map_remote_git_output(stdout: &[u8], stderr: &[u8], exit_code: Option<i32>) -> Result<String> {
+fn map_remote_output(
+    label: &str,
+    stdout: &[u8],
+    stderr: &[u8],
+    exit_code: Option<i32>,
+) -> Result<String> {
     let stdout = String::from_utf8_lossy(stdout).to_string();
     // Mirror the local arm: exit 0 => ok; exit 1 with non-empty stdout => ok
     // (git diff "differences found"); anything else (including death by signal,
@@ -113,13 +193,45 @@ fn map_remote_git_output(stdout: &[u8], stderr: &[u8], exit_code: Option<i32>) -
         Ok(stdout)
     } else {
         let stderr = String::from_utf8_lossy(stderr);
-        Err(anyhow!("Git command failed: {}, {}", stderr, stdout))
+        Err(anyhow!("{label} command failed: {stderr}, {stdout}"))
     }
 }
 
-/// Runs a git command on the remote host via [`RemoteServerClient::run_command`].
-/// `working_directory` replaces a local `cd`, and `GIT_OPTIONAL_LOCKS=0` is
-/// passed through the environment map to match the local arm.
+/// Runs a fully-built command string on the remote host via
+/// [`RemoteServerClient::run_command`]. `working_directory` replaces a local
+/// `cd`; `env` is passed through as the command's environment. `label` names
+/// the program in error text (see [`map_remote_output`]).
+#[cfg(feature = "local_fs")]
+async fn run_remote_command(
+    client: &RemoteServerClient,
+    session_id: SessionId,
+    working_directory: &str,
+    command: String,
+    env: HashMap<String, String>,
+    label: &str,
+) -> Result<String> {
+    use crate::remote_server::proto::run_command_response;
+
+    log::debug!("[GIT OPERATION] git.rs run_remote_command {command}");
+
+    let response = client
+        .run_command(session_id, command, Some(working_directory.to_string()), env)
+        .await
+        .map_err(|e| anyhow!("Failed to execute remote {label} command: {e}"))?;
+
+    match response.result {
+        Some(run_command_response::Result::Success(success)) => {
+            map_remote_output(label, &success.stdout, &success.stderr, success.exit_code)
+        }
+        Some(run_command_response::Result::Error(err)) => {
+            Err(anyhow!("Remote {label} command error: {}", err.message))
+        }
+        None => Err(anyhow!("Remote {label} command returned an empty response")),
+    }
+}
+
+/// Runs a git command on the remote host. `GIT_OPTIONAL_LOCKS=0` is passed
+/// through the environment map to match the local arm.
 #[cfg(feature = "local_fs")]
 async fn run_git_remote(
     client: &RemoteServerClient,
@@ -127,28 +239,90 @@ async fn run_git_remote(
     repo_path: &str,
     args: &[&str],
 ) -> Result<String> {
-    use crate::remote_server::proto::run_command_response;
-
-    let command = build_remote_git_command(args);
-    log::debug!("[GIT OPERATION] git.rs run_git_remote {command}");
-
     let mut env = HashMap::new();
     env.insert("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string());
+    run_remote_command(
+        client,
+        session_id,
+        repo_path,
+        build_remote_git_command(args),
+        env,
+        "Git",
+    )
+    .await
+}
 
-    let response = client
-        .run_command(session_id, command, Some(repo_path.to_string()), env)
-        .await
-        .map_err(|e| anyhow!("Failed to execute remote git command: {e}"))?;
+/// Runs a foreign CLI (e.g. `gh`) on the remote host. Failures are mapped with
+/// the same exit-code rules as the git arm; `user_facing_git_error` recognises
+/// the host-local `gh` failure wording.
+#[cfg(feature = "local_fs")]
+async fn run_remote_program(
+    client: &RemoteServerClient,
+    session_id: SessionId,
+    repo_path: &str,
+    program: &str,
+    args: &[&str],
+) -> Result<String> {
+    run_remote_command(
+        client,
+        session_id,
+        repo_path,
+        build_remote_command(program, args),
+        HashMap::new(),
+        program,
+    )
+    .await
+}
 
-    match response.result {
-        Some(run_command_response::Result::Success(success)) => {
-            map_remote_git_output(&success.stdout, &success.stderr, success.exit_code)
-        }
-        Some(run_command_response::Result::Error(err)) => {
-            Err(anyhow!("Remote git command error: {}", err.message))
-        }
-        None => Err(anyhow!("Remote git command returned an empty response")),
+/// Runs a foreign CLI as a local subprocess in `repo_path`. `path_env`, when
+/// `Some`, replaces the child's `PATH` so GUI-launched sessions can find
+/// binaries installed outside launchd's minimal `PATH` (e.g. Homebrew's `gh`).
+#[cfg(feature = "local_fs")]
+async fn run_local_program(
+    repo_path: &Path,
+    program: &str,
+    args: &[&str],
+    path_env: Option<&str>,
+) -> Result<String> {
+    use command::r#async::Command;
+    use command::Stdio;
+
+    log::debug!("[GIT OPERATION] git.rs run_local_program {program} {}", args.join(" "));
+
+    let mut cmd = Command::new(program);
+    cmd.args(args)
+        .current_dir(repo_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("HOMEBREW_NO_AUTO_UPDATE", "1")
+        .kill_on_drop(true);
+    if let Some(path_env) = path_env {
+        cmd.env("PATH", path_env);
     }
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| anyhow!("Failed to execute {program} command: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(anyhow!("{program} command failed: {stderr}"))
+    }
+}
+
+#[cfg(not(feature = "local_fs"))]
+async fn run_local_program(
+    _repo_path: &Path,
+    _program: &str,
+    _args: &[&str],
+    _path_env: Option<&str>,
+) -> Result<String> {
+    Err(anyhow!("Not supported on wasm"))
 }
 
 /// POSIX single-quote escaping for one shell argument. An argument made up
@@ -478,7 +652,7 @@ pub struct FileChangeEntry {
 /// uncommitted changes (staged + unstaged + untracked) vs HEAD; otherwise only staged changes.
 #[cfg(feature = "local_fs")]
 pub async fn get_file_change_entries(
-    repo_path: &Path,
+    target: &GitExecTarget,
     include_unstaged: bool,
 ) -> Result<Vec<FileChangeEntry>> {
     let args: &[&str] = if include_unstaged {
@@ -486,7 +660,7 @@ pub async fn get_file_change_entries(
     } else {
         &["diff", "--cached", "--numstat"]
     };
-    let output = run_git_command(repo_path, args).await.unwrap_or_default();
+    let output = target.run_git(args).await.unwrap_or_default();
     let mut entries = Vec::new();
     for line in output.lines() {
         if line.is_empty() {
@@ -504,14 +678,22 @@ pub async fn get_file_change_entries(
 
     // Also include untracked files when showing all changes.
     if include_unstaged {
-        if let Ok(untracked) =
-            run_git_command(repo_path, &["ls-files", "--others", "--exclude-standard"]).await
+        if let Ok(untracked) = target
+            .run_git(&["ls-files", "--others", "--exclude-standard"])
+            .await
         {
             for file_name in untracked.lines() {
                 if file_name.is_empty() {
                     continue;
                 }
-                let additions = count_lines_if_text_file(&repo_path.join(file_name)) as usize;
+                // Local targets count the file off disk; remote targets can't,
+                // so they ask git (see `count_untracked_lines_via_git`).
+                let additions = match target.local_repo_path() {
+                    Some(local_root) => {
+                        count_lines_if_text_file(&local_root.join(file_name)) as usize
+                    }
+                    None => count_untracked_lines_via_git(target, file_name).await,
+                };
                 entries.push(FileChangeEntry {
                     path: file_name.to_string(),
                     additions,
@@ -526,10 +708,31 @@ pub async fn get_file_change_entries(
 
 #[cfg(not(feature = "local_fs"))]
 pub async fn get_file_change_entries(
-    _repo_path: &Path,
+    _target: &GitExecTarget,
     _include_unstaged: bool,
 ) -> Result<Vec<FileChangeEntry>> {
     Err(anyhow!("Not supported on wasm"))
+}
+
+/// Line count git reports for one untracked file, for targets whose working
+/// copy is not readable locally.
+///
+/// `git diff --no-index --numstat -- /dev/null <path>` emits
+/// `<added>\t0\t<path>` for text (`added` is the line count) and `-\t-\t<path>`
+/// for binary. Differences yield exit code 1, which [`GitExecTarget::run_git`]
+/// accepts.
+#[cfg(feature = "local_fs")]
+pub async fn count_untracked_lines_via_git(target: &GitExecTarget, rel_path: &str) -> usize {
+    let output = target
+        .run_git(&["diff", "--no-index", "--numstat", "--", "/dev/null", rel_path])
+        .await
+        .unwrap_or_default();
+    output
+        .lines()
+        .next()
+        .and_then(|line| line.split('\t').next())
+        .and_then(|added| added.parse::<usize>().ok())
+        .unwrap_or(0)
 }
 
 /// Unpushed commits: `<upstream>..HEAD`, or `<fork_point>..HEAD` if no upstream.
@@ -606,19 +809,17 @@ fn parse_commit_log(output: &str) -> Result<Vec<Commit>> {
 
 /// Returns the list of files changed in a specific commit, with per-file stats.
 #[cfg(feature = "local_fs")]
-pub async fn get_commit_files(repo_path: &Path, hash: &str) -> Result<Vec<FileChangeEntry>> {
-    let output = run_git_command(
-        repo_path,
-        &[
+pub async fn get_commit_files(target: &GitExecTarget, hash: &str) -> Result<Vec<FileChangeEntry>> {
+    let output = target
+        .run_git(&[
             "diff-tree",
             "--root",
             "--no-commit-id",
             "-r",
             "--numstat",
             hash,
-        ],
-    )
-    .await?;
+        ])
+        .await?;
 
     let mut entries = Vec::new();
     for line in output.lines() {
@@ -639,7 +840,10 @@ pub async fn get_commit_files(repo_path: &Path, hash: &str) -> Result<Vec<FileCh
 }
 
 #[cfg(not(feature = "local_fs"))]
-pub async fn get_commit_files(_repo_path: &Path, _hash: &str) -> Result<Vec<FileChangeEntry>> {
+pub async fn get_commit_files(
+    _target: &GitExecTarget,
+    _hash: &str,
+) -> Result<Vec<FileChangeEntry>> {
     Err(anyhow!("Not supported on wasm"))
 }
 
@@ -665,6 +869,13 @@ const BINARY_CHECK_BYTES: usize = 1_024;
 #[cfg(feature = "local_fs")]
 const MAX_PR_TITLE_BYTES: usize = 200;
 
+/// Maximum PR body accepted for `gh pr create --body`. On the remote arm the
+/// body is part of one shell command string, bounded by the host's
+/// `MAX_ARG_STRLEN` (128 KiB on Linux); 64 KiB leaves headroom for the
+/// surrounding command without truncating silently.
+#[cfg(feature = "local_fs")]
+const MAX_PR_BODY_BYTES: usize = 64 * 1024;
+
 /// Returns a prefix of `s` whose length is at most `byte_cap` and which ends
 /// on a UTF-8 char boundary. Plain `&s[..byte_cap]` panics when the cut
 /// point lands inside a multi-byte code point, which is reachable in diffs
@@ -688,21 +899,18 @@ fn truncate_on_char_boundary(s: &str, byte_cap: usize) -> &str {
 /// of new files. When `include_unstaged` is false, diffs only staged changes.
 #[cfg(feature = "local_fs")]
 pub async fn get_diff_for_commit_message(
-    repo_path: &Path,
+    target: &GitExecTarget,
     include_unstaged: bool,
 ) -> Result<String> {
     let mut diff = if !include_unstaged {
-        run_git_command(repo_path, &["diff", "--cached"]).await?
-    } else if run_git_command(repo_path, &["rev-parse", "--verify", "HEAD"])
-        .await
-        .is_ok()
-    {
-        run_git_command(repo_path, &["diff", "HEAD"]).await?
+        target.run_git(&["diff", "--cached"]).await?
+    } else if target.run_git(&["rev-parse", "--verify", "HEAD"]).await.is_ok() {
+        target.run_git(&["diff", "HEAD"]).await?
     } else {
         // No HEAD before the first commit. Include staged changes plus
         // unstaged edits to staged files; untracked files are added below.
-        let mut diff = run_git_command(repo_path, &["diff", "--cached"]).await?;
-        diff.push_str(&run_git_command(repo_path, &["diff"]).await?);
+        let mut diff = target.run_git(&["diff", "--cached"]).await?;
+        diff.push_str(&target.run_git(&["diff"]).await?);
         diff
     };
 
@@ -710,18 +918,13 @@ pub async fn get_diff_for_commit_message(
     // haven't been staged yet are invisible to it, so we synthesise diff hunks for
     // them here — mirroring the logic in `get_file_change_entries`.
     if include_unstaged {
-        if let Ok(untracked) = run_git_command(
-            repo_path,
-            &["ls-files", "--others", "--exclude-standard", "-z"],
-        )
-        .await
+        if let Ok(untracked) = target
+            .run_git(&["ls-files", "--others", "--exclude-standard", "-z"])
+            .await
         {
             // `-z` separates paths with NUL bytes and disables C-style
             // quoting, so paths containing spaces or non-ASCII characters
             // round-trip intact.
-            // Cap the read to cover both the binary-check window and the
-            // synthesised-hunk budget.
-            let read_cap = BINARY_CHECK_BYTES.max(MAX_UNTRACKED_FILE_BYTES);
             for file_name_bytes in untracked.as_bytes().split(|b| *b == 0) {
                 if file_name_bytes.is_empty() {
                     continue;
@@ -729,39 +932,8 @@ pub async fn get_diff_for_commit_message(
                 let Ok(file_name) = std::str::from_utf8(file_name_bytes) else {
                     continue;
                 };
-                let file_path = repo_path.join(file_name);
-                // Async + bounded so a large untracked file doesn't block
-                // the executor or balloon memory.
-                let Ok(file) = tokio::fs::File::open(&file_path).await else {
-                    continue;
-                };
-                let mut bytes = Vec::with_capacity(read_cap);
-                use tokio::io::AsyncReadExt as _;
-                if file
-                    .take(read_cap as u64)
-                    .read_to_end(&mut bytes)
-                    .await
-                    .is_err()
-                {
-                    continue;
-                }
-                let check_len = bytes.len().min(BINARY_CHECK_BYTES);
-                if warp_util::file_type::is_buffer_binary(&bytes[..check_len]) {
-                    continue;
-                }
-                let Ok(content) = std::str::from_utf8(&bytes) else {
-                    continue;
-                };
-                let content = truncate_on_char_boundary(content, MAX_UNTRACKED_FILE_BYTES);
-                let line_count = content.lines().count();
-                diff.push_str(&format!(
-                    "diff --git a/{file_name} b/{file_name}\nnew file mode 100644\n\
-                     --- /dev/null\n+++ b/{file_name}\n@@ -0,0 +1,{line_count} @@\n"
-                ));
-                for line in content.lines() {
-                    diff.push('+');
-                    diff.push_str(line);
-                    diff.push('\n');
+                if let Some(hunk) = synthesize_untracked_hunk(target, file_name).await {
+                    diff.push_str(&hunk);
                 }
             }
         }
@@ -777,32 +949,86 @@ pub async fn get_diff_for_commit_message(
     }
 }
 
+/// Builds a synthetic `diff --git` hunk for one untracked file, so the commit
+/// message prompt sees new files that `git diff HEAD` omits. Local targets read
+/// the file off disk (bounded, with the same binary heuristic as
+/// [`count_lines_if_text_file`]); remote targets ask git via
+/// `diff --no-index -- /dev/null <path>` instead of touching the local FS.
+#[cfg(feature = "local_fs")]
+async fn synthesize_untracked_hunk(target: &GitExecTarget, file_name: &str) -> Option<String> {
+    let Some(local_root) = target.local_repo_path() else {
+        let file_diff = target
+            .run_git(&["diff", "--no-index", "--", "/dev/null", file_name])
+            .await
+            .ok()?;
+        if file_diff.trim().is_empty() || file_diff.contains("Binary files ") {
+            return None;
+        }
+        let truncated = truncate_on_char_boundary(&file_diff, MAX_UNTRACKED_FILE_BYTES);
+        let mut hunk = truncated.to_string();
+        if truncated.len() < file_diff.len() {
+            hunk.push_str("\n... (truncated)");
+        }
+        return Some(hunk);
+    };
+
+    // Cap the read to cover both the binary-check window and the
+    // synthesised-hunk budget.
+    let read_cap = BINARY_CHECK_BYTES.max(MAX_UNTRACKED_FILE_BYTES);
+    // Async + bounded so a large untracked file doesn't block the executor or
+    // balloon memory.
+    let file = tokio::fs::File::open(local_root.join(file_name)).await.ok()?;
+    let mut bytes = Vec::with_capacity(read_cap);
+    use tokio::io::AsyncReadExt as _;
+    file.take(read_cap as u64).read_to_end(&mut bytes).await.ok()?;
+    let check_len = bytes.len().min(BINARY_CHECK_BYTES);
+    if warp_util::file_type::is_buffer_binary(&bytes[..check_len]) {
+        return None;
+    }
+    let content = std::str::from_utf8(&bytes).ok()?;
+    let content = truncate_on_char_boundary(content, MAX_UNTRACKED_FILE_BYTES);
+    let line_count = content.lines().count();
+    let mut hunk = format!(
+        "diff --git a/{file_name} b/{file_name}\nnew file mode 100644\n\
+         --- /dev/null\n+++ b/{file_name}\n@@ -0,0 +1,{line_count} @@\n"
+    );
+    for line in content.lines() {
+        hunk.push('+');
+        hunk.push_str(line);
+        hunk.push('\n');
+    }
+    Some(hunk)
+}
+
 #[cfg(not(feature = "local_fs"))]
 pub async fn get_diff_for_commit_message(
-    _repo_path: &Path,
+    _target: &GitExecTarget,
     _include_unstaged: bool,
 ) -> Result<String> {
     Err(anyhow!("Not supported on wasm"))
 }
 
 /// Commits changes. If `include_unstaged` is true, stages all changes first via `git add -A`.
-/// `path_env` is forwarded so commit hooks can find tools on the user's `PATH`.
+/// `path_env` is forwarded so commit hooks can find tools on the user's `PATH`
+/// (local targets only).
 #[cfg(feature = "local_fs")]
 pub async fn run_commit(
-    repo_path: &Path,
+    target: &GitExecTarget,
     message: &str,
     include_unstaged: bool,
     path_env: Option<&str>,
 ) -> Result<String> {
     if include_unstaged {
-        run_git_command_with_env(repo_path, &["add", "-A"], path_env).await?;
+        target.run_git_with_env(&["add", "-A"], path_env).await?;
     }
-    run_git_command_with_env(repo_path, &["commit", "-m", message], path_env).await
+    target
+        .run_git_with_env(&["commit", "-m", message], path_env)
+        .await
 }
 
 #[cfg(not(feature = "local_fs"))]
 pub async fn run_commit(
-    _repo_path: &Path,
+    _target: &GitExecTarget,
     _message: &str,
     _include_unstaged: bool,
     _path_env: Option<&str>,
@@ -813,14 +1039,15 @@ pub async fn run_commit(
 /// Per-file stats for what would land in a PR: default branch vs
 /// `origin/<current>` (or HEAD when unpushed).
 #[cfg(feature = "local_fs")]
-pub async fn get_branch_diff_entries(repo_path: &Path) -> Result<Vec<FileChangeEntry>> {
-    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
+pub async fn get_branch_diff_entries(target: &GitExecTarget) -> Result<Vec<FileChangeEntry>> {
+    let base = detect_main_branch(target).await?;
     let base = base.trim();
-    let current = detect_current_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
+    let current = detect_current_branch(target).await?;
     let remote_ref = format!("origin/{current}");
 
     // Use the remote ref if it exists, otherwise fall back to HEAD.
-    let end_ref = if run_git_command(repo_path, &["rev-parse", "--verify", &remote_ref])
+    let end_ref = if target
+        .run_git(&["rev-parse", "--verify", &remote_ref])
         .await
         .is_ok()
     {
@@ -830,7 +1057,7 @@ pub async fn get_branch_diff_entries(repo_path: &Path) -> Result<Vec<FileChangeE
     };
 
     let range = format!("{base}..{end_ref}");
-    let output = run_git_command(repo_path, &["diff", "--numstat", &range]).await?;
+    let output = target.run_git(&["diff", "--numstat", &range]).await?;
     let mut entries = Vec::new();
     for line in output.lines() {
         if line.is_empty() {
@@ -849,24 +1076,30 @@ pub async fn get_branch_diff_entries(repo_path: &Path) -> Result<Vec<FileChangeE
 }
 
 #[cfg(not(feature = "local_fs"))]
-pub async fn get_branch_diff_entries(_repo_path: &Path) -> Result<Vec<FileChangeEntry>> {
+pub async fn get_branch_diff_entries(_target: &GitExecTarget) -> Result<Vec<FileChangeEntry>> {
     Err(anyhow!("Not supported on wasm"))
 }
 
 /// Pushes the given branch to origin, setting upstream tracking if not already configured.
-/// `path_env` is forwarded so the LFS `pre-push` hook can find `git-lfs`.
+/// `path_env` is forwarded so the LFS `pre-push` hook can find `git-lfs`
+/// (local targets only).
 #[cfg(feature = "local_fs")]
-pub async fn run_push(repo_path: &Path, branch: &str, path_env: Option<&str>) -> Result<String> {
-    run_git_command_with_env(
-        repo_path,
-        &["push", "--set-upstream", "origin", branch],
-        path_env,
-    )
-    .await
+pub async fn run_push(
+    target: &GitExecTarget,
+    branch: &str,
+    path_env: Option<&str>,
+) -> Result<String> {
+    target
+        .run_git_with_env(&["push", "--set-upstream", "origin", branch], path_env)
+        .await
 }
 
 #[cfg(not(feature = "local_fs"))]
-pub async fn run_push(_repo_path: &Path, _branch: &str, _path_env: Option<&str>) -> Result<String> {
+pub async fn run_push(
+    _target: &GitExecTarget,
+    _branch: &str,
+    _path_env: Option<&str>,
+) -> Result<String> {
     Err(anyhow!("Not supported on wasm"))
 }
 
@@ -879,51 +1112,18 @@ pub struct PrInfo {
     pub url: String,
 }
 
-/// Runs a `gh` CLI command and returns stdout on success. `path_env`, when
-/// `Some`, is set as the child's `PATH` so a Homebrew-installed `gh` is
-/// findable from macOS GUI launches (launchd's minimal `PATH` excludes it).
-#[cfg(feature = "local_fs")]
-async fn run_gh_command(repo_path: &Path, args: &[&str], path_env: Option<&str>) -> Result<String> {
-    use command::r#async::Command;
-    use command::Stdio;
-
-    log::debug!(
-        "[GIT OPERATION] git.rs run_gh_command gh {}",
-        args.join(" ")
-    );
-
-    let mut cmd = Command::new("gh");
-    cmd.args(args)
-        .current_dir(repo_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env("HOMEBREW_NO_AUTO_UPDATE", "1")
-        .kill_on_drop(true);
-    if let Some(path_env) = path_env {
-        cmd.env("PATH", path_env);
-    }
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| anyhow!("Failed to execute gh command: {e}"))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if output.status.success() {
-        Ok(stdout)
-    } else {
-        Err(anyhow!("gh command failed: {stderr}"))
-    }
-}
-
 /// Looks up the PR for the current branch via `gh pr view`.
 /// Returns `Ok(None)` if there is simply no PR for this branch.
 /// Returns `Err` for real failures (auth, network, gh not installed).
 #[cfg(feature = "local_fs")]
-pub async fn get_pr_for_branch(repo_path: &Path, path_env: Option<&str>) -> Result<Option<PrInfo>> {
-    match run_gh_command(repo_path, &["pr", "view", "--json", "number,url"], path_env).await {
+pub async fn get_pr_for_branch(
+    target: &GitExecTarget,
+    path_env: Option<&str>,
+) -> Result<Option<PrInfo>> {
+    match target
+        .run_program("gh", &["pr", "view", "--json", "number,url"], path_env)
+        .await
+    {
         Ok(stdout) => {
             let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
                 .map_err(|e| anyhow!("Failed to parse gh output: {e}"))?;
@@ -949,7 +1149,7 @@ pub async fn get_pr_for_branch(repo_path: &Path, path_env: Option<&str>) -> Resu
 
 #[cfg(not(feature = "local_fs"))]
 pub async fn get_pr_for_branch(
-    _repo_path: &Path,
+    _target: &GitExecTarget,
     _path_env: Option<&str>,
 ) -> Result<Option<PrInfo>> {
     Err(anyhow!("Not supported on wasm"))
@@ -958,13 +1158,14 @@ pub async fn get_pr_for_branch(
 /// PR-ready diff (default branch vs `origin/<current>` or HEAD),
 /// truncated for AI token limits.
 #[cfg(feature = "local_fs")]
-pub async fn get_diff_for_pr(repo_path: &Path) -> Result<String> {
-    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
+pub async fn get_diff_for_pr(target: &GitExecTarget) -> Result<String> {
+    let base = detect_main_branch(target).await?;
     let base = base.trim();
-    let current = detect_current_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
+    let current = detect_current_branch(target).await?;
     let remote_ref = format!("origin/{current}");
 
-    let end_ref = if run_git_command(repo_path, &["rev-parse", "--verify", &remote_ref])
+    let end_ref = if target
+        .run_git(&["rev-parse", "--verify", &remote_ref])
         .await
         .is_ok()
     {
@@ -974,7 +1175,7 @@ pub async fn get_diff_for_pr(repo_path: &Path) -> Result<String> {
     };
 
     let range = format!("{base}..{end_ref}");
-    let mut diff = run_git_command(repo_path, &["diff", &range]).await?;
+    let mut diff = target.run_git(&["diff", &range]).await?;
     if diff.len() > MAX_DIFF_CHARS_FOR_AI {
         diff = format!(
             "{}\n... (diff truncated)",
@@ -985,17 +1186,17 @@ pub async fn get_diff_for_pr(repo_path: &Path) -> Result<String> {
 }
 
 #[cfg(not(feature = "local_fs"))]
-pub async fn get_diff_for_pr(_repo_path: &Path) -> Result<String> {
+pub async fn get_diff_for_pr(_target: &GitExecTarget) -> Result<String> {
     Err(anyhow!("Not supported on wasm"))
 }
 
 /// Commit subject lines on the current branch since the default branch.
 #[cfg(feature = "local_fs")]
-pub async fn get_branch_commit_messages(repo_path: &Path) -> Result<Vec<String>> {
-    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
+pub async fn get_branch_commit_messages(target: &GitExecTarget) -> Result<Vec<String>> {
+    let base = detect_main_branch(target).await?;
     let base = base.trim();
     let range = format!("{base}..HEAD");
-    let output = run_git_command(repo_path, &["log", &range, "--format=%s"]).await?;
+    let output = target.run_git(&["log", &range, "--format=%s"]).await?;
     Ok(output
         .lines()
         .filter(|l| !l.is_empty())
@@ -1004,7 +1205,7 @@ pub async fn get_branch_commit_messages(repo_path: &Path) -> Result<Vec<String>>
 }
 
 #[cfg(not(feature = "local_fs"))]
-pub async fn get_branch_commit_messages(_repo_path: &Path) -> Result<Vec<String>> {
+pub async fn get_branch_commit_messages(_target: &GitExecTarget) -> Result<Vec<String>> {
     Err(anyhow!("Not supported on wasm"))
 }
 
@@ -1013,12 +1214,24 @@ pub async fn get_branch_commit_messages(_repo_path: &Path) -> Result<Vec<String>
 /// default branch.
 #[cfg(feature = "local_fs")]
 pub async fn create_pr(
-    repo_path: &Path,
+    target: &GitExecTarget,
     title: Option<&str>,
     body: Option<&str>,
     path_env: Option<&str>,
 ) -> Result<PrInfo> {
-    let base = detect_main_branch(&GitExecTarget::local(repo_path.to_path_buf())).await?;
+    if let Some(body) = body {
+        // The body travels as one shell-quoted argument on the remote arm; the
+        // host's `MAX_ARG_STRLEN` (128 KiB on Linux) bounds how much fits, and
+        // `--body` costs nothing extra locally. Reject anything that could not
+        // survive that pipe instead of letting the host truncate it silently.
+        if body.len() > MAX_PR_BODY_BYTES {
+            return Err(anyhow!(
+                "PR body is too large ({} bytes, limit {MAX_PR_BODY_BYTES})",
+                body.len()
+            ));
+        }
+    }
+    let base = detect_main_branch(target).await?;
     let base = base.trim();
     let base = base.strip_prefix("origin/").unwrap_or(base);
     let sanitized_title;
@@ -1038,7 +1251,7 @@ pub async fn create_pr(
         }
         _ => vec!["pr", "create", "--base", base, "--fill"],
     };
-    let stdout = run_gh_command(repo_path, &args, path_env).await?;
+    let stdout = target.run_program("gh", &args, path_env).await?;
     // `gh pr create` prints the PR URL on success.
     let url = stdout.trim().to_string();
     // Extract PR number from the URL (e.g. https://github.com/owner/repo/pull/123)
@@ -1059,12 +1272,40 @@ fn sanitize_pr_title(raw: &str) -> String {
 
 #[cfg(not(feature = "local_fs"))]
 pub async fn create_pr(
-    _repo_path: &Path,
+    _target: &GitExecTarget,
     _title: Option<&str>,
     _body: Option<&str>,
     _path_env: Option<&str>,
 ) -> Result<PrInfo> {
     Err(anyhow!("Not supported on wasm"))
+}
+
+/// Shell probe for an in-progress git operation, used when the working copy is
+/// remote. Resolves the git dir (so worktrees and submodules are handled) and
+/// tests the same marker files the local arm stats, in one round trip. Always
+/// exits 0 with `blocked` or `ok` on stdout.
+#[cfg(feature = "local_fs")]
+const GIT_OPERATION_PROBE: &str = "gd=$(git rev-parse --git-dir 2>/dev/null) || exit 0; \
+for f in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply index.lock; do \
+if [ -e \"$gd/$f\" ]; then echo blocked; exit 0; fi; done; echo ok";
+
+/// Probes a remote target for an in-progress git operation (merge, rebase,
+/// cherry-pick, revert) or a stale `index.lock`, mirroring the local
+/// filesystem check in `DiffStateModel::is_git_operation_blocked`. Returns
+/// `false` for local targets and on any probe failure — a transport hiccup
+/// must not block the user's writes.
+#[cfg(feature = "local_fs")]
+pub async fn probe_remote_git_operation_blocked(target: &GitExecTarget) -> bool {
+    if !target.is_remote() {
+        return false;
+    }
+    match target.run_program("sh", &["-c", GIT_OPERATION_PROBE], None).await {
+        Ok(stdout) => stdout.trim() == "blocked",
+        Err(e) => {
+            log::warn!("Remote git-operation probe failed: {e}");
+            false
+        }
+    }
 }
 
 /// Counts newlines in a file, returning 0 for binary or oversized files.

@@ -209,11 +209,15 @@ impl WorkingDirectoriesModel {
     /// detection and routes git through the remote session. Cached models are
     /// re-pointed at the current `session_id`/`client`, since those change
     /// across reconnects while the `(host, root)` identity is stable.
+    ///
+    /// `host` is the user-facing label (`user@host`) used to word errors about
+    /// host-local tooling; `host_id` is the daemon identity used for cache keys.
     pub fn get_or_create_remote_diff_state_model(
         &mut self,
         client: Arc<RemoteServerClient>,
         session_id: SessionId,
         host_id: HostId,
+        host: String,
         repo_root: String,
         ctx: &mut ModelContext<Self>,
     ) -> Option<ModelHandle<DiffStateModel>> {
@@ -221,14 +225,14 @@ impl WorkingDirectoriesModel {
         if let Some(model) = self.remote_diff_state_models.get(&key) {
             let model = model.clone();
             model.update(ctx, |model, ctx| {
-                model.set_remote_repository(client, session_id, repo_root, ctx);
+                model.set_remote_repository(client, session_id, host, repo_root, ctx);
             });
             return Some(model);
         }
 
         let diff_state_model = ctx.add_model(|model_ctx| {
             let mut model = DiffStateModel::new(None, model_ctx);
-            model.set_remote_repository(client, session_id, repo_root, model_ctx);
+            model.set_remote_repository(client, session_id, host, repo_root, model_ctx);
             model
         });
         self.remote_diff_state_models

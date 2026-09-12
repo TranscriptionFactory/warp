@@ -7911,10 +7911,11 @@ impl Workspace {
         ctx: &mut ViewContext<Self>,
     ) -> Option<(PathBuf, ModelHandle<DiffStateModel>)> {
         let terminal_view = terminal_view.upgrade(ctx)?;
-        let (host_id, root, session_id) = terminal_view.read(ctx, |tv, _| {
+        let (host_id, root, session_id, host_label) = terminal_view.read(ctx, |tv, ctx| {
             let (host_id, root) = tv.current_remote_repo()?;
             let session_id = tv.active_block_session_id()?;
-            Some((host_id.clone(), root.to_string(), session_id))
+            let host_label = tv.active_remote_host_label(ctx)?;
+            Some((host_id.clone(), root.to_string(), session_id, host_label))
         })?;
 
         let client = RemoteServerManager::as_ref(ctx)
@@ -7926,6 +7927,7 @@ impl Workspace {
                 client,
                 session_id,
                 host_id,
+                host_label,
                 root.clone(),
                 ctx,
             )

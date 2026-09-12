@@ -19,7 +19,10 @@ impl IsTransientError for FileInvalidationError {
 
 pub struct FileInvalidationTask {
     pub file: PathBuf,
-    pub repo_path: PathBuf,
+    /// Transport the diff for `file` is computed against. Derived from the
+    /// active [`DiffStateModel`] at enqueue time so a remote session runs its
+    /// per-file invalidation on the remote host.
+    pub exec_target: GitExecTarget,
     pub mode: DiffMode,
     pub merge_base: Option<String>,
 }
@@ -33,19 +36,14 @@ impl SyncQueueTaskTrait for FileInvalidationTask {
     type Fut = Pin<Box<dyn Future<Output = Result<Self::Result, Self::Error>>>>;
 
     fn run(&mut self) -> Self::Fut {
-        let repo_path = self.repo_path.clone();
+        let exec_target = self.exec_target.clone();
         let file = self.file.clone();
         let mode = self.mode.clone();
         let merge_base = self.merge_base.clone();
         Box::pin(async move {
-            DiffStateModel::retrieve_diff_state(
-                &GitExecTarget::local(repo_path),
-                &file,
-                &mode,
-                merge_base.as_deref(),
-            )
-            .await
-            .map_err(FileInvalidationError::from)
+            DiffStateModel::retrieve_diff_state(&exec_target, &file, &mode, merge_base.as_deref())
+                .await
+                .map_err(FileInvalidationError::from)
         })
     }
 }

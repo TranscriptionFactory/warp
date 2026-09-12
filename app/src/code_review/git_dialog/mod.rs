@@ -9,8 +9,6 @@
 //! + confirm async, extend `GitDialogMode`, add the per-mode action and
 //! outcome variant, and wire up dispatch.
 
-use std::path::PathBuf;
-
 use pathfinder_geometry::vector::vec2f;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
@@ -37,7 +35,7 @@ use crate::{
         dialog::{dialog_styles, Dialog},
         icons::Icon,
     },
-    util::git::{Commit, FileChangeEntry},
+    util::git::{Commit, FileChangeEntry, GitExecTarget},
     view_components::{
         action_button::{ActionButton, ButtonSize, NakedTheme, SecondaryTheme},
         DismissibleToast,
@@ -147,7 +145,11 @@ fn should_send_git_ops_ai_request(app: &AppContext) -> bool {
 /// Maps a raw git error string to a user-friendly toast message. Known
 /// failure modes get dedicated copy; anything else falls back to a generic
 /// message (the raw error is always logged separately at the call site).
-fn user_facing_git_error(raw: &str) -> &'static str {
+///
+/// `host` is the remote host label (`user@host`) when the command ran over SSH,
+/// or `None` locally. GitHub-CLI failures are worded with the host so a missing
+/// or unauthenticated remote `gh` is not reported as a generic git failure.
+fn user_facing_git_error(raw: &str, host: Option<&str>) -> String {
     let lower = raw.to_lowercase();
     if lower.contains("nothing to commit") {
         "No changes to commit."
@@ -176,20 +178,34 @@ fn user_facing_git_error(raw: &str) -> &'static str {
         "Network error. Check your connection."
     } else if lower.contains("repository not found") {
         "Remote repository not found."
-    } else if lower.contains("failed to execute gh command") {
-        // `run_gh_command` wraps spawn failures with this prefix, which is
-        // the reliable "gh binary missing" signal.
-        "GitHub CLI (gh) not installed. See https://cli.github.com/."
+    } else if lower.contains("failed to execute gh command")
+        || (lower.contains("gh command failed") && lower.contains("not found"))
+    {
+        // `run_local_program` reports spawn failures with "Failed to execute
+        // gh command"; over SSH the host shell reports "gh command failed:
+        // .../sh: gh: not found". Both mean the binary is missing.
+        return match host {
+            Some(host) => {
+                format!("GitHub CLI (gh) not installed on {host}. See https://cli.github.com/.")
+            }
+            None => "GitHub CLI (gh) not installed. See https://cli.github.com/.".to_string(),
+        };
     } else if lower.contains("not logged in")
         || lower.contains("authentication required")
         || lower.contains("gh auth login")
     {
         // Phrases mirror `context_chips::current_prompt::is_gh_auth_error`,
         // which has been vetted against real `gh` failure output.
-        "GitHub CLI not authenticated. Run `gh auth login`."
+        return match host {
+            Some(host) => {
+                format!("GitHub CLI not authenticated on {host}. Run `gh auth login` there.")
+            }
+            None => "GitHub CLI not authenticated. Run `gh auth login`.".to_string(),
+        };
     } else {
-        "Git operation failed."
+        return "Git operation failed.".to_string();
     }
+    .to_string()
 }
 
 // ── Shared rendering helpers ─────────────────────────────────────────
@@ -480,7 +496,9 @@ pub enum GitDialogMode {
 }
 
 pub struct GitDialog {
-    repo_path: PathBuf,
+    /// Transport-agnostic git target: the local working copy or the remote
+    /// session's repo. All mode async ops run against this.
+    exec_target: GitExecTarget,
     branch_name: String,
     mode: GitDialogMode,
     loading: bool,
@@ -491,7 +509,7 @@ pub struct GitDialog {
 
 impl GitDialog {
     pub fn new_for_commit(
-        repo_path: PathBuf,
+        exec_target: GitExecTarget,
         branch_name: String,
         allow_create_pr: bool,
         has_upstream: bool,
@@ -503,9 +521,9 @@ impl GitDialog {
         // will actually run on click.
         let (confirm_button, cancel_button, close_button) =
             Self::build_dialog_buttons(crate::t!("common-confirm"), None, ctx);
-        let state = commit::new_state(&repo_path, allow_create_pr, has_upstream, ctx);
+        let state = commit::new_state(&exec_target, allow_create_pr, has_upstream, ctx);
         let this = Self {
-            repo_path,
+            exec_target,
             branch_name,
             mode: GitDialogMode::Commit(state),
             loading: false,
@@ -518,7 +536,7 @@ impl GitDialog {
     }
 
     pub fn new_for_push(
-        repo_path: PathBuf,
+        exec_target: GitExecTarget,
         branch_name: String,
         publish: bool,
         commits: Vec<Commit>,
@@ -531,7 +549,7 @@ impl GitDialog {
         );
         let state = push::new_state(publish, commits);
         Self {
-            repo_path,
+            exec_target,
             branch_name,
             mode: GitDialogMode::Push(state),
             loading: false,
@@ -542,16 +560,16 @@ impl GitDialog {
     }
 
     pub fn new_for_pr(
-        repo_path: PathBuf,
+        exec_target: GitExecTarget,
         branch_name: String,
         base_branch_name: Option<String>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let (confirm_button, cancel_button, close_button) =
             Self::build_dialog_buttons(pr::confirm_label_for(), Some(pr::confirm_icon_for()), ctx);
-        let state = pr::new_state(&repo_path, base_branch_name, ctx);
+        let state = pr::new_state(&exec_target, base_branch_name, ctx);
         Self {
-            repo_path,
+            exec_target,
             branch_name,
             mode: GitDialogMode::CreatePr(state),
             loading: false,
@@ -595,8 +613,8 @@ impl GitDialog {
         (confirm_button, cancel_button, close_button)
     }
 
-    fn repo_path(&self) -> &PathBuf {
-        &self.repo_path
+    fn exec_target(&self) -> &GitExecTarget {
+        &self.exec_target
     }
 
     fn branch_name(&self) -> &str {

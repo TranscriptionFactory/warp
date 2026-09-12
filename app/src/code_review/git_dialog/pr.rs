@@ -4,8 +4,6 @@
 //! with expandable per-file stats. On confirm, spawns `create_pr` and shows
 //! a toast with a clickable "Open PR" link.
 
-use std::path::Path;
-
 use warp_core::ui::appearance::Appearance;
 use warpui::{
     elements::{
@@ -20,7 +18,7 @@ use crate::{
         user_facing_git_error, GitDialog, GitDialogAction, GitDialogEvent, GitDialogMode,
     },
     ui_components::icons::Icon,
-    util::git::{create_pr, get_branch_diff_entries, FileChangeEntry, PrInfo},
+    util::git::{create_pr, get_branch_diff_entries, FileChangeEntry, GitExecTarget, PrInfo},
     view_components::{DismissibleToast, ToastLink},
     workspace::ToastStack,
 };
@@ -58,13 +56,13 @@ pub(super) fn is_ready_to_confirm(_state: &PrState) -> bool {
 }
 
 pub(super) fn new_state(
-    repo_path: &Path,
+    exec_target: &GitExecTarget,
     base_branch_name: Option<String>,
     ctx: &mut ViewContext<GitDialog>,
 ) -> PrState {
-    let diff_repo_path = repo_path.to_path_buf();
+    let target_for_load = exec_target.clone();
     ctx.spawn(
-        async move { get_branch_diff_entries(&diff_repo_path).await },
+        async move { get_branch_diff_entries(&target_for_load).await },
         |me, result, ctx| {
             if let GitDialogMode::CreatePr(state) = &mut me.mode {
                 match result {
@@ -111,7 +109,7 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
     let GitDialogMode::CreatePr(_) = me.mode() else {
         return;
     };
-    let repo_path = me.repo_path().clone();
+    let exec_target = me.exec_target().clone();
 
     me.set_loading(loading_label_for(), ctx);
 
@@ -120,16 +118,17 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
     ctx.spawn(
         async move {
             let path_env = path_future.await;
-            create_pr(&repo_path, None, None, path_env.as_deref()).await
+            create_pr(&exec_target, None, None, path_env.as_deref()).await
         },
-        move |_me, result, ctx| {
+        move |me, result, ctx| {
             match result {
                 Ok(pr_info) => {
                     show_pr_created_toast(&pr_info, ctx);
                 }
                 Err(err) => {
                     log::error!("Failed to create PR: {err}");
-                    show_toast(user_facing_git_error(&err.to_string()), ctx);
+                    let host = me.exec_target().remote_host().map(str::to_string);
+                    show_toast(user_facing_git_error(&err.to_string(), host.as_deref()), ctx);
                 }
             }
             ctx.emit(GitDialogEvent::Completed);
