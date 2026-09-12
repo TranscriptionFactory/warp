@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v2026.09.12.1] — 2026-09-12
+
+- **Code Review / 远端仓库**:代码评审面板的写路径(commit / push / 创建 PR)与 PR 查询不再只在本地跑 —— 此前在 warpified SSH 会话中,这些命令仍以本地 cwd 拼上远端仓库路径执行,于是要么失败、要么静默什么也没做。现在新增统一的远端命令执行器(`GitExecTarget::run_program` 与唯一的引用/转义实现 `build_remote_command`),全部 git 读 helper 连同 `gh pr view` / `gh pr create` 都按 exec target 执行;`gh` 在远端缺失或未认证时,git 操作下拉框显示禁用的 “Could not check for a PR on `<host>`”,Create PR 按钮同时禁用并给出带主机名的提示,不再把“查不到 PR”当成“分支没有 PR”
+- **Code Review / 远端仓库**:未跟踪文件行数统计与 commit 信息 diff 改走 `git diff --no-index`(`count_untracked_lines_via_git`),远端目标不再读本地文件系统;merge/rebase 保护在远端改为刷新元数据时的一次 shell 探测并缓存结果(`MERGE_HEAD`/`CHERRY_PICK_HEAD`/`REVERT_HEAD`/`rebase-merge`/`rebase-apply`/`index.lock`);`GitDialog` 持有 `GitExecTarget` 而非 `PathBuf`,per-file 增量刷新携带 exec target
+- **Code Review / PR 正文**:`gh pr create` 继续用 `--body <text>`(shell 转义已由单测覆盖引号、换行、`$` 与 unicode),并新增 64 KiB 上限,超限时在构造命令之前报错,不在远端落地临时文件
+
 ## [v2026.08.30.3] — 2026-08-31
 
 - **构建修复**:v2026.08.30.2 的发布构建在 Linux/Windows 上编译失败(Rust 2024 edition 迁移在 macOS 上执行,未覆盖 cfg 平台专属代码):为 `env::set_var`/`remove_var` 补上 `unsafe` 块,平台 `extern` 块改为 `unsafe extern`,`#[no_mangle]` 改为 `#[unsafe(no_mangle)]`。v2026.08.30.2 未产出发布成品,其全部变更随本版本首次发布。
