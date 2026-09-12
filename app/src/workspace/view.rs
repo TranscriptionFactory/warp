@@ -13150,6 +13150,16 @@ impl Workspace {
                     }
                 }
             }
+            pane_group::Event::MovePaneToOwnTab { pane_id } => {
+                // Zap:把 pane 从当前 tab 拆出,紧随其后插入为独立 tab。
+                // 与拖拽 pane 头部落到标签之间(BeforeTab)走同一套逻辑。
+                let new_idx = self.active_tab_index + 1;
+                if let Some(pane) = pane_group.update(ctx, |pane_group, ctx| {
+                    pane_group.remove_pane_for_move(pane_id, ctx)
+                }) {
+                    self.add_tab_from_existing_pane(pane, new_idx, ctx);
+                }
+            }
             pane_group::Event::SwitchTabFocusAndMovePane {
                 tab_idx,
                 pane_id,

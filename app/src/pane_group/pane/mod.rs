@@ -1104,6 +1104,8 @@ pub enum PaneEvent {
     SplitUp(Option<AvailableShell>),
     SplitDown(Option<AvailableShell>),
     ToggleMaximized,
+    /// Zap:请求把该 pane 从当前 tab 的 pane group 中拆出,提升为独立 tab。
+    MoveToOwnTab,
     /// Make this pane the focused pane.
     FocusSelf,
     FocusActiveSession,

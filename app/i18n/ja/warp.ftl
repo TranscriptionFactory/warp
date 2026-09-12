@@ -2306,6 +2306,7 @@ menu-tab-default-no-color = デフォルト (色なし)
 # --- pane header 溢出菜单(terminal/view/pane_impl.rs) ---
 menu-pane-copy-link = リンクをコピー
 menu-pane-stop-sharing-session = セッションブロードキャストを停止
+menu-pane-move-to-own-tab = ペインを独立したタブへ移動
 menu-pane-open-on-desktop = デスクトップで開く
 
 # --- 文件树右键菜单(code/file_tree/view.rs) ---

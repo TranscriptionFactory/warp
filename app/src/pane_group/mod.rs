@@ -545,6 +545,11 @@ pub enum Event {
         origin: ActionOrigin,
         pane_id: PaneId,
     },
+    /// Zap:把指定 pane 从其所在 tab 的 pane group 中拆出,提升为独立 tab。
+    /// 由 workspace 处理(pane 与 tab 的归属关系属于 workspace 层)。
+    MovePaneToOwnTab {
+        pane_id: PaneId,
+    },
     /// Switches the focus to the specified tab and moves the given
     /// pane_id into the tab as a hidden pane. This will insert it into the pane
     /// group, but it will not yet render it
@@ -4108,6 +4113,9 @@ impl PaneGroup {
                 // The toggled pane might not be the active pane -- focus it first.
                 self.focus_pane_by_id(pane_id, ctx);
                 self.toggle_maximize_pane(ctx);
+            }
+            PaneEvent::MoveToOwnTab => {
+                ctx.emit(Event::MovePaneToOwnTab { pane_id });
             }
             PaneEvent::FocusSelf => self.focus_pane_by_id(pane_id, ctx),
             PaneEvent::FocusActiveSession => self.focus_active_session(ctx),

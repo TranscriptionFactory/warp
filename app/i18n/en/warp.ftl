@@ -2402,6 +2402,7 @@ menu-tab-default-no-color = Default (no color)
 # --- pane header 溢出菜单(terminal/view/pane_impl.rs) ---
 menu-pane-copy-link = Copy link
 menu-pane-stop-sharing-session = Stop session broadcast
+menu-pane-move-to-own-tab = Move pane to its own tab
 menu-pane-open-on-desktop = Open on Desktop
 
 # --- 文件树右键菜单(code/file_tree/view.rs) ---

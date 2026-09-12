@@ -212,6 +212,8 @@ pub enum TerminalAction {
     ClearSelectionsWhenShellMode,
     Close,
     ToggleMaximizePane,
+    /// Zap:把当前 pane 拆出为独立 tab(pane 头部三点菜单)。
+    MovePaneToOwnTab,
     SplitRight(Option<AvailableShell>),
     SplitLeft(Option<AvailableShell>),
     SplitDown(Option<AvailableShell>),
@@ -498,6 +500,7 @@ impl fmt::Debug for TerminalAction {
             SplitLeft(_) => f.write_str("SplitLeft"),
             SplitDown(_) => f.write_str("SplitDown"),
             SplitUp(_) => f.write_str("SplitUp"),
+            MovePaneToOwnTab => f.write_str("MovePaneToOwnTab"),
             ToggleMaximizePane => f.write_str("ToggleMaximizeActivePane"),
             PromptContextMenu {
                 position_offset_from_prompt,
