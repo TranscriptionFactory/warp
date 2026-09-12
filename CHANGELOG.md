@@ -3,6 +3,9 @@
 本文档记录 OpenWarp 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
 
 ## [Unreleased]
+## [v2026.09.12.2] — 2026-09-12
+
+- **分屏 / 标签页**:pane 头部三点菜单新增 “Move pane to its own tab”(将窗格移至独立标签页)。此前把 pane 头部拖到 workspace 标签上会误把两个 tab 合并进同一 pane group,而拆回去的唯一方法是再把 pane 头部拖到标签之间,极易二次误操作;现在处于分屏中的 pane 可在菜单里一键拆出,复用 BeforeTab 拖放逻辑(`remove_pane_for_move` + `add_tab_from_existing_pane`),新 tab 插入在原 tab 之后。终端 pane 先支持(en / zh-CN / ja 三语文案)。
 
 ## [v2026.09.12.1] — 2026-09-12
 
