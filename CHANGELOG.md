@@ -3,6 +3,11 @@
 本文档记录 OpenWarp 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
 
 ## [Unreleased]
+## [v2026.09.16.1] — 2026-09-16
+
+- **AI / BYOP**:OpenCode Go(`opencode.ai/zen/go`)要求每个请求带 `x-opencode-session`,缺失时直接 400 `MissingSessionID`,此前所有 OpenCode Go 模型在 Zap 里都无法使用。现在对 opencode.ai host 自动注入:主对话流用 conversation token(与 `prompt_cache_key` 同源,同一会话内稳定),标题生成 / 主动 AI 等 one-shot 请求每次用新 UUID;用户在 provider extra headers 里手填的同名 header 优先,不覆盖。
+- **AI / BYOP**:provider 级自定义 extra headers 此前只在主对话流出线,标题生成与主动 AI(prompt suggestions / next command 等)的 one-shot 请求会丢掉这些 header,导致需要自定义 header 鉴权的代理 / 网关(Cloudflare AI Gateway、Azure `api-key`、企业代理)在这些路径上静默失败。现在 `OneshotConfig` / `TitleGenInput` 携带并下发 provider 的 extra headers。
+
 ## [v2026.09.12.2] — 2026-09-12
 
 - **分屏 / 标签页**:pane 头部三点菜单新增 “Move pane to its own tab”(将窗格移至独立标签页)。此前把 pane 头部拖到 workspace 标签上会误把两个 tab 合并进同一 pane group,而拆回去的唯一方法是再把 pane 头部拖到标签之间,极易二次误操作;现在处于分屏中的 pane 可在菜单里一键拆出,复用 BeforeTab 拖放逻辑(`remove_pane_for_move` + `add_tab_from_existing_pane`),新 tab 插入在原 tab 之后。终端 pane 先支持(en / zh-CN / ja 三语文案)。
