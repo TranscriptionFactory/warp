@@ -32,6 +32,8 @@ pub struct OneshotConfig {
     pub model_id: String,
     pub api_type: AgentProviderApiType,
     pub reasoning_effort: ReasoningEffortSetting,
+    /// Provider 级用户自定义 header(与主对话流同源),否则代理 / 网关鉴权在 one-shot 上静默失败。
+    pub extra_headers: Vec<(String, String)>,
 }
 
 /// One-shot 调用的可选参数。
@@ -81,7 +83,8 @@ fn build_oneshot_request(
     }
 
     // OpenCode Go 缺 `x-opencode-session` 会 400;one-shot 无会话 → 每次新 UUID。
-    let headers = chat_stream::with_opencode_session_header(&cfg.base_url, Vec::new(), None);
+    let headers =
+        chat_stream::with_opencode_session_header(&cfg.base_url, cfg.extra_headers.clone(), None);
     if !headers.is_empty() {
         chat_opts = chat_opts.with_extra_headers(headers);
     }
@@ -180,6 +183,7 @@ pub fn resolve_active_ai_oneshot(
         model_id,
         api_type: provider.api_type,
         reasoning_effort,
+        extra_headers: provider.extra_headers,
     })
 }
 
@@ -203,5 +207,59 @@ pub fn resolve_next_command_oneshot(
         model_id,
         api_type: provider.api_type,
         reasoning_effort,
+        extra_headers: provider.extra_headers,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(base_url: &str, extra_headers: Vec<(String, String)>) -> OneshotConfig {
+        OneshotConfig {
+            base_url: base_url.to_owned(),
+            api_key: "k".to_owned(),
+            model_id: "m".to_owned(),
+            api_type: AgentProviderApiType::OpenAi,
+            reasoning_effort: ReasoningEffortSetting::Auto,
+            extra_headers,
+        }
+    }
+
+    fn header_names(opts: &ChatOptions) -> Vec<String> {
+        opts.extra_headers
+            .as_ref()
+            .map(|h| h.iter().map(|(k, _)| k.to_ascii_lowercase()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Provider 级 extra_headers 必须随 one-shot 请求出线(此前被丢弃,代理鉴权静默失败)。
+    #[test]
+    fn oneshot_forwards_provider_extra_headers() {
+        let c = cfg(
+            "https://proxy.example.com/v1",
+            vec![("X-Proxy-Token".to_owned(), "t".to_owned())],
+        );
+        let (_, opts) = build_oneshot_request(&c, "sys", "user", &OneshotOptions::default());
+        assert_eq!(header_names(&opts), vec!["x-proxy-token"]);
+    }
+
+    #[test]
+    fn oneshot_without_headers_sets_none() {
+        let c = cfg("https://proxy.example.com/v1", vec![]);
+        let (_, opts) = build_oneshot_request(&c, "sys", "user", &OneshotOptions::default());
+        assert!(opts.extra_headers.is_none());
+    }
+
+    #[test]
+    fn oneshot_adds_opencode_session_alongside_user_headers() {
+        let c = cfg(
+            "https://opencode.ai/zen/go/v1",
+            vec![("X-Foo".to_owned(), "bar".to_owned())],
+        );
+        let (_, opts) = build_oneshot_request(&c, "sys", "user", &OneshotOptions::default());
+        let mut names = header_names(&opts);
+        names.sort();
+        assert_eq!(names, vec!["x-foo", "x-opencode-session"]);
+    }
 }

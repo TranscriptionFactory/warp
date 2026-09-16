@@ -3327,6 +3327,7 @@ pub struct TitleGenInput {
     pub model_id: String,
     pub api_type: AgentProviderApiType,
     pub reasoning_effort: crate::settings::ReasoningEffortSetting,
+    pub extra_headers: Vec<(String, String)>,
 }
 
 pub struct ByopOutputInput {
@@ -4576,6 +4577,7 @@ pub(crate) async fn generate_title_via_byop(
         model_id: tg.model_id.clone(),
         api_type: tg.api_type,
         reasoning_effort: tg.reasoning_effort,
+        extra_headers: tg.extra_headers.clone(),
     };
     let system = include_str!("prompts/tasks/title_system.md");
     let user_prompt = format!(
