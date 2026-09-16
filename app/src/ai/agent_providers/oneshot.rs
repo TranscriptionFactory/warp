@@ -80,6 +80,12 @@ fn build_oneshot_request(
         }
     }
 
+    // OpenCode Go 缺 `x-opencode-session` 会 400;one-shot 无会话 → 每次新 UUID。
+    let headers = chat_stream::with_opencode_session_header(&cfg.base_url, Vec::new(), None);
+    if !headers.is_empty() {
+        chat_opts = chat_opts.with_extra_headers(headers);
+    }
+
     let max_chars = opts.max_chars.unwrap_or(DEFAULT_MAX_CHARS);
     let user_truncated = truncate_chars(user, max_chars);
 

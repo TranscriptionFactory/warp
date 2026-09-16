@@ -3119,6 +3119,34 @@ fn opencode_compatible_cache_provider(base_url: &str) -> bool {
         || u.contains("opencode.ai/zen")
 }
 
+/// OpenCode Go(`opencode.ai/zen/go/...`)要求每个请求带 `x-opencode-session`,
+/// 缺失时直接 400 `MissingSessionID`(https://opencode.ai/docs/go/#where-can-i-use-it)。
+/// 值应是"每个会话稳定"的 ID,服务端用它做路由 + prompt cache 亲和。
+///
+/// - 主对话流传 `session_id = conversation_token`(与 `prompt_cache_key` 同源)。
+/// - one-shot(标题生成 / 主动 AI)没有会话概念,传 `None` → 每次请求新 UUID。
+/// - 用户已在 provider extra_headers 里手填同名 header 时尊重之,不覆盖。
+/// - 非 opencode.ai host 原样返回,不注入任何 header。
+pub(super) fn with_opencode_session_header(
+    base_url: &str,
+    mut headers: Vec<(String, String)>,
+    session_id: Option<&str>,
+) -> Vec<(String, String)> {
+    const HEADER: &str = "x-opencode-session";
+    if !base_url.to_ascii_lowercase().contains("opencode.ai") {
+        return headers;
+    }
+    if headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(HEADER)) {
+        return headers;
+    }
+    let value = match session_id {
+        Some(id) if !id.is_empty() => id.to_owned(),
+        _ => Uuid::new_v4().to_string(),
+    };
+    headers.push((HEADER.to_owned(), value));
+    headers
+}
+
 fn build_chat_options(
     api_type: AgentProviderApiType,
     base_url: &str,
@@ -3246,6 +3274,7 @@ fn build_chat_options(
         );
         opts = opts.with_extra_body(json!({"enable_thinking": true}));
     }
+    let extra_headers = with_opencode_session_header(base_url, extra_headers, conversation_id);
     if !extra_headers.is_empty() {
         opts = opts.with_extra_headers(extra_headers);
     }
@@ -5652,6 +5681,71 @@ mod build_chat_options_off_tests {
         // gpt-4o 不在 reasoning 名单,Off 也跳过
         let o = opts(AgentProviderApiType::OpenAi, "gpt-4o", R::Off);
         assert!(o.reasoning_effort.is_none());
+    }
+}
+
+#[cfg(test)]
+mod opencode_session_header_tests {
+    use super::*;
+    use crate::settings::ReasoningEffortSetting as R;
+
+    const GO: &str = "https://opencode.ai/zen/go/v1";
+
+    fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+
+    #[test]
+    fn injects_conversation_id_for_opencode_host() {
+        let h = with_opencode_session_header(GO, vec![], Some("conv-123"));
+        assert_eq!(header(&h, "x-opencode-session"), Some("conv-123"));
+    }
+
+    #[test]
+    fn falls_back_to_fresh_uuid_without_session() {
+        let a = with_opencode_session_header(GO, vec![], None);
+        let b = with_opencode_session_header(GO, vec![], Some(""));
+        let va = header(&a, "x-opencode-session").expect("header injected");
+        let vb = header(&b, "x-opencode-session").expect("header injected");
+        assert!(Uuid::parse_str(va).is_ok(), "expected UUID, got {va}");
+        assert_ne!(va, vb, "one-shot calls must not share a session id");
+    }
+
+    #[test]
+    fn respects_user_supplied_header() {
+        let user = vec![("X-OpenCode-Session".to_owned(), "mine".to_owned())];
+        let h = with_opencode_session_header(GO, user, Some("conv-123"));
+        assert_eq!(h.len(), 1);
+        assert_eq!(header(&h, "x-opencode-session"), Some("mine"));
+    }
+
+    #[test]
+    fn leaves_other_hosts_untouched() {
+        let user = vec![("X-Foo".to_owned(), "bar".to_owned())];
+        let h = with_opencode_session_header("https://api.openai.com/v1", user.clone(), Some("c"));
+        assert_eq!(h, user);
+    }
+
+    /// 端到端:`build_chat_options` 对 OpenCode Go 必须把 header 塞进 `extra_headers`。
+    #[test]
+    fn build_chat_options_carries_header_for_opencode_go() {
+        let o = build_chat_options(
+            AgentProviderApiType::OpenAi,
+            GO,
+            "deepseek-v4.1-flash",
+            R::Auto,
+            vec![],
+            Some("conv-123"),
+        );
+        let headers = o.extra_headers.expect("extra_headers set for OpenCode Go");
+        let found = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("x-opencode-session"))
+            .map(|(_, v)| v.as_str());
+        assert_eq!(found, Some("conv-123"));
     }
 }
 
