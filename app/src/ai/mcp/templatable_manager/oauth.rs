@@ -18,6 +18,7 @@ use warpui::ModelSpawner;
 use warpui_extras::secure_storage::AppContextExt as _;
 
 use super::{MCPServerState, TemplatableMCPServerManager};
+use crate::ai::mcp::http_client::build_oauth_discovery_client;
 use {crate::ai::mcp::FileBasedMCPManager, warpui::SingletonEntity};
 
 pub(crate) const TEMPLATABLE_MCP_CREDENTIALS_KEY: &str = "TemplatableMcpCredentials";
@@ -224,8 +225,15 @@ pub async fn make_authenticated_client(
     // Dynamic Client Registration, satisfying RFC 6749 §3.1.2.2 exact-match validation.
     let redirect_uri = format!("{}://mcp/oauth2callback", ChannelState::url_scheme());
 
+    // Drive rmcp's OAuth state machine through a hardened client. rmcp fetches the
+    // `resource_metadata` URL out of the server's `WWW-Authenticate` header without any origin
+    // or address check, and does so inside `start_authorization()` — i.e. before the user sees
+    // a consent screen — so an unhardened client here is an unauthenticated SSRF primitive.
+    let discovery_client = build_oauth_discovery_client()
+        .map_err(|e| AuthError::InternalError(format!("Failed to build OAuth client: {e}")))?;
+
     // Create the OAuth state machine.
-    let mut oauth_state = OAuthState::new(resource_url, None).await?;
+    let mut oauth_state = OAuthState::new(resource_url, Some(discovery_client.clone())).await?;
 
     // If we have cached credentials, use them.
     if let Some(credentials) = persisted_credentials {
@@ -278,7 +286,8 @@ pub async fn make_authenticated_client(
 
                     // We didn't have a valid auth token _and_ we could not refresh it, so
                     // we need to go through the OAuth flow again.
-                    oauth_state = OAuthState::new(resource_url, None).await?;
+                    oauth_state =
+                        OAuthState::new(resource_url, Some(discovery_client.clone())).await?;
                 }
             }
         }
