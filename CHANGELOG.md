@@ -3,6 +3,17 @@
 本文档记录 OpenWarp 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
 
 ## [Unreleased]
+## [v2026.09.28.1] — 2026-09-28
+
+上游(warpdotdev)2026-09-28 同步:移植 10 个上游修复,外加 2 个本地 MCP 安全加固。
+
+- **安全 / MCP**:用户为 MCP server 配置的自定义 header(API key、鉴权 token)此前会在 HTTP 重定向时被重放到重定向目标 —— reqwest 默认跟随 30x,而 rmcp 0.10.0 不把这些 header 标记为 sensitive,`remove_sensitive_headers()` 因此不会剥离它们;恶意或被劫持的 MCP server 只要回一个 30x 就能把凭据引到自己的 host(等同 CVE-2026-64684)。现在 MCP client 显式禁用重定向。
+- **安全 / MCP OAuth**:OAuth 发现流程存在未经用户确认的 SSRF(GHSA-c9xm-49cp-xcr9)。rmcp 的 `extract_resource_metadata_url_from_header` 接受 server 在 `WWW-Authenticate: Bearer resource_metadata="..."` 里给出的任意绝对 URL 并直接 GET,而发现发生在 `start_authorization()` 内、早于浏览器同意界面 —— 恶意 MCP server 可在用户点下「授权」之前就让客户端去打 `169.254.169.254` 云元数据服务、localhost 服务或任意内网主机。现在 OAuth 发现改走独立的加固 client:自定义 DNS resolver 拦截环回 / 私有 / 链路本地 / 保留网段,并强制 resource metadata URL 与 issuer 同源。仍未覆盖:CVE-2026-63127(`ResourceServerMetadata` 缺 `resource` 字段导致的授权服务器混淆)需升级 rmcp 依赖本身。
+- **崩溃修复 / 终端网格**:行尾字符被变体选择符从单宽提升为双宽时,晋升逻辑仍按行内情形处理、不为双宽 spacer 留格,产生不一致的宽字符元数据,随后 FlatStorage 重建行时越界读取并使后台处理崩溃。现在仅在零宽字符确实改变字素宽度时才套用宽字符布局:换行开启时把行尾字素移到下一行,关闭时去掉选择符保留窄字素(#15763)。
+- **崩溃修复**:Code Review 面板重复的 discard 确认触发 `index out of bounds`(#15884);Agent 流式返回空文档更新时崩溃(#15720);字形缺 bounding box 时 `em_width` panic(部分 Windows 字体)(#15705);新增 `ViewHandle::try_update` 守卫 view 更新,view 已失效时不再 panic(#15695)。
+- **UI / 终端**:关闭标签页右键菜单后恢复焦点(#16138);macOS 剪贴板识别 `public.tiff` 为图片数据(#16055);用户命令在无活跃 in-band 接收时启动,不再打印预期内的 reset 警告(CORE-3810);Windows 重新启用 LRC 进程活动信号(#15690)。
+- **构建**:macOS bootstrap 脚本安装 protobuf(#15710)。
+
 ## [v2026.09.16.1] — 2026-09-16
 
 - **AI / BYOP**:OpenCode Go(`opencode.ai/zen/go`)要求每个请求带 `x-opencode-session`,缺失时直接 400 `MissingSessionID`,此前所有 OpenCode Go 模型在 Zap 里都无法使用。现在对 opencode.ai host 自动注入:主对话流用 conversation token(与 `prompt_cache_key` 同源,同一会话内稳定),标题生成 / 主动 AI 等 one-shot 请求每次用新 UUID;用户在 provider extra headers 里手填的同名 header 优先,不覆盖。
