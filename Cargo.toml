@@ -22,7 +22,7 @@ default-members = [
 ]
 
 [workspace.package]
-authors = ["Warp Team <dev@warp.dev>"]
+authors = ["TranscriptionFactory <TranscriptionFactory@gmail.com> via work of the Warp Team <dev@warp.dev>"]
 license = "AGPL-3.0-only"
 publish = false
 
