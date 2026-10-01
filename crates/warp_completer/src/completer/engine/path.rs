@@ -1,12 +1,12 @@
 use std::fmt::{Display, Formatter};
 use std::fs::DirEntry;
 
-use itertools::{iproduct, Itertools};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use typed_path::{TypedPath, TypedPathBuf};
 use warp_command_signatures::{IconType, PathSuggestionType};
-use warp_util::path::HOME_DIR_ENV_VAR_PREFIX;
+use warp_util::path::{expand_session_home, HOME_DIR_ENV_VAR_PREFIX};
 
 use crate::completer::suggest::Priority;
 use crate::completer::{
@@ -283,16 +283,18 @@ impl SplitPath {
 
         let directory_absolute_path = if directory_relative_path_name.is_empty() {
             current_directory.to_path_buf()
-        } else if let Some(rest) = iproduct!([HOME_DIR_ENV_VAR_PREFIX, "~"], path_separators)
-            .find_map(|(prefix, sep)| {
-                directory_relative_path_name.strip_prefix(&format!("{prefix}{sep}"))
-            })
-        {
+        } else if let Some(rest) = path_separators.iter().find_map(|sep| {
+            directory_relative_path_name.strip_prefix(&format!("{HOME_DIR_ENV_VAR_PREFIX}{sep}"))
+        }) {
             let mut home_directory = TypedPathBuf::from(home_directory.unwrap_or_default());
             home_directory.push(rest.replace(r"\~", "~"));
             home_directory
-        } else {
+        } else if directory_relative_path_name.starts_with(r"\~") {
             current_directory.join(directory_relative_path_name.replace(r"\~", "~"))
+        } else {
+            let unescaped_path = directory_relative_path_name.replace(r"\~", "~");
+            let expanded = expand_session_home(&unescaped_path, home_directory, path_separators);
+            current_directory.join(expanded)
         };
 
         // Unescape escaped tildes in the filename.

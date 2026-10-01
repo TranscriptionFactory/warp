@@ -70,6 +70,29 @@ fn test_split_path() {
     );
 }
 
+#[test]
+fn split_path_keeps_escaped_leading_tilde_relative_to_pwd() {
+    let pwd = TypedPathBuf::from_unix("/work");
+    let split = SplitPath::new(pwd.to_path(), r"\~/file", Some("/home/me"), &['/']);
+
+    assert_eq!(
+        split.directory_absolute_path,
+        TypedPathBuf::from_unix("/work/~/")
+    );
+    assert_eq!(split.directory_relative_path_name, r"\~/");
+}
+
+#[test]
+fn split_path_expands_tilde_against_session_home() {
+    let pwd = TypedPathBuf::from_unix("/work");
+    let split = SplitPath::new(pwd.to_path(), "~/src/fi", Some("/home/me"), &['/']);
+
+    assert_eq!(
+        split.directory_absolute_path,
+        TypedPathBuf::from_unix("/home/me/src/")
+    );
+}
+
 fn file_entry(file_name: &str) -> EngineDirEntry {
     EngineDirEntry {
         file_name: file_name.to_owned(),
