@@ -57,6 +57,9 @@ pub(super) struct State {
     /// Information about cell dimensions.
     pub cell_width: usize,
     pub cell_height: usize,
+    /// Untruncated cell dimensions, used to map image pixels (which clients
+    /// compute against the truncated size above) onto the actual grid.
+    pub cell_size_px: Vector2F,
 
     /// Mode flags.
     pub mode: TermMode,
@@ -129,6 +132,10 @@ impl State {
         Self {
             cell_width: size_info.cell_width_px.as_f32() as usize,
             cell_height: size_info.cell_height_px.as_f32() as usize,
+            cell_size_px: Vector2F::new(
+                size_info.cell_width_px.as_f32(),
+                size_info.cell_height_px.as_f32(),
+            ),
             mode: Default::default(),
             tabs,
             cursor_style: Default::default(),
@@ -1462,6 +1469,25 @@ fn cell_index(coordinate: u32) -> Option<usize> {
 
 /// Helper functions for the [`ansi::Handler`] implementation.
 impl GridHandler {
+    /// Scales a kitty image size from the truncated cell size that we report
+    /// to clients (e.g. via `CSI 14 t`) to the actual cell size, so an image
+    /// sized to N cells covers exactly N cells. Without this, per-cell image
+    /// tiles (as zellij emits) leave sub-pixel gaps that show as thin lines.
+    fn kitty_image_size_on_grid(&self, width_px: u32, height_px: u32) -> Vector2F {
+        let state = &self.ansi_handler_state;
+        let scale = |px: u32, reported: usize, actual: f32| {
+            if reported == 0 {
+                px as f32
+            } else {
+                px as f32 * actual / reported as f32
+            }
+        };
+        Vector2F::new(
+            scale(width_px, state.cell_width, state.cell_size_px.x()),
+            scale(height_px, state.cell_height, state.cell_size_px.y()),
+        )
+    }
+
     /// Advances the cursor by one cell, handling wrapping appropriately.
     fn advance_cursor_by_one_cell(&mut self) {
         let num_cols = self.columns();
@@ -1873,7 +1899,7 @@ impl GridHandler {
                     FitType::Stretch,
                 );
 
-                let image_size = Vector2F::new(width_px as f32, height_px as f32);
+                let image_size = self.kitty_image_size_on_grid(width_px, height_px);
 
                 // Convert the dimension in pixels to cells. We want to round up if this doesn't perfectly fit within an amount of cells.
                 let height_cells = (height_px as f32 / (self.ansi_handler_state.cell_height as f32))
@@ -1982,7 +2008,7 @@ impl GridHandler {
                     FitType::Stretch,
                 );
 
-                let image_size = Vector2F::new(width_px as f32, height_px as f32);
+                let image_size = self.kitty_image_size_on_grid(width_px, height_px);
 
                 // Convert the dimension in pixels to cells. We want to round up if this doesn't perfectly fit within an amount of cells.
                 let height_cells = (height_px as f32 / (self.ansi_handler_state.cell_height as f32))

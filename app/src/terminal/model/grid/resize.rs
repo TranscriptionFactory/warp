@@ -19,6 +19,10 @@ impl GridHandler {
     pub fn resize(&mut self, size: SizeInfo) {
         self.ansi_handler_state.cell_width = size.cell_width_px.as_f32() as usize;
         self.ansi_handler_state.cell_height = size.cell_height_px.as_f32() as usize;
+        self.ansi_handler_state.cell_size_px = pathfinder_geometry::vector::Vector2F::new(
+            size.cell_width_px.as_f32(),
+            size.cell_height_px.as_f32(),
+        );
 
         let old_cols = self.columns();
         let old_rows = self.visible_rows();

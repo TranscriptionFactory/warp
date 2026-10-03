@@ -788,3 +788,46 @@ fn uppercase_delete_by_id_with_placement_frees_the_whole_image() {
     assert!(!has_placement(&terminal, 1, 1));
     assert!(!has_placement(&terminal, 1, 2));
 }
+
+#[test]
+fn image_sized_to_reported_cells_fills_fractional_cells() {
+    use pathfinder_geometry::vector::vec2f;
+    use warpui::units::{IntoPixels as _, Pixels};
+
+    use crate::terminal::{SizeInfo, SizeUpdate, SizeUpdateReason};
+
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = TerminalModel::mock(None, None);
+    let last_size = *terminal.block_list().size();
+    // A 17.25px cell height is reported to clients as 17px.
+    let new_size = SizeInfo::new(
+        vec2f(80., 172.5),
+        8.0.into_pixels(),
+        17.25.into_pixels(),
+        Pixels::zero(),
+        Pixels::zero(),
+    );
+    terminal.resize(SizeUpdate {
+        update_reason: SizeUpdateReason::Refresh,
+        last_size,
+        new_size,
+        new_gap_height: None,
+        natural_rows: new_size.rows(),
+        natural_cols: new_size.columns(),
+    });
+    terminal.simulate_cmd("kitty");
+
+    // One reported cell's worth of pixels, the way zellij tiles images.
+    let rgba = vec![0xffu8; 8 * 17 * 4];
+    terminal.process_bytes(kitty_apc("a=T,i=1,p=1,f=32,s=8,v=17,C=1", &rgba).as_str());
+
+    let placement = terminal
+        .block_list()
+        .active_block()
+        .grid_handler()
+        .get_image_placement_data(1, 1)
+        .expect("image should be placed");
+    assert_eq!(placement.height_cells, 1);
+    assert_eq!(placement.width_cells, 1);
+    assert_eq!(placement.image_size, vec2f(8., 17.25));
+}
