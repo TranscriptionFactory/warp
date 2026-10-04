@@ -32,7 +32,7 @@ use warpui::color::ColorU;
 use warpui::elements::{Border, CornerRadius, Fill, Radius, DEFAULT_UI_LINE_HEIGHT_RATIO};
 use warpui::fonts::{Cache as FontCache, FamilyId, FontId, Properties, Style, Weight};
 use warpui::geometry::rect::RectF;
-use warpui::geometry::vector::{vec2f, Vector2F};
+use warpui::geometry::vector::{vec2f, Vector2F, Vector2I};
 use warpui::image_cache::{
     AnimatedImageBehavior, CacheOption, FitType, Image, ImageCache, StaticImage,
 };
@@ -2152,7 +2152,8 @@ fn render_image(
 
     match image.as_ref() {
         Image::Static(image) => {
-            let logical_image_size = image.size().to_f32() / ctx.scene.scale_factor();
+            let logical_image_size =
+                drawn_image_size(image.size(), image_metadata, image_placement_data, ctx);
 
             let image_origin = grid_origin + glyph_offset;
             ctx.scene.draw_image(
@@ -2168,7 +2169,8 @@ fn render_image(
             let elapsed = ANIMATION_EPOCH.elapsed().as_millis() as u32;
             match animated_image.get_current_frame(elapsed) {
                 Ok((frame, remaining_delay)) => {
-                    let logical_image_size = frame.size().to_f32() / ctx.scene.scale_factor();
+                    let logical_image_size =
+                        drawn_image_size(frame.size(), image_metadata, image_placement_data, ctx);
 
                     let image_origin = grid_origin + glyph_offset;
                     ctx.scene.draw_image(
@@ -2186,6 +2188,24 @@ fn render_image(
                 }
             }
         }
+    }
+}
+
+/// The logical size to draw a placed image at. Stretched images are drawn at
+/// their placement size rather than the decoded texture size, which is
+/// truncated to whole device pixels; otherwise images tiled one per cell (as
+/// zellij does) come up a fraction of a pixel short on a fractional-pixel grid
+/// and leave thin gaps between rows.
+fn drawn_image_size(
+    texture_size: Vector2I,
+    image_metadata: &StoredImageMetadata,
+    image_placement_data: &ImagePlacementData,
+    ctx: &PaintContext,
+) -> Vector2F {
+    if image_metadata.preserve_aspect_ratio() {
+        texture_size.to_f32() / ctx.scene.scale_factor()
+    } else {
+        image_placement_data.image_size
     }
 }
 
