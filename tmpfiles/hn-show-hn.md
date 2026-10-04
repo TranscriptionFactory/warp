@@ -12,8 +12,8 @@ OpenWarp is a community fork of Warp's open-source code that drops the
 account requirement and cloud dependency. Paste a base URL and an API key,
 or point it at Ollama or LM Studio, and the AI features work. Credentials,
 conversations, and agent history stay on your machine. It speaks six
-provider protocols (OpenAI, Anthropic, Gemini, DeepSeek, Ollama, plus any
-OpenAI-compatible proxy).
+native protocols (OpenAI Chat and Responses, Anthropic, Gemini, DeepSeek,
+Ollama) and works with any OpenAI-compatible proxy.
 
 Lineage: Warp, Inc. open-sourced their client. zerx-lab forked it to open
 up the provider layer; you may remember that fork from
@@ -31,14 +31,22 @@ New since that earlier post:
 - We delete cloud code paths from the tree instead of switching them off.
   Billing, referral, cloud sync, and the cloud-agent subsystems are gone.
 
-- Security hardening: an SSRF guard on webfetch and shell-escaping fixes.
-  We contributed most of it back upstream.
+- Kitty graphics protocol on macOS and Linux, including Unicode
+  placeholders (so images work through tmux) and animation.
 
-- A built-in SSH host manager, an SFTP file browser, and a diff/code-review
-  panel that works on remote hosts over SSH.
+- Remote work over SSH: the code-review panel diffs, commits, pushes, and
+  opens PRs against a repo on the remote host. Images and Markdown files
+  on the remote open in-app. The SSH host manager and SFTP browser are
+  zerx-lab's work.
+
+- Security hardening: SSRF guards on webfetch and MCP OAuth discovery, and
+  shell-escaping fixes. The MCP client no longer sends your credentials to
+  redirect targets.
 
 - Third-party CLI agents (Claude Code, Codex, and others) run inside Warp's
   block model.
+
+- We port fixes from Warp's repo: 53 across the last two syncs.
 
 On the naming question from the last thread: we are not affiliated with
 Warp, Inc. Warp did open-source their client. This fork exists because
@@ -63,7 +71,8 @@ still requires an account (and a paid plan) to use your own LLM providers.
 OpenWarp is a community fork that removes that: no login, no cloud calls, an
 open provider layer. It builds on the zerx-lab community fork, which has
 since taken its own branding; this repo continues under the OpenWarp name,
-and we trade patches with them.
+and we trade patches with them. We also port fixes from Warp's repo: 53
+across the last two syncs.
 
 In practice:
 
@@ -77,12 +86,22 @@ In practice:
   codebase instead of toggling them off.
 - **You edit the system prompt yourself.** It is a minijinja template;
   upstream assembles theirs server-side.
+- **Prompt caching is on.** Anthropic requests carry cache breakpoints and
+  OpenAI requests carry a stable cache key. Per-provider extra headers
+  reach title generation and suggestions too, so gateways that
+  authenticate with a custom header work.
+- **MCP credentials stay with the server you gave them to.** The MCP
+  client refuses redirects, and OAuth discovery blocks loopback and
+  private addresses.
 - **CLI agents run in the terminal UI.** Claude Code, Codex, and others run
-  inside Warp's block model. A built-in SSH host manager, SFTP browser, and
-  remote code review cover work on remote boxes.
+  inside Warp's block model. The terminal supports the kitty graphics
+  protocol on macOS and Linux, so tools that draw images inline work.
+- **Remote boxes are covered.** A built-in SSH host manager and SFTP
+  browser, plus a code-review panel that diffs, commits, pushes, and opens
+  PRs on the remote host.
 
-First binary releases shipped this week: macOS (Apple Silicon and Intel),
-Linux (AppImage/deb/rpm), and Windows.
+Binary releases cover macOS (Apple Silicon and Intel), Linux
+(AppImage/deb/rpm), and Windows.
 
 Repo: https://github.com/TranscriptionFactory/warp
 Releases: https://github.com/TranscriptionFactory/warp/releases
@@ -107,10 +126,18 @@ and cloud dependency stripped out. It keeps Warp's terminal fundamentals
 
 - No account, no vendor-cloud telemetry. AI is optional and bring-your-own:
   any OpenAI-compatible endpoint, or Ollama for local models.
-- Built-in SSH host manager (with tmux integration), SFTP file browser, and
-  diff/code-review on remote hosts
+- Kitty graphics protocol on macOS and Linux, including Unicode
+  placeholders (images work through tmux) and animation
+- Built-in SSH host manager (with tmux integration) and SFTP file browser
+- Code-review panel that diffs, commits, pushes, and opens PRs on remote
+  hosts over SSH
 - In-app image viewer and Markdown preview, local and over SFTP
+- Drag a tab onto a pane to split it, move a pane to its own tab, drag
+  tabs between windows
 - Per-window themes; Warp's blocks, workflows, and keybindings preserved
+- Security fixes: SSRF guards on webfetch and MCP OAuth discovery, shell
+  escaping, and no MCP credentials sent to redirect targets
+- Fixes ported from Warp's repo: 53 across the last two syncs
 - Binaries for macOS/Linux/Windows: https://github.com/TranscriptionFactory/warp/releases
 
 AGPL-3.0/MIT, unchanged from upstream. Not affiliated with Warp, Inc.
