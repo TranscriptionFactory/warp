@@ -951,6 +951,11 @@ impl Session {
         self.session_type.lock().clone()
     }
 
+    /// The session this one was launched from, if it is a subshell or remote session.
+    pub fn spawning_session_id(&self) -> Option<SessionId> {
+        self.info.spawning_session_id
+    }
+
     /// Updates the `host_id` on a `WarpifiedRemote` session type after the
     /// remote server handshake completes (or clears it on disconnect).
     pub fn set_remote_host_id(&self, host_id: Option<warp_core::HostId>) {

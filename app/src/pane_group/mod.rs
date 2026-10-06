@@ -30,7 +30,7 @@ use crate::pane_group::pane::get_started_pane::GetStartedPane;
 use crate::pane_group::pane::welcome_pane::WelcomePane;
 use crate::pane_group::pane::ActionOrigin;
 use crate::quit_warning::UnsavedStateSummary;
-use crate::settings::{AISettings, DefaultSessionMode, PaneSettings};
+use crate::settings::{AISettings, DefaultSessionMode, PaneSettings, SshSettings};
 use crate::settings_view::SettingsSection;
 use crate::shell_indicator::ShellIndicatorType;
 use crate::terminal::available_shells::{AvailableShell, AvailableShells};
@@ -146,6 +146,7 @@ use crate::workspace::{
 
 pub mod focus_state;
 pub mod pane;
+pub mod ssh_split;
 pub mod tree;
 pub mod working_directories;
 
@@ -3329,12 +3330,11 @@ impl PaneGroup {
         let base_session_id = base_pane_id
             .as_terminal_pane_id()
             .or(self.active_session_id(ctx));
-        let new_pane_id = self.add_session(
+        let new_pane_id = self.add_split_session(
             direction,
             Some(base_pane_id),
             base_session_id,
             chosen_shell,
-            None, /* conversation_restoration */
             ctx,
         );
         ctx.emit(Event::AppStateChanged);
@@ -5119,6 +5119,79 @@ impl PaneGroup {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// The ssh command a pane split from `base_pane_id` should run to land on the same remote
+    /// host, if the feature is enabled and the pane's active session qualifies.
+    fn inherited_ssh_command(
+        &self,
+        base_pane_id: TerminalPaneId,
+        ctx: &AppContext,
+    ) -> Option<String> {
+        if !FeatureFlag::SplitInheritsSsh.is_enabled()
+            || !*SshSettings::as_ref(ctx).split_inherits_ssh.value()
+        {
+            return None;
+        }
+        let view = self.terminal_view_from_pane_id(base_pane_id, ctx)?;
+        let view = view.as_ref(ctx);
+        let sessions = view.sessions_model().as_ref(ctx);
+        let session = sessions.get(view.active_block_session_id()?)?;
+        let spawning_session_type = session
+            .spawning_session_id()
+            .and_then(|id| sessions.get(id))
+            .map(|spawning| spawning.session_type());
+        ssh_split::inherited_ssh_command(
+            &session.session_type(),
+            session.subshell_info().as_ref(),
+            spawning_session_type.as_ref(),
+        )
+    }
+
+    /// Adds a terminal pane for a split. If the base pane is a warpified SSH session, the new
+    /// pane runs the same ssh command; otherwise this is `add_session`.
+    fn add_split_session(
+        &mut self,
+        direction: Direction,
+        base_pane_id_for_split: Option<PaneId>,
+        base_pane_id_for_context: Option<TerminalPaneId>,
+        chosen_shell: Option<AvailableShell>,
+        ctx: &mut ViewContext<Self>,
+    ) -> TerminalPaneId {
+        let Some(ssh_command) = base_pane_id_for_context
+            .and_then(|base_pane_id| self.inherited_ssh_command(base_pane_id, ctx))
+        else {
+            return self.add_session(
+                direction,
+                base_pane_id_for_split,
+                base_pane_id_for_context,
+                chosen_shell,
+                None, /* conversation_restoration */
+                ctx,
+            );
+        };
+        // Like `open_ssh_terminal`, skip the default session mode: the new pane is about to
+        // become a remote shell, not a fresh local one.
+        let new_pane_id = self.add_session_with_default_session_mode_behavior(
+            direction,
+            base_pane_id_for_split,
+            base_pane_id_for_context,
+            chosen_shell,
+            None, /* conversation_restoration */
+            DefaultSessionModeBehavior::Ignore,
+            ctx,
+        );
+        if let Some(terminal_view) = self.terminal_view_from_pane_id(new_pane_id, ctx) {
+            let enter_agent_view =
+                AISettings::as_ref(ctx).default_session_mode(ctx) == DefaultSessionMode::Agent;
+            terminal_view.update(ctx, |view, ctx| {
+                if enter_agent_view {
+                    view.set_enter_agent_view_after_ssh_bootstrap();
+                }
+                view.execute_command_or_set_pending(&ssh_command, ctx);
+            });
+        }
+        new_pane_id
+    }
+
     pub fn add_session(
         &mut self,
         direction: Direction,
@@ -6142,7 +6215,14 @@ impl TypedActionView for PaneGroup {
                         None
                     }}
                 };
-                self.add_terminal_pane(*direction, chosen_shell, ctx);
+                self.add_split_session(
+                    *direction,
+                    Some(self.focused_pane_id(ctx)),
+                    self.active_session_id(ctx),
+                    chosen_shell,
+                    ctx,
+                );
+                ctx.emit(Event::AppStateChanged);
             }
             Remove(view_id) => self.close_pane_with_confirmation(*view_id, ctx),
             RemoveActive => self.close_active_pane_with_confirmation(ctx),
