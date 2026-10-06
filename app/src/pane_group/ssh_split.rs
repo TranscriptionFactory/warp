@@ -1,6 +1,25 @@
 use crate::terminal::model::session::{shell_quote_arg, SessionType};
 use crate::terminal::model::terminal_model::SubshellInitializationInfo;
 use crate::terminal::shell::ShellType;
+use crate::terminal::ssh::util::parse_interactive_ssh_command;
+
+/// Returns the ssh command typed to start a remote session, if it parsed as an interactive ssh.
+///
+/// A warpified subshell records the command in `subshell_info`; a legacy-wrapper session has no
+/// `subshell_info`, so its command is stored separately and parsed here.
+pub fn resolve_ssh_spawning_command<'a>(
+    subshell_info: Option<&'a SubshellInitializationInfo>,
+    legacy_ssh_spawning_command: Option<&'a str>,
+) -> Option<&'a str> {
+    match subshell_info {
+        Some(info) => info
+            .ssh_connection_info
+            .is_some()
+            .then_some(info.spawning_command.as_str()),
+        None => legacy_ssh_spawning_command
+            .filter(|command| parse_interactive_ssh_command(command).is_some()),
+    }
+}
 
 /// Returns the command to run in a new pane split from a warpified SSH session so that the new
 /// pane lands on the same remote host, or `None` if the split should stay a plain local shell.
@@ -9,18 +28,16 @@ use crate::terminal::shell::ShellType;
 /// `gcloud ...`) and nested SSH hops are rejected because replaying them is not safe.
 pub fn inherited_ssh_command(
     session_type: &SessionType,
-    subshell_info: Option<&SubshellInitializationInfo>,
+    ssh_spawning_command: Option<&str>,
     spawning_session_type: Option<&SessionType>,
 ) -> Option<String> {
     if !matches!(session_type, SessionType::WarpifiedRemote { .. }) {
         return None;
     }
-    let info = subshell_info?;
-    info.ssh_connection_info.as_ref()?;
     if !matches!(spawning_session_type, Some(SessionType::Local)) {
         return None;
     }
-    let command = info.spawning_command.trim();
+    let command = ssh_spawning_command?.trim();
     (command.split_whitespace().next() == Some("ssh")).then(|| command.to_string())
 }
 

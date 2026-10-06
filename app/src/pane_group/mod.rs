@@ -5138,9 +5138,13 @@ impl PaneGroup {
             .spawning_session_id()
             .and_then(|id| sessions.get(id))
             .map(|spawning| spawning.session_type());
+        let ssh_spawning_command = ssh_split::resolve_ssh_spawning_command(
+            session.subshell_info().as_ref(),
+            session.legacy_ssh_spawning_command(),
+        );
         ssh_split::inherited_ssh_command(
             &session.session_type(),
-            session.subshell_info().as_ref(),
+            ssh_spawning_command,
             spawning_session_type.as_ref(),
         )
     }

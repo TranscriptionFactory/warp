@@ -40,6 +40,7 @@ fn new_block_list(event_proxy: ChannelEventListener, mode: TypeaheadMode) -> Blo
         None,
         false,
         None,
+        None,
     )
     .merge_from_bootstrapped_value(bootstrapped_value.clone(), false);
 
