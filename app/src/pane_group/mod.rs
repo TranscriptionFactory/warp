@@ -5118,7 +5118,6 @@ impl PaneGroup {
         success
     }
 
-    #[allow(clippy::too_many_arguments)]
     /// The ssh command a pane split from `base_pane_id` should run to land on the same remote
     /// host, if the feature is enabled and the pane's active session qualifies.
     fn inherited_ssh_command(
@@ -5203,6 +5202,7 @@ impl PaneGroup {
         new_pane_id
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_session(
         &mut self,
         direction: Direction,
