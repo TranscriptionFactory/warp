@@ -87,3 +87,36 @@ fn nested_or_unknown_spawning_session_is_not_inherited() {
         None
     );
 }
+
+fn pending(path: &str) -> PendingRemoteCd {
+    PendingRemoteCd {
+        remote_host: "me@box".to_string(),
+        path: path.to_string(),
+    }
+}
+
+#[test]
+fn remote_cd_matches_host() {
+    assert_eq!(
+        remote_cd_command(&pending("/srv/app"), "me@box", ShellType::Bash, true),
+        Some("cd '/srv/app'".to_string())
+    );
+}
+
+#[test]
+fn remote_cd_quotes_path() {
+    let cmd = remote_cd_command(&pending("/srv/it's here"), "me@box", ShellType::Bash, true);
+    assert_eq!(cmd, Some(r#"cd '/srv/it'"'"'s here'"#.to_string()));
+}
+
+#[test]
+fn remote_cd_skips_host_mismatch_and_dirty_input() {
+    assert_eq!(
+        remote_cd_command(&pending("/srv"), "me@other", ShellType::Bash, true),
+        None
+    );
+    assert_eq!(
+        remote_cd_command(&pending("/srv"), "me@box", ShellType::Bash, false),
+        None
+    );
+}

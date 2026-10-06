@@ -5168,6 +5168,14 @@ impl PaneGroup {
                 ctx,
             );
         };
+        let remote_cd = base_pane_id_for_context.and_then(|base_pane_id| {
+            let view = self.terminal_view_from_pane_id(base_pane_id, ctx)?;
+            let view = view.as_ref(ctx);
+            Some(ssh_split::PendingRemoteCd {
+                remote_host: view.active_session_remote_host(ctx)?,
+                path: view.pwd()?,
+            })
+        });
         // Like `open_ssh_terminal`, skip the default session mode: the new pane is about to
         // become a remote shell, not a fresh local one.
         let new_pane_id = self.add_session_with_default_session_mode_behavior(
@@ -5180,6 +5188,9 @@ impl PaneGroup {
             ctx,
         );
         if let Some(terminal_view) = self.terminal_view_from_pane_id(new_pane_id, ctx) {
+            if let Some(pending) = remote_cd {
+                terminal_view.update(ctx, |view, _| view.set_cd_after_ssh_bootstrap(pending));
+            }
             let enter_agent_view =
                 AISettings::as_ref(ctx).default_session_mode(ctx) == DefaultSessionMode::Agent;
             terminal_view.update(ctx, |view, ctx| {
