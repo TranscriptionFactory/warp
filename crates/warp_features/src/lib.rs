@@ -602,6 +602,10 @@ pub enum FeatureFlag {
     /// Enables Kitty keyboard protocol support (CSI u encoding, progressive enhancement).
     KittyKeyboardProtocol,
 
+    /// Splitting a pane whose active session is a warpified SSH session opens
+    /// the new pane on the same remote host.
+    SplitInheritsSsh,
+
     /// Detects the word "figma" in the terminal input in real-time and shows a
     /// contextual button above the input.
     FigmaDetection,
@@ -743,6 +747,7 @@ pub const DEBUG_FLAGS: &[FeatureFlag] = &[FeatureFlag::DebugMode, FeatureFlag::R
 /// Features enabled for the development team.  The expectation is that, over
 /// time, these will move on to PREVIEW_FLAGS before being launched.
 pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
+    FeatureFlag::SplitInheritsSsh,
     FeatureFlag::ToggleBootstrapBlock,
     FeatureFlag::RemoveAutosuggestionDuringTabCompletions,
     FeatureFlag::ResizeFix,

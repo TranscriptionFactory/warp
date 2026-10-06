@@ -545,6 +545,7 @@ default = [
     "file_based_mcp",
     "inline_repo_menu",
     "kitty_keyboard_protocol",
+    "split_inherits_ssh",
     "inline_menu_headers",
     "github_pr_prompt_chip",
     "conversations_as_context",
@@ -635,6 +636,7 @@ run_generators_with_cmd_exe = []
 inline_ssh_banner = []
 kitty_images = []
 kitty_keyboard_protocol = []
+split_inherits_ssh = []
 ligatures = []
 trim_trailing_blank_lines = []
 cli_agent_rich_input = []
