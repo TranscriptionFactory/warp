@@ -1016,6 +1016,7 @@ settings-features-auto-open-code-review = コードレビューパネルを自�
 settings-features-max-rows-per-block = ブロック内の最大行数
 settings-features-ssh-wrapper = OpenWarp SSH ラッパー
 settings-features-ssh-auto-discovery = SSH ホストの自動検出
+settings-features-split-inherits-ssh = SSH セッションから分割したペインを同じホストで開く
 settings-features-receive-desktop-notifications = OpenWarp からのデスクトップ通知を受信
 settings-features-show-in-app-agent-notifications = アプリ内エージェント通知を表示
 settings-features-confirm-close-shared-session = 読み取り専用セッションを閉じる前に確認

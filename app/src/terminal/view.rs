@@ -229,6 +229,7 @@ use crate::env_vars::{
     EnvVar, EnvVarCollectionObject,
 };
 use crate::pane_group::focus_state::PaneFocusHandle;
+use crate::pane_group::ssh_split::{remote_cd_command, PendingRemoteCd};
 use crate::persistence::{self, FinishedCommandMetadata};
 use crate::server::ids::{ObjectUid, SyncId};
 #[cfg(feature = "local_fs")]
@@ -2420,6 +2421,9 @@ pub struct TerminalView {
     /// SSH 管理器创建的 tab 会先启动本地 shell，再执行 ssh 并等待远端 shell
     /// bootstrap；默认 Agent 模式必须延后到远端会话可用后再进入。
     enter_agent_view_after_ssh_bootstrap: bool,
+    /// Set on a pane split from a warpified SSH session: `cd` to the original pane's remote
+    /// directory once the first ssh session bootstraps. One-shot.
+    cd_after_ssh_bootstrap: Option<PendingRemoteCd>,
     slow_bootstrap_banner: ViewHandle<Banner<TerminalAction>>,
     is_slow_bootstrap_banner_open: bool,
 
@@ -3932,6 +3936,7 @@ impl TerminalView {
             awaiting_pending_command_completion: false,
             enter_agent_view_after_pending_commands: false,
             enter_agent_view_after_ssh_bootstrap: false,
+            cd_after_ssh_bootstrap: None,
             slow_bootstrap_banner,
             is_slow_bootstrap_banner_open: false,
             incompatible_configuration_banner,
@@ -6443,7 +6448,7 @@ impl TerminalView {
 
     /// Returns `None` for local sessions, `Some("user@hostname")` for remote.
     /// Used to key per-host plugin install failure tracking.
-    fn active_session_remote_host<C: ModelAsRef>(&self, ctx: &C) -> Option<String> {
+    pub(crate) fn active_session_remote_host<C: ModelAsRef>(&self, ctx: &C) -> Option<String> {
         self.active_block_session_id().and_then(|session_id| {
             let session = self.sessions.as_ref(ctx).get(session_id)?;
             if session.is_local() {
@@ -11705,6 +11710,8 @@ impl TerminalView {
         let is_subshell_or_ssh = session.is_subshell_or_ssh();
         let is_ssh_session = matches!(session.session_type(), SessionType::WarpifiedRemote { .. })
             || session.is_legacy_ssh_session();
+        let session_host = format!("{}@{}", session.user(), session.hostname());
+        let session_shell_type = session.shell().shell_type();
 
         // Make sure we decorate any text that is already in the input.  We
         // need to make sure external commands have finished loading before
@@ -11733,6 +11740,16 @@ impl TerminalView {
         self.any_session_contains_restored_remote_blocks = self.contains_restored_remote_blocks();
         self.any_session_contains_remote_blocks |= self.active_block_is_considered_remote(ctx);
         self.update_focused_terminal_info(ctx);
+
+        if is_ssh_session && let Some(pending) = self.cd_after_ssh_bootstrap.take() {
+            let input_is_empty = self.input.as_ref(ctx).buffer_text(ctx).is_empty()
+                && !self.input.as_ref(ctx).has_pending_command();
+            if let Some(cd) =
+                remote_cd_command(&pending, &session_host, session_shell_type, input_is_empty)
+            {
+                self.execute_command_or_set_pending(&cd, ctx);
+            }
+        }
 
         if self.enter_agent_view_after_ssh_bootstrap && is_ssh_session {
             self.enter_agent_view_after_ssh_bootstrap = false;
@@ -13782,6 +13799,10 @@ impl TerminalView {
     /// guided tutorial.
     pub fn clear_enter_agent_view_after_pending_commands(&mut self) {
         self.enter_agent_view_after_pending_commands = false;
+    }
+
+    pub fn set_cd_after_ssh_bootstrap(&mut self, pending: PendingRemoteCd) {
+        self.cd_after_ssh_bootstrap = Some(pending);
     }
 
     pub fn set_enter_agent_view_after_ssh_bootstrap(&mut self) {

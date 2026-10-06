@@ -24,5 +24,15 @@ define_settings_group!(SshSettings,
             toml_path: "warpify.ssh.enable_ssh_auto_discovery",
             description: "Whether to auto-discover SSH hosts from ~/.ssh/config.",
         },
+        split_inherits_ssh: SplitInheritsSshSetting {
+            type: bool,
+            default: true,
+            supported_platforms: SupportedPlatforms::ALL,
+            sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+            private: false,
+            storage_key: "SplitInheritsSsh",
+            toml_path: "warpify.ssh.split_inherits_ssh",
+            description: "Whether splitting a pane from an SSH session opens the new pane on the same host.",
+        },
     ]
 );

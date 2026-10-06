@@ -1061,6 +1061,7 @@ settings-features-auto-open-code-review = 自动打开代码评审面板
 settings-features-max-rows-per-block = 命令块最大行数
 settings-features-ssh-wrapper = OpenWarp SSH 包装器
 settings-features-ssh-auto-discovery = 自动发现 SSH 主机
+settings-features-split-inherits-ssh = 从 SSH 会话拆分的窗格在同一主机上打开
 settings-features-receive-desktop-notifications = 接收来自 OpenWarp 的桌面通知
 settings-features-show-in-app-agent-notifications = 显示应用内 Agent 通知
 settings-features-confirm-close-shared-session = 关闭只读会话前确认

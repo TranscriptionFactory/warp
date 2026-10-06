@@ -1080,6 +1080,7 @@ settings-features-auto-open-code-review = Auto open code review panel
 settings-features-max-rows-per-block = Maximum rows in a block
 settings-features-ssh-wrapper = OpenWarp SSH Wrapper
 settings-features-ssh-auto-discovery = Auto-discover SSH hosts
+settings-features-split-inherits-ssh = Splits from SSH sessions open on the same host
 settings-features-receive-desktop-notifications = Receive desktop notifications from OpenWarp
 settings-features-show-in-app-agent-notifications = Show in-app agent notifications
 settings-features-confirm-close-shared-session = Confirm before closing read-only session

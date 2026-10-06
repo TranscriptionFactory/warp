@@ -3122,6 +3122,11 @@ impl ansi::Handler for TerminalModel {
             let shell_type = ShellType::from_name(&data.shell)
                 .unwrap_or_else(|| panic!("invalid shell name: {}", data.shell));
 
+            let legacy_ssh_spawning_command = self
+                .pending_legacy_ssh_session
+                .is_some()
+                .then(|| self.block_list().active_block().command_to_string());
+
             let pending_session_info = SessionInfo::create_pending(
                 shell_type,
                 data,
@@ -3133,6 +3138,7 @@ impl ansi::Handler for TerminalModel {
                     Some(TmuxControlModeContext::WarpInitiatedForSsh { .. })
                 ),
                 self.block_list().active_block().session_id(),
+                legacy_ssh_spawning_command,
             );
             self.pending_session_info = Some(pending_session_info.clone());
 

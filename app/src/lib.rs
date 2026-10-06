@@ -2620,6 +2620,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::QueueSlashCommand,
         #[cfg(feature = "kitty_keyboard_protocol")]
         FeatureFlag::KittyKeyboardProtocol,
+        #[cfg(feature = "split_inherits_ssh")]
+        FeatureFlag::SplitInheritsSsh,
         #[cfg(feature = "inline_menu_headers")]
         FeatureFlag::InlineMenuHeaders,
         #[cfg(feature = "directory_tab_colors")]
