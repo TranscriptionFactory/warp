@@ -46,6 +46,7 @@ use crate::settings::{
     AutocompleteSymbols, AutosuggestionKeybindingHint, CodeSettings, CommandCorrections,
     CompletionsOpenWhileTyping, CopyOnSelect, CtrlTabBehavior, DefaultSessionMode,
     EnableSshAutoDiscovery, EnableSlashCommandsInTerminal, EnableSshWrapper,
+    SplitInheritsSshSetting,
     ErrorUnderliningEnabled, ExtraMetaKeys,
     GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
     LinuxSelectionClipboard, MiddleClickPasteEnabled, MouseScrollMultiplier, PreferLowPowerGPU,
@@ -644,6 +645,7 @@ pub enum FeaturesPageAction {
     #[deprecated]
     ToggleSshWrapper,
     ToggleSshAutoDiscovery,
+    ToggleSplitInheritsSsh,
     ToggleSnackbar,
     ToggleLinkTooltip,
     ToggleCompletionsOpenWhileTyping,
@@ -840,6 +842,10 @@ impl FeaturesPageAction {
             Self::ToggleSshAutoDiscovery => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleSshAutoDiscovery".to_string(),
                 value: to_string(*ssh_settings.enable_ssh_auto_discovery.value()),
+            },
+            Self::ToggleSplitInheritsSsh => TelemetryEvent::FeaturesPageAction {
+                action: "ToggleSplitInheritsSsh".to_string(),
+                value: to_string(*ssh_settings.split_inherits_ssh.value()),
             },
             Self::SetGlobalHotkeyMode(mode) => TelemetryEvent::FeaturesPageAction {
                 action: "SetGlobalHotkeyMode".to_string(),
@@ -1406,6 +1412,11 @@ impl TypedActionView for FeaturesPageView {
                     report_if_error!(ssh_settings
                         .enable_ssh_auto_discovery
                         .toggle_and_save_value(ctx));
+                });
+            }
+            ToggleSplitInheritsSsh => {
+                SshSettings::handle(ctx).update(ctx, |ssh_settings, ctx| {
+                    report_if_error!(ssh_settings.split_inherits_ssh.toggle_and_save_value(ctx));
                 });
             }
             OpenUrl(url) => {
@@ -2573,6 +2584,14 @@ impl FeaturesPageView {
             .is_supported_on_current_platform()
         {
             session_widgets.push(Box::new(SSHAutoDiscoveryWidget::default()));
+        }
+
+        if FeatureFlag::SplitInheritsSsh.is_enabled()
+            && SshSettings::as_ref(ctx)
+                .split_inherits_ssh
+                .is_supported_on_current_platform()
+        {
+            session_widgets.push(Box::new(SplitInheritsSshWidget::default()));
         }
 
         let session_settings = SessionSettings::as_ref(ctx);
@@ -4978,6 +4997,52 @@ impl SettingsWidget for SSHAutoDiscoveryWidget {
                 .build()
                 .on_click(move |ctx, _, _| {
                     ctx.dispatch_typed_action(FeaturesPageAction::ToggleSshAutoDiscovery);
+                })
+                .finish(),
+            None,
+        )
+    }
+}
+
+#[derive(Default)]
+struct SplitInheritsSshWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for SplitInheritsSshWidget {
+    type View = FeaturesPageView;
+
+    fn search_terms(&self) -> &str {
+        "ssh split pane same host remote"
+    }
+
+    fn render(
+        &self,
+        view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let ui_builder = appearance.ui_builder();
+        render_body_item::<FeaturesPageAction>(
+            crate::t!("settings-features-split-inherits-ssh"),
+            None,
+            LocalOnlyIconState::for_setting(
+                SplitInheritsSshSetting::storage_key(),
+                SplitInheritsSshSetting::sync_to_cloud(),
+                &mut view
+                    .button_mouse_states
+                    .local_only_icon_tooltip_states
+                    .borrow_mut(),
+                app,
+            ),
+            ToggleState::Enabled,
+            appearance,
+            ui_builder
+                .switch(self.switch_state.clone())
+                .check(*SshSettings::as_ref(app).split_inherits_ssh.value())
+                .build()
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleSplitInheritsSsh);
                 })
                 .finish(),
             None,
