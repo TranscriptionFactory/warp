@@ -34,9 +34,11 @@ New since that earlier post:
 - Kitty graphics protocol on macOS and Linux, including Unicode
   placeholders (so images work through tmux) and animation.
 
-- Remote work over SSH: the code-review panel diffs, commits, pushes, and
-  opens PRs against a repo on the remote host. Images and Markdown files
-  on the remote open in-app. The SSH host manager and SFTP browser are
+- Remote work over SSH: splitting a pane in an SSH session opens the new
+  pane on the same host, in the same directory, the way a tmux split
+  does. The code-review panel diffs, commits, pushes, and opens PRs
+  against a repo on the remote host. Images and Markdown files on the
+  remote open in-app. The SSH host manager and SFTP browser are
   zerx-lab's work.
 
 - Security hardening: SSRF guards on webfetch and MCP OAuth discovery, and
