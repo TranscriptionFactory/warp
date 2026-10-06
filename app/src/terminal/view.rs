@@ -11741,18 +11741,13 @@ impl TerminalView {
         self.any_session_contains_remote_blocks |= self.active_block_is_considered_remote(ctx);
         self.update_focused_terminal_info(ctx);
 
-        if is_ssh_session {
-            if let Some(pending) = self.cd_after_ssh_bootstrap.take() {
-                let input_is_empty = self.input.as_ref(ctx).buffer_text(ctx).is_empty()
-                    && !self.input.as_ref(ctx).has_pending_command();
-                if let Some(cd) = remote_cd_command(
-                    &pending,
-                    &session_host,
-                    session_shell_type,
-                    input_is_empty,
-                ) {
-                    self.execute_command_or_set_pending(&cd, ctx);
-                }
+        if is_ssh_session && let Some(pending) = self.cd_after_ssh_bootstrap.take() {
+            let input_is_empty = self.input.as_ref(ctx).buffer_text(ctx).is_empty()
+                && !self.input.as_ref(ctx).has_pending_command();
+            if let Some(cd) =
+                remote_cd_command(&pending, &session_host, session_shell_type, input_is_empty)
+            {
+                self.execute_command_or_set_pending(&cd, ctx);
             }
         }
 
