@@ -463,10 +463,10 @@ impl super::TerminalView {
         false
     }
 
-    /// Zap:取得远端会话某个 cwd 的目录列表校验上下文。
+    /// Zap:取得远端会话某个 cwd 的目录列表。
     ///
-    /// 命中缓存则直接返回 `Remote(Some(..))`;未命中则异步发起 daemon
-    /// `ListDirectory` RPC 拉取该目录列表,本轮返回 `Remote(None)`(不高亮),
+    /// 命中缓存则直接返回 `Some(..)`;未命中则异步发起 daemon
+    /// `ListDirectory` RPC 拉取该目录列表,本轮返回 `None`(不高亮),
     /// 拉取完成后写入缓存并 `ctx.notify()` 触发 re-render 把链接点亮。
     ///
     /// 缓存保持有界:拉取新 cwd 时清掉所有旧条目,只保留当前 cwd。
@@ -475,19 +475,19 @@ impl super::TerminalView {
         feature = "local_fs",
         not(target_family = "wasm")
     ))]
-    fn remote_dir_listing_context(
+    fn remote_cwd_listing(
         &mut self,
         session_id: crate::terminal::model::session::SessionId,
         cwd: &str,
         ctx: &mut ViewContext<Self>,
-    ) -> crate::util::file::LinkValidationContext {
+    ) -> Option<std::sync::Arc<crate::util::file::RemoteDirListing>> {
         use std::path::PathBuf;
         use std::sync::Arc;
 
         use warpui::SingletonEntity as _;
 
         use crate::remote_server::manager::RemoteServerManager;
-        use crate::util::file::{LinkValidationContext, RemoteDirListing};
+        use crate::util::file::RemoteDirListing;
 
         let cwd_path = PathBuf::from(cwd);
         // 缓存按 (会话, cwd) 复合键索引,避免不同 host 的相同路径互相串扰。
@@ -495,17 +495,14 @@ impl super::TerminalView {
 
         // 命中缓存(已就绪或拉取中)直接返回。
         if let Some(entry) = self.remote_dir_listing_cache.get(&cache_key) {
-            return LinkValidationContext::Remote(entry.clone());
+            return entry.clone();
         }
 
         // 取该会话的 daemon 客户端。
-        let Some(client) = RemoteServerManager::handle(ctx)
+        let client = RemoteServerManager::handle(ctx)
             .as_ref(ctx)
             .client_for_session(session_id)
-            .cloned()
-        else {
-            return LinkValidationContext::Remote(None);
-        };
+            .cloned()?;
 
         // 拉取新 cwd:超出容量上限时按插入顺序 FIFO 淘汰最旧条目,
         // 然后插入 `None` 占位(标记拉取中)。`MAX_ENTRIES` 选 8 足够覆盖
@@ -565,7 +562,129 @@ impl super::TerminalView {
             },
         );
 
-        LinkValidationContext::Remote(None)
+        None
+    }
+
+    /// Zap:组装远端会话的链接校验快照(cwd 列表 + `ResolvePath` 结果)。
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn remote_link_validation(
+        &mut self,
+        session_id: crate::terminal::model::session::SessionId,
+        cwd: &str,
+        ctx: &mut ViewContext<Self>,
+    ) -> crate::util::file::RemoteLinkValidation {
+        let resolved = self
+            .remote_resolved_paths
+            .iter()
+            .filter(|((sid, _), entry)| *sid == session_id && entry.is_fresh())
+            .map(|((_, path), entry)| (path.clone(), entry.is_dir))
+            .collect();
+        crate::util::file::RemoteLinkValidation {
+            cwd_listing: self.remote_cwd_listing(session_id, cwd, ctx),
+            resolved: std::sync::Arc::new(resolved),
+            unresolved: Default::default(),
+        }
+    }
+
+    /// Zap:对链接扫描中两个缓存都答不上来的候选路径发起 daemon `ResolvePath`。
+    ///
+    /// 结果写入 `remote_resolved_paths`。如果鼠标仍停在同一个词上,重新扫描,
+    /// 把刚确认存在的路径点亮。每个候选只查一次(不存在的结果过期后再查),
+    /// 所以重新扫描最终会停止。
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn resolve_remote_link_candidates(
+        &mut self,
+        session_id: crate::terminal::model::session::SessionId,
+        candidates: Vec<PathBuf>,
+        find_link_arg: FindLinkArg,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        use warpui::SingletonEntity as _;
+
+        use super::RemoteResolvedPath;
+        use crate::remote_server::manager::RemoteServerManager;
+
+        // 一次悬停最多查这么多个路径,控制 RPC 数量。
+        const MAX_RESOLVES_PER_SCAN: usize = 8;
+        // 缓存上限,超出后按插入顺序 FIFO 淘汰。
+        const MAX_ENTRIES: usize = 512;
+
+        let mut to_resolve: Vec<PathBuf> = Vec::new();
+        for path in candidates {
+            if to_resolve.len() >= MAX_RESOLVES_PER_SCAN {
+                break;
+            }
+            let known = self
+                .remote_resolved_paths
+                .get(&(session_id, path.clone()))
+                .is_some_and(RemoteResolvedPath::is_fresh);
+            if !known && !to_resolve.contains(&path) {
+                to_resolve.push(path);
+            }
+        }
+        if to_resolve.is_empty() {
+            return;
+        }
+        let Some(client) = RemoteServerManager::handle(ctx)
+            .as_ref(ctx)
+            .client_for_session(session_id)
+            .cloned()
+        else {
+            return;
+        };
+
+        while self.remote_resolved_paths.len() + to_resolve.len() > MAX_ENTRIES {
+            self.remote_resolved_paths.shift_remove_index(0);
+        }
+        // 先写入"不存在"占位,避免查询期间重复发起同一个 RPC。
+        for path in &to_resolve {
+            self.remote_resolved_paths
+                .insert((session_id, path.clone()), RemoteResolvedPath::new(None));
+        }
+
+        ctx.spawn(
+            async move {
+                futures::future::join_all(to_resolve.into_iter().map(|path| {
+                    let client = client.clone();
+                    async move {
+                        let result = client
+                            .resolve_path(path.to_string_lossy().into_owned())
+                            .await;
+                        (path, result)
+                    }
+                }))
+                .await
+            },
+            move |me, results, ctx| {
+                use crate::remote_server::proto::{resolve_path_response, FileSystemEntryKind};
+
+                for (path, result) in results {
+                    let is_dir = match result.map(|resp| resp.result) {
+                        Ok(Some(resolve_path_response::Result::Success(success))) => {
+                            Some(success.kind == FileSystemEntryKind::Directory as i32)
+                        }
+                        _ => None,
+                    };
+                    me.remote_resolved_paths
+                        .insert((session_id, path), RemoteResolvedPath::new(is_dir));
+                }
+                let still_hovering = me
+                    .last_hover_fragment_boundary
+                    .as_ref()
+                    .is_some_and(|boundary| boundary.contains(&find_link_arg.position));
+                if still_hovering {
+                    me.scan_for_file_path(find_link_arg.position, find_link_arg.from_editor, ctx);
+                }
+            },
+        );
     }
 
     /// Scans the terminal model at the given position to see if it is
@@ -614,13 +733,18 @@ impl super::TerminalView {
                 .and_then(|block| block.pwd().map(String::from)),
         };
 
-        // Zap:远端会话用缓存的 cwd 目录列表精确校验;本地会话保持 `Local`。
+        // Zap:远端会话用缓存的远端文件信息精确校验;本地会话保持 `Local`。
         let validation_ctx = match (&pwd_to_scan_for, block_session_id) {
             #[cfg(all(feature = "local_tty", not(target_family = "wasm")))]
             (Some(cwd), Some(session_id)) if is_remote => {
-                self.remote_dir_listing_context(session_id, cwd, ctx)
+                LinkValidationContext::Remote(self.remote_link_validation(session_id, cwd, ctx))
             }
             _ => LinkValidationContext::Local,
+        };
+        // 扫描结束后取出两个缓存都答不上来的候选路径,交给 daemon 查询。
+        let unresolved = match &validation_ctx {
+            LinkValidationContext::Remote(remote) => Some(remote.unresolved.clone()),
+            LinkValidationContext::Local => None,
         };
 
         match pwd_to_scan_for {
@@ -657,7 +781,29 @@ impl super::TerminalView {
 
                 let _ = ctx.spawn(
                     async move { rx.await.ok().flatten() },
-                    Self::handle_file_link_completed,
+                    move |me, link_result, ctx| {
+                        me.handle_file_link_completed(link_result, ctx);
+                        #[cfg(all(feature = "local_tty", not(target_family = "wasm")))]
+                        if let (Some(unresolved), Some(session_id)) = (unresolved, block_session_id)
+                        {
+                            let candidates = std::mem::take(
+                                &mut *unresolved.lock().unwrap_or_else(|e| e.into_inner()),
+                            );
+                            if !candidates.is_empty() {
+                                me.resolve_remote_link_candidates(
+                                    session_id,
+                                    candidates,
+                                    FindLinkArg {
+                                        position,
+                                        from_editor,
+                                    },
+                                    ctx,
+                                );
+                            }
+                        }
+                        #[cfg(not(all(feature = "local_tty", not(target_family = "wasm"))))]
+                        let _ = unresolved;
+                    },
                 );
             }
             _ if self.highlighted_link.take(&mut self.model.lock()).is_some() => {
