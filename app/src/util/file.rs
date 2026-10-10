@@ -53,17 +53,48 @@ impl RemoteDirListing {
 ///
 /// 本地会话用本地文件系统 `fs::metadata` 判断路径是否存在;远端 SSH
 /// (remote-server)会话的文件不在本地磁盘上,本地校验必然失败,因此远端
-/// 会话改用 daemon `ListDirectory` RPC 缓存下来的真实目录列表做精确校验。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// 会话改用 daemon RPC 拉取并缓存下来的远端文件信息做精确校验。
+#[derive(Clone, Debug, Default)]
 pub enum LinkValidationContext {
     /// 本地会话:用本地文件系统校验路径是否真实存在。
     #[default]
     Local,
-    /// 远端 SSH 会话:用缓存下来的远端 cwd 目录列表精确校验。
-    ///
-    /// `None` 表示该 cwd 的目录列表尚未缓存(异步拉取中或拉取失败),
-    /// 此时本轮校验一律视为"无效"(不高亮),等列表到达后 re-render 再点亮。
-    Remote(Option<Arc<RemoteDirListing>>),
+    /// 远端 SSH 会话:用缓存下来的远端文件信息精确校验。
+    Remote(RemoteLinkValidation),
+}
+
+/// Zap:远端会话链接校验所需的缓存快照。
+#[derive(Clone, Debug, Default)]
+pub struct RemoteLinkValidation {
+    /// 远端 cwd 的目录列表(daemon `ListDirectory`)。`None` 表示尚未缓存。
+    pub cwd_listing: Option<Arc<RemoteDirListing>>,
+    /// 已经由 daemon `ResolvePath` 查过的绝对路径:`Some(is_dir)` 表示存在,
+    /// `None` 表示不存在或仍在查询中。覆盖 cwd 之外的路径,例如 agent 输出里
+    /// 的 `src/foo.rs:12` 或 `/home/me/out.png`。
+    pub resolved: Arc<HashMap<PathBuf, Option<bool>>>,
+    /// 两个缓存都答不上来的候选路径。校验时写入,链接扫描结束后由 view
+    /// 取出并发起 `ResolvePath`,结果到达后重新扫描。
+    pub unresolved: Arc<std::sync::Mutex<Vec<PathBuf>>>,
+}
+
+impl RemoteLinkValidation {
+    /// 返回 `Some(is_dir)` 表示路径已知存在,`None` 表示已知不存在或未知。
+    /// 未知路径会记入 `unresolved`。
+    fn lookup(&self, path: &Path) -> Option<bool> {
+        if let Some(known) = self.resolved.get(path) {
+            return *known;
+        }
+        if let Some(listing) = &self.cwd_listing
+            && path.parent() == Some(listing.dir.as_path())
+        {
+            let file_name = path.file_name().and_then(|n| n.to_str())?;
+            return listing.entries.get(file_name).copied();
+        }
+        if let Ok(mut unresolved) = self.unresolved.lock() {
+            unresolved.push(path.to_path_buf());
+        }
+        None
+    }
 }
 
 /// Checks if a file path exists and is valid for a file link.
@@ -130,23 +161,11 @@ fn is_path_valid(
     }
 
     // Zap:远端 SSH 会话的文件不在本地磁盘上,`fs::metadata` 必然失败。
-    // 改用 daemon `ListDirectory` 缓存下来的真实目录列表精确校验:候选解析
-    // 路径有效 ⇔ 其父目录恰好等于缓存的 cwd 且其文件名是该目录下的已知子项。
-    // 这给链接检测器的子串搜索提供了和本地 `fs::metadata` 等价的消歧依据,
-    // 能从 `ls -l` 整行里准确切出真正的文件名。
-    if let LinkValidationContext::Remote(listing) = validation_ctx {
-        // cwd 列表尚未缓存(异步拉取中/失败):本轮视为无效,等列表到达后再点亮。
-        let Some(listing) = listing else {
-            return false;
-        };
-        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
-            return false;
-        };
-        // 父目录必须正好是缓存的那个 cwd。
-        if path.parent() != Some(listing.dir.as_path()) {
-            return false;
-        }
-        let Some(&is_dir) = listing.entries.get(file_name) else {
+    // 改用 daemon 拉取的缓存精确校验(cwd 目录列表 + `ResolvePath` 结果)。
+    // 这给链接检测器的子串搜索提供了和本地 `fs::metadata` 等价的消歧依据。
+    // 未知路径本轮视为无效,查询结果到达后重新扫描再点亮。
+    if let LinkValidationContext::Remote(remote) = validation_ctx {
+        let Some(is_dir) = remote.lookup(path) else {
             return false;
         };
         // 与本地一致:带行列号时不能是目录。
@@ -228,3 +247,7 @@ pub fn create_file<P: AsRef<Path>>(_path: P) -> io::Result<fs::File> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "file_tests.rs"]
+mod tests;

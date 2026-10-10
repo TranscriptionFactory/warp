@@ -4455,7 +4455,7 @@ async fn collect_download_files_into_prefixed(
     Ok(())
 }
 
-async fn download_file_with_progress(
+pub(crate) async fn download_file_with_progress(
     client: Arc<RemoteServerClient>,
     remote_path: String,
     local_path: PathBuf,

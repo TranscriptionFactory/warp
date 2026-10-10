@@ -1325,6 +1325,40 @@ struct FindLinkArg {
     from_editor: TerminalEditor,
 }
 
+/// Zap:远端路径的 daemon `ResolvePath` 查询结果。
+#[cfg(all(
+    feature = "local_tty",
+    feature = "local_fs",
+    not(target_family = "wasm")
+))]
+struct RemoteResolvedPath {
+    /// `Some(is_dir)` 表示存在;`None` 表示不存在或仍在查询中。
+    is_dir: Option<bool>,
+    resolved_at: Instant,
+}
+
+#[cfg(all(
+    feature = "local_tty",
+    feature = "local_fs",
+    not(target_family = "wasm")
+))]
+impl RemoteResolvedPath {
+    /// "不存在"的结果只在这段时间内有效,之后重新查询。agent 经常先打印
+    /// 路径再写文件,不能让一次未命中永久压住链接。
+    const MISSING_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+
+    fn new(is_dir: Option<bool>) -> Self {
+        Self {
+            is_dir,
+            resolved_at: Instant::now(),
+        }
+    }
+
+    fn is_fresh(&self) -> bool {
+        self.is_dir.is_some() || self.resolved_at.elapsed() < Self::MISSING_TTL
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum TerminalEditor {
     Yes,
@@ -2482,6 +2516,17 @@ pub struct TerminalView {
         (warp_core::SessionId, PathBuf),
         Option<std::sync::Arc<crate::util::file::RemoteDirListing>>,
     >,
+
+    /// Zap:远端会话里 cwd 之外的路径的 `ResolvePath` 查询结果。
+    ///
+    /// 键是 `(session_id, 远端绝对路径)`。由 `link_detection.rs` 写入,
+    /// 容量上限见 `resolve_remote_link_candidates`。本地会话永不写入。
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    remote_resolved_paths: indexmap::IndexMap<(warp_core::SessionId, PathBuf), RemoteResolvedPath>,
 
     last_focus_ts: Option<NaiveDateTime>,
     tips_completed: ModelHandle<TipsCompleted>,
@@ -3960,6 +4005,12 @@ impl TerminalView {
                 not(target_family = "wasm")
             ))]
             remote_dir_listing_cache: indexmap::IndexMap::new(),
+            #[cfg(all(
+                feature = "local_tty",
+                feature = "local_fs",
+                not(target_family = "wasm")
+            ))]
+            remote_resolved_paths: indexmap::IndexMap::new(),
             last_focus_ts: None,
             tips_completed: resources.tips_completed.clone(),
             was_ever_visible: false,
@@ -16717,12 +16768,122 @@ impl TerminalView {
         session_id: warp_core::SessionId,
         path: &std::path::Path,
     ) -> bool {
+        if let Some(entry) = self
+            .remote_resolved_paths
+            .get(&(session_id, path.to_path_buf()))
+        {
+            return entry.is_dir == Some(true);
+        }
         path.parent().is_some_and(|parent| {
             self.remote_dir_listing_cache
                 .get(&(session_id, parent.to_path_buf()))
                 .and_then(|entry| entry.as_ref())
                 .is_some_and(|listing| crate::util::file::remote_path_is_dir(path, listing))
         })
+    }
+
+    /// Zap:打开终端里点击的远端路径。
+    ///
+    /// 目录:在该远端会话里 `cd` 进去。图片和二进制文件(PDF、Office 文档等):
+    /// 下载到本地缓存后走本地打开流程。其余文本文件:走 buffer-sync 在内嵌
+    /// 代码编辑器里打开,可直接编辑。
+    #[cfg(all(feature = "local_tty", feature = "local_fs"))]
+    fn open_remote_terminal_path(
+        &mut self,
+        host_id: warp_core::HostId,
+        path: PathBuf,
+        line_col: Option<LineAndColumnArg>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(session_id) = self.active_block_session_id() {
+            if self.remote_clicked_path_is_dir(session_id, &path) {
+                self.cd_into_remote_directory(&path, ctx);
+                return;
+            }
+            if crate::util::openable_file_type::is_supported_image_file(&path)
+                || crate::util::openable_file_type::is_file_openable_in_warp(&path).is_none()
+            {
+                self.download_and_open_remote_file(session_id, &host_id, path, ctx);
+                return;
+            }
+        }
+        if let Some(remote_path) = Self::remote_path_from_terminal_path(host_id, &path) {
+            ctx.emit(Event::OpenRemoteFileFromTerminal {
+                remote_path,
+                line_col,
+            });
+        }
+    }
+
+    /// Zap:通过 daemon `ReadFileChunk` 把远端文件下载到本地缓存,再按本地
+    /// 文件打开(图片进内置图片查看器,其余交给系统默认应用)。
+    ///
+    /// 缓存路径为 `<cache>/remote-files/<host>/<远端绝对路径>`。每次点击都重新
+    /// 下载,保证看到的是远端最新内容。
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn download_and_open_remote_file(
+        &mut self,
+        session_id: warp_core::SessionId,
+        host_id: &warp_core::HostId,
+        remote_path: PathBuf,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(client) = RemoteServerManager::handle(ctx)
+            .as_ref(ctx)
+            .client_for_session(session_id)
+            .cloned()
+        else {
+            log::warn!("没有远端会话的 daemon 客户端,无法下载 {remote_path:?}");
+            return;
+        };
+
+        // 主机 id 和路径都来自远端,只保留安全字符和普通路径分量,防止写出缓存目录。
+        let host_dir: String = host_id
+            .as_str()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let mut local_path = warp_core::paths::cache_dir()
+            .join("remote-files")
+            .join(host_dir);
+        for component in remote_path.components() {
+            if let std::path::Component::Normal(part) = component {
+                local_path.push(part);
+            }
+        }
+
+        let remote_path_str = remote_path.to_string_lossy().into_owned();
+        ctx.spawn(
+            crate::workspace::view::server_file_browser::download_file_with_progress(
+                client,
+                remote_path_str,
+                local_path.clone(),
+                Default::default(),
+                0,
+            ),
+            move |_me, result, ctx| match result {
+                Ok(()) => {
+                    let target = resolve_file_target(&local_path, EditorSettings::as_ref(ctx), None);
+                    ctx.emit(Event::OpenFileWithTarget {
+                        path: local_path,
+                        target,
+                        line_col: None,
+                    });
+                }
+                Err(err) => log::warn!("下载远端文件失败 {remote_path:?}: {err}"),
+            },
+        );
     }
 
     /// Zap:在当前(远端)终端会话里 `cd` 进指定目录。
@@ -16747,23 +16908,10 @@ impl TerminalView {
     ) {
         ctx.notify();
 
-        // Zap:远端 SSH 会话走 buffer-sync 协议打开远端文件。
+        // Zap:远端 SSH 会话走远端打开流程。
         #[cfg(all(feature = "local_tty", feature = "local_fs"))]
         if let Some(host_id) = self.active_session_remote_host_id(ctx) {
-            // 远端目录点击:不在编辑器里打开,改为在该远端会话里 `cd` 进去。
-            #[cfg(not(target_family = "wasm"))]
-            if let Some(session_id) = self.active_block_session_id() {
-                if self.remote_clicked_path_is_dir(session_id, &path) {
-                    self.cd_into_remote_directory(&path, ctx);
-                    return;
-                }
-            }
-            if let Some(remote_path) = Self::remote_path_from_terminal_path(host_id, &path) {
-                ctx.emit(Event::OpenRemoteFileFromTerminal {
-                    remote_path,
-                    line_col: line_and_column_num,
-                });
-            }
+            self.open_remote_terminal_path(host_id, path, line_and_column_num, ctx);
             return;
         }
 
@@ -16787,24 +16935,10 @@ impl TerminalView {
     ) {
         ctx.notify();
 
-        // Zap:远端 SSH 会话走 buffer-sync 协议打开远端文件。
-        // 远端文件统一在内嵌代码编辑器打开,忽略 `target`(外部编辑器无法访问远端文件)。
+        // Zap:远端 SSH 会话走远端打开流程,忽略 `target`(外部编辑器无法访问远端文件)。
         #[cfg(all(feature = "local_tty", feature = "local_fs"))]
         if let Some(host_id) = self.active_session_remote_host_id(ctx) {
-            // 远端目录点击:不在编辑器里打开,改为在该远端会话里 `cd` 进去。
-            #[cfg(not(target_family = "wasm"))]
-            if let Some(session_id) = self.active_block_session_id() {
-                if self.remote_clicked_path_is_dir(session_id, &path) {
-                    self.cd_into_remote_directory(&path, ctx);
-                    return;
-                }
-            }
-            if let Some(remote_path) = Self::remote_path_from_terminal_path(host_id, &path) {
-                ctx.emit(Event::OpenRemoteFileFromTerminal {
-                    remote_path,
-                    line_col: line_and_column_num,
-                });
-            }
+            self.open_remote_terminal_path(host_id, path, line_and_column_num, ctx);
             return;
         }
 
