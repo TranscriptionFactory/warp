@@ -3,7 +3,7 @@ use std::path::Path;
 use warp_completer::completer::TopLevelCommandCaseSensitivity;
 use warp_util::path::EscapeChar;
 
-use super::{check_openable_in_warp, OpenablePath};
+use super::{check_openable_in_warp, openable_candidates, OpenablePath};
 use crate::util::openable_file_type::OpenableFileType;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -116,4 +116,28 @@ fn test_nonexistent_code_file() {
         EscapeChar::Backslash,
     ));
     assert_eq!(result, None);
+}
+
+#[test]
+fn test_remote_candidates_join_remote_cwd_without_checking_existence() {
+    // Remote sessions resolve candidates on the host, so they must not depend on the local disk.
+    let candidates = openable_candidates(
+        "cat notes.md src/main.rs /etc/hosts.png".to_string(),
+        Some(Path::new("/home/me/proj")),
+        TopLevelCommandCaseSensitivity::CaseInsensitive,
+        EscapeChar::Backslash,
+    );
+    assert_eq!(
+        candidates,
+        vec![
+            OpenablePath {
+                path: "/home/me/proj/notes.md".into(),
+                file_type: OpenableFileType::Markdown,
+            },
+            OpenablePath {
+                path: "/home/me/proj/src/main.rs".into(),
+                file_type: OpenableFileType::Code,
+            },
+        ]
+    );
 }
