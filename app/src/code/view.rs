@@ -355,10 +355,10 @@ impl CodeView {
                     }
                     (MarkdownDisplayMode::Raw, false) => {}
                     (MarkdownDisplayMode::Rendered, true) => {
-                        view.set_remote_markdown_rendered(true, ctx);
+                        view.set_remote_markdown_rendered(view.active_tab_index, true, ctx);
                     }
                     (MarkdownDisplayMode::Raw, true) => {
-                        view.set_remote_markdown_rendered(false, ctx);
+                        view.set_remote_markdown_rendered(view.active_tab_index, false, ctx);
                     }
                 }
             });
@@ -382,7 +382,7 @@ impl CodeView {
                 tab.markdown_default_applied = true;
             }
             if is_remote && *EditorSettings::as_ref(ctx).prefer_markdown_viewer {
-                self.set_remote_markdown_rendered(true, ctx);
+                self.set_remote_markdown_rendered(index, true, ctx);
             }
         }
 
@@ -412,12 +412,17 @@ impl CodeView {
     /// `rendered = false`:清除该视图,回到源码编辑器。
     ///
     /// 注意:这是**快照**式渲染 —— buffer 后续经 sync 更新时预览不会自动刷新,
-    /// 用户切回 Raw 再切回 Rendered 即可重新渲染。本地文件不走这里
+    /// 用户切回 Raw 再切回 Rendered 即可重新渲染。远端初始内容到达
+    /// (`FileLoaded`)时会对已处于 Rendered 的 tab 重新快照一次,否则打开时
+    /// 拍到的是空 buffer。本地文件不走这里
     /// (走 `RenderMarkdown` → `ReplaceWithFilePane`)。
     #[cfg(feature = "local_fs")]
-    fn set_remote_markdown_rendered(&mut self, rendered: bool, ctx: &mut ViewContext<Self>) {
-        let index = self.active_tab_index;
-
+    fn set_remote_markdown_rendered(
+        &mut self,
+        index: usize,
+        rendered: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
         if !rendered {
             if let Some(tab) = self.tab_group.get_mut(index) {
                 tab.rendered_markdown_view = None;
@@ -725,13 +730,24 @@ impl CodeView {
             LocalCodeEditorEvent::FileLoaded => {
                 // 远端 buffer 初始内容到达后,解除加载期施加的编辑锁。
                 // 本地文件创建时即可编辑,从不被锁,这里也就是 no-op。
-                if let Some(tab) = me.tab_group.iter().find(|tab| tab.editor_view == emitter) {
+                if let Some((index, tab)) = me
+                    .tab_group
+                    .iter()
+                    .enumerate()
+                    .find(|(_, tab)| tab.editor_view == emitter)
+                {
                     if matches!(tab.location, Some(BufferLocation::Remote(_))) {
+                        let rerender_markdown = tab.rendered_markdown_view.is_some();
                         emitter.update(ctx, |local_editor, ctx| {
                             local_editor.editor().update(ctx, |code_editor, ctx| {
                                 code_editor.set_interaction_state(InteractionState::Editable, ctx);
                             });
                         });
+                        // 打开时的 Rendered 快照拍到的是空 buffer,内容到达后重拍一次。
+                        #[cfg(feature = "local_fs")]
+                        if rerender_markdown {
+                            me.set_remote_markdown_rendered(index, true, ctx);
+                        }
                     }
                 }
                 me.pane_configuration.update(ctx, |pane_config, ctx| {
