@@ -518,6 +518,12 @@ pub enum CodeReviewViewEvent {
         path: PathBuf,
         line_and_column: Option<LineAndColumnArg>,
     },
+    /// Request to open a file of a remote repo on its host.
+    #[cfg(all(feature = "local_fs", feature = "local_tty"))]
+    OpenRemoteFile {
+        remote_path: crate::code::buffer_location::RemotePath,
+        line_col: Option<LineAndColumnArg>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -6961,6 +6967,14 @@ impl CodeReviewView {
             return;
         };
         let full_path = repo_path.join(path);
+        #[cfg(all(feature = "local_fs", feature = "local_tty"))]
+        if let Some(remote_path) = self.remote_path_for(&full_path, ctx) {
+            ctx.emit(CodeReviewViewEvent::OpenRemoteFile {
+                remote_path,
+                line_col: line_and_column,
+            });
+            return;
+        }
         ctx.emit(CodeReviewViewEvent::OpenFileInNewTab {
             path: full_path,
             line_and_column,
@@ -6976,6 +6990,26 @@ impl CodeReviewView {
     ) {
     }
 
+    /// The host path of `full_path` when this panel shows a remote repo, `None` for local repos.
+    #[cfg(all(feature = "local_fs", feature = "local_tty"))]
+    fn remote_path_for(
+        &self,
+        full_path: &Path,
+        ctx: &AppContext,
+    ) -> Option<crate::code::buffer_location::RemotePath> {
+        let crate::util::git::GitExecTarget::Remote { session_id, .. } =
+            self.git_exec_target(ctx)?
+        else {
+            return None;
+        };
+        let host_id = crate::remote_server::manager::RemoteServerManager::as_ref(ctx)
+            .host_id_for_session(session_id)?
+            .clone();
+        let path =
+            warp_util::standardized_path::StandardizedPath::try_new(full_path.to_str()?).ok()?;
+        Some(crate::code::buffer_location::RemotePath::new(host_id, path))
+    }
+
     #[cfg(feature = "local_fs")]
     fn open_code_review_file(
         &self,
@@ -6983,6 +7017,15 @@ impl CodeReviewView {
         line_and_column: Option<LineAndColumnArg>,
         ctx: &mut ViewContext<Self>,
     ) {
+        // Remote repos open on the host; the local editor-choice routing below doesn't apply.
+        #[cfg(feature = "local_tty")]
+        if let Some(remote_path) = self.remote_path_for(&full_path, ctx) {
+            ctx.emit(CodeReviewViewEvent::OpenRemoteFile {
+                remote_path,
+                line_col: line_and_column,
+            });
+            return;
+        }
         let settings = EditorSettings::as_ref(ctx);
         let target = resolve_file_target_with_editor_choice(
             &full_path,

@@ -373,6 +373,11 @@ pub enum RightPanelEvent {
         path: PathBuf,
         line_and_column: Option<LineAndColumnArg>,
     },
+    #[cfg(all(feature = "local_fs", feature = "local_tty"))]
+    OpenRemoteFile {
+        remote_path: crate::code::buffer_location::RemotePath,
+        line_col: Option<LineAndColumnArg>,
+    },
 }
 
 pub struct RightPanelView {
@@ -1259,6 +1264,16 @@ impl RightPanelView {
                     ctx.emit(RightPanelEvent::OpenFileInNewTab {
                         path: path.clone(),
                         line_and_column: *line_and_column,
+                    });
+                }
+                #[cfg(all(feature = "local_fs", feature = "local_tty"))]
+                CodeReviewViewEvent::OpenRemoteFile {
+                    remote_path,
+                    line_col,
+                } => {
+                    ctx.emit(RightPanelEvent::OpenRemoteFile {
+                        remote_path: remote_path.clone(),
+                        line_col: *line_col,
                     });
                 }
                 _ => {}

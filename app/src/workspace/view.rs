@@ -5594,6 +5594,20 @@ impl Workspace {
             } => {
                 self.add_tab_for_code_file(path, line_and_column, ctx);
             }
+            #[cfg(feature = "local_tty")]
+            RightPanelEvent::OpenRemoteFile {
+                remote_path,
+                line_col,
+            } => {
+                if self
+                    .active_tab_pane_group()
+                    .as_ref(ctx)
+                    .is_right_panel_maximized
+                {
+                    self.toggle_right_panel_maximized(ctx);
+                }
+                self.open_remote_file_with_target(remote_path, line_col, ctx);
+            }
         }
         #[cfg(not(feature = "local_fs"))]
         let _ = (event, ctx);
