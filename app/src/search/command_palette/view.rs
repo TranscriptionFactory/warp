@@ -107,6 +107,8 @@ pub enum Event {
     OpenFile {
         path: String,
         line_and_column_arg: Option<LineAndColumnArg>,
+        /// Set when `path` is on an SSH host rather than the local filesystem.
+        remote_host: Option<warp_core::HostId>,
     },
     /// Open a directory at the given path.
     OpenDirectory { path: String },
@@ -901,6 +903,7 @@ impl View {
                 path,
                 project_directory,
                 line_and_column_arg,
+                remote_host,
             } => {
                 let absolute_path = std::path::Path::new(&project_directory)
                     .join(&path)
@@ -910,6 +913,7 @@ impl View {
                 ctx.emit(Event::OpenFile {
                     path: absolute_path,
                     line_and_column_arg,
+                    remote_host,
                 });
             }
             CommandPaletteItemAction::OpenDirectory {
@@ -941,6 +945,7 @@ impl View {
                 ctx.emit(Event::OpenFile {
                     path: file_path.to_string_lossy().to_string(),
                     line_and_column_arg: None,
+                    remote_host: None,
                 });
             }
             CommandPaletteItemAction::NewConversationInProject {

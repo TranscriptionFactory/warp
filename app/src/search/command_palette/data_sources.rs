@@ -217,6 +217,7 @@ impl DataSourceStore {
                 path,
                 project_directory,
                 line_and_column_arg,
+                remote_host,
             } => {
                 // Create a file search item from the summary
                 use crate::search::command_palette::files::search_item::FileSearchItem;
@@ -228,6 +229,7 @@ impl DataSourceStore {
                     match_result: FuzzyMatchResult::no_match(),
                     line_and_column_arg: *line_and_column_arg,
                     is_directory: false,
+                    remote_host: remote_host.clone(),
                 };
                 Some(QueryResult::from(search_item))
             }
@@ -245,6 +247,7 @@ impl DataSourceStore {
                     match_result: FuzzyMatchResult::no_match(),
                     line_and_column_arg: None,
                     is_directory: true,
+                    remote_host: None,
                 };
                 Some(QueryResult::from(search_item))
             }

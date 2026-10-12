@@ -126,6 +126,7 @@ impl FileDataSource {
         let file_search_model = FileSearchModel::as_ref(app);
 
         let (contents, git_changed_files) = self.contents_with_git_changes(app);
+        let remote_host = file_search_model.remote_host(app);
 
         let mut results = Vec::new();
 
@@ -161,6 +162,7 @@ impl FileDataSource {
                 match_result,
                 line_and_column_arg: None,
                 is_directory: item.is_directory,
+                remote_host: remote_host.clone(),
             };
             results.push((file_ranking, QueryResult::from(search_item)));
         }
@@ -192,6 +194,7 @@ impl FileDataSource {
         let opened_files = OpenedFilesModel::as_ref(app);
 
         let repo_root = file_search_model.repo_root(app);
+        let remote_host = file_search_model.remote_host(app);
 
         // For the "Create file" fallback, use the expanded (but not repo-root-stripped)
         // path so that absolute paths work correctly with Path::join.
@@ -262,6 +265,7 @@ impl FileDataSource {
                         line_and_column_arg: text.line_and_column_num,
                         match_result,
                         is_directory: item.is_directory,
+                        remote_host: remote_host.clone(),
                     };
                     results.push(search_item);
                 }

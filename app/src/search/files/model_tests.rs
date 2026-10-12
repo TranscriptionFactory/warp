@@ -460,3 +460,78 @@ mod integration_tests {
         assert!(button_component.is_some());
     }
 }
+
+#[cfg(feature = "local_fs")]
+mod remote_direct_children_tests {
+    use super::*;
+    use warp_util::standardized_path::StandardizedPath;
+
+    fn result(path: &str, is_directory: bool) -> FileSearchResult {
+        FileSearchResult {
+            path: path.to_string(),
+            project_directory: "/home/u/repo".to_string(),
+            is_directory,
+        }
+    }
+
+    fn paths(results: &[FileSearchResult]) -> Vec<(&str, &str, bool)> {
+        let mut out: Vec<_> = results
+            .iter()
+            .map(|r| {
+                (
+                    r.path.as_str(),
+                    r.project_directory.as_str(),
+                    r.is_directory,
+                )
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn test_direct_children_of_nested_cwd() {
+        let root = StandardizedPath::try_new("/home/u/repo").unwrap();
+        let cwd = StandardizedPath::try_new("/home/u/repo/src").unwrap();
+        let contents = vec![
+            result("README.md", false),
+            result("src/", true),
+            result("src/main.rs", false),
+            result("src/util/", true),
+            result("src/util/mod.rs", false),
+            // Shares a string prefix with `src` but is not inside it.
+            result("src2/", true),
+            result("src2/lib.rs", false),
+        ];
+
+        let children = FileSearchModel::direct_children(&root, &cwd, &contents);
+
+        assert_eq!(
+            paths(&children),
+            vec![
+                ("main.rs", "/home/u/repo/src", false),
+                ("util", "/home/u/repo/src", true),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_direct_children_at_repo_root() {
+        let root = StandardizedPath::try_new("/home/u/repo").unwrap();
+        let contents = vec![
+            result("README.md", false),
+            result("src/", true),
+            result("src/main.rs", false),
+        ];
+
+        let children = FileSearchModel::direct_children(&root, &root, &contents);
+
+        assert_eq!(
+            paths(&children),
+            vec![
+                ("README.md", "/home/u/repo", false),
+                ("src", "/home/u/repo", true),
+            ]
+        );
+    }
+}

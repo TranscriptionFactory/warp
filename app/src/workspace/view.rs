@@ -12169,7 +12169,23 @@ impl Workspace {
             CommandPaletteEvent::OpenFile {
                 path,
                 line_and_column_arg,
+                remote_host,
             } => {
+                #[cfg(feature = "local_tty")]
+                if let Some(host_id) = remote_host {
+                    match warp_util::standardized_path::StandardizedPath::try_new(path) {
+                        Ok(remote_path) => self.open_remote_file_with_target(
+                            crate::code::buffer_location::RemotePath::new(
+                                host_id.clone(),
+                                remote_path,
+                            ),
+                            *line_and_column_arg,
+                            ctx,
+                        ),
+                        Err(err) => log::warn!("Invalid remote file path {path}: {err:?}"),
+                    }
+                    return;
+                }
                 #[cfg(feature = "local_fs")]
                 self.open_code(
                     CodeSource::Link {
@@ -13834,6 +13850,10 @@ impl Workspace {
                     Some(terminal_handle.id()),
                     ctx,
                 );
+                let remote_cwd = matches!(is_local, Some(false))
+                    .then(|| pwd.clone())
+                    .flatten();
+                active_session.set_remote_cwd(window_id, remote_cwd, ctx);
             });
 
             let is_remote = matches!(is_local, Some(false));

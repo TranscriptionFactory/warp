@@ -59,6 +59,7 @@ pub enum CommandPaletteItemAction {
         path: String,
         project_directory: String,
         line_and_column_arg: Option<LineAndColumnArg>,
+        remote_host: Option<warp_core::HostId>,
     },
     OpenDirectory {
         path: String,
@@ -122,10 +123,12 @@ impl CommandPaletteItemAction {
                 path,
                 project_directory,
                 line_and_column_arg,
+                remote_host,
             } => ItemSummary::File {
                 path: path.clone(),
                 project_directory: project_directory.clone(),
                 line_and_column_arg: *line_and_column_arg,
+                remote_host: remote_host.clone(),
             },
             CommandPaletteItemAction::OpenDirectory {
                 path,
@@ -190,6 +193,7 @@ pub enum ItemSummary {
         path: String,
         project_directory: String,
         line_and_column_arg: Option<LineAndColumnArg>,
+        remote_host: Option<warp_core::HostId>,
     },
     Directory {
         path: String,

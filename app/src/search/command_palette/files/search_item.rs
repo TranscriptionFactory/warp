@@ -2,6 +2,7 @@ use fuzzy_match::FuzzyMatchResult;
 use ordered_float::OrderedFloat;
 use std::fmt::Debug;
 use std::path::PathBuf;
+use warp_core::HostId;
 use warp_util::path::LineAndColumnArg;
 
 use crate::appearance::Appearance;
@@ -23,6 +24,8 @@ pub struct FileSearchItem {
     pub match_result: FuzzyMatchResult,
     pub line_and_column_arg: Option<LineAndColumnArg>,
     pub is_directory: bool,
+    /// Set when the file lives on an SSH host rather than the local filesystem.
+    pub remote_host: Option<HostId>,
 }
 
 impl SearchItem for FileSearchItem {
@@ -86,6 +89,7 @@ impl SearchItem for FileSearchItem {
                 path: self.path.to_string_lossy().to_string(),
                 project_directory: self.project_directory.clone(),
                 line_and_column_arg: self.line_and_column_arg,
+                remote_host: self.remote_host.clone(),
             }
         }
     }

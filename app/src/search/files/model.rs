@@ -17,7 +17,12 @@ cfg_if::cfg_if! {
         use repo_metadata::local_model::GetContentsArgs;
         use repo_metadata::wrapper_model::RepoMetadataEvent;
         use repo_metadata::RepoMetadataModel;
+        use repo_metadata::RepositoryIdentifier;
+        use repo_metadata::repository_identifier::RemoteRepositoryIdentifier;
         use repo_metadata::repositories::DetectedRepositories;
+        use remote_server::manager::RemoteServerManager;
+        use warp_core::HostId;
+        use warp_util::standardized_path::StandardizedPath;
         use std::cell::RefCell;
         use std::collections::HashMap;
     }
@@ -28,10 +33,10 @@ use super::search_item::FileSearchResult;
 /// Shared model for file search functionality across different UI components.
 /// This singleton provides common file discovery, fuzzy matching, and git integration.
 pub struct FileSearchModel {
-    /// Cached flattened repo contents keyed by repo root path.
+    /// Cached flattened repo contents keyed by repository (local or remote).
     /// Populated lazily on first query, invalidated when the file tree changes.
     #[cfg(feature = "local_fs")]
-    repo_contents_cache: RefCell<HashMap<PathBuf, Arc<Vec<FileSearchResult>>>>,
+    repo_contents_cache: RefCell<HashMap<RepositoryIdentifier, Arc<Vec<FileSearchResult>>>>,
 }
 
 impl FileSearchModel {
@@ -44,29 +49,16 @@ impl FileSearchModel {
                 RepoMetadataEvent::FileTreeUpdated { ids } => {
                     let mut cache = me.repo_contents_cache.borrow_mut();
                     for id in ids {
-                        if let repo_metadata::RepositoryIdentifier::Local(path) = id {
-                            if let Some(local) = path.to_local_path() {
-                                cache.remove(&local);
-                            }
-                        }
+                        cache.remove(id);
                     }
                 }
-                RepoMetadataEvent::RepositoryRemoved { id } => {
-                    if let repo_metadata::RepositoryIdentifier::Local(path) = id {
-                        if let Some(local) = path.to_local_path() {
-                            me.repo_contents_cache.borrow_mut().remove(&local);
-                        }
-                    }
+                // Remote incremental updates only emit `FileTreeEntryUpdated`.
+                RepoMetadataEvent::RepositoryRemoved { id }
+                | RepoMetadataEvent::RepositoryUpdated { id }
+                | RepoMetadataEvent::FileTreeEntryUpdated { id } => {
+                    me.repo_contents_cache.borrow_mut().remove(id);
                 }
-                RepoMetadataEvent::RepositoryUpdated { id } => {
-                    if let repo_metadata::RepositoryIdentifier::Local(path) = id {
-                        if let Some(local) = path.to_local_path() {
-                            me.repo_contents_cache.borrow_mut().remove(&local);
-                        }
-                    }
-                }
-                RepoMetadataEvent::FileTreeEntryUpdated { .. }
-                | RepoMetadataEvent::UpdatingRepositoryFailed { .. }
+                RepoMetadataEvent::UpdatingRepositoryFailed { .. }
                 | RepoMetadataEvent::IncrementalUpdateReady { .. } => {}
             },
         );
@@ -107,7 +99,7 @@ impl FileSearchModel {
             .and_then(|window_id| ActiveSession::as_ref(app).path_if_local(window_id))
         {
             Some(path) => path,
-            None => return Vec::new(),
+            None => return self.get_remote_folder_contents(app),
         };
 
         let current_dir_string = current_dir.to_string_lossy().to_string();
@@ -141,17 +133,20 @@ impl FileSearchModel {
     #[cfg(feature = "local_fs")]
     pub fn get_repo_contents(&self, app: &AppContext) -> Arc<Vec<FileSearchResult>> {
         let Some(repo_root) = self.repo_root(app) else {
-            return Arc::new(Vec::new());
+            return self
+                .remote_repo(app)
+                .map(|remote_id| self.get_remote_repo_contents(remote_id, app))
+                .unwrap_or_default();
         };
 
-        if let Some(cached) = self.repo_contents_cache.borrow().get(&repo_root) {
+        let Some(id) = RepositoryIdentifier::try_local(&repo_root) else {
+            return Arc::new(Vec::new());
+        };
+        if let Some(cached) = self.repo_contents_cache.borrow().get(&id) {
             return cached.clone();
         }
 
         let repo_metadata = RepoMetadataModel::as_ref(app);
-        let Some(id) = repo_metadata::RepositoryIdentifier::try_local(&repo_root) else {
-            return Arc::new(Vec::new());
-        };
         let contents = if repo_metadata.has_repository(&id, app) {
             self.get_contents_from_repo(&repo_root, repo_metadata, GetContentsArgs::default(), app)
         } else {
@@ -161,8 +156,142 @@ impl FileSearchModel {
         let arc = Arc::new(contents);
         self.repo_contents_cache
             .borrow_mut()
-            .insert(repo_root, arc.clone());
+            .insert(id, arc.clone());
         arc
+    }
+
+    /// The host of the active SSH session, when file search is serving its remote repo.
+    #[cfg(feature = "local_fs")]
+    pub fn remote_host(&self, app: &AppContext) -> Option<HostId> {
+        if self.repo_root(app).is_some() {
+            return None;
+        }
+        self.remote_repo(app).map(|id| id.host_id)
+    }
+
+    #[cfg(not(feature = "local_fs"))]
+    pub fn remote_host(&self, _app: &AppContext) -> Option<warp_core::HostId> {
+        None
+    }
+
+    /// The indexed remote repository (or lazily loaded remote directory) containing the active
+    /// SSH session's working directory. The remote server indexes it after
+    /// `navigate_to_directory` and pushes the tree into [`RepoMetadataModel`].
+    #[cfg(feature = "local_fs")]
+    fn remote_repo(&self, app: &AppContext) -> Option<RemoteRepositoryIdentifier> {
+        let window_id = app.windows().state().active_window?;
+        let active_session = ActiveSession::as_ref(app);
+        let cwd = StandardizedPath::try_new(active_session.remote_cwd(window_id)?).ok()?;
+        let session_id = active_session.session(window_id)?.id();
+        let host_id = RemoteServerManager::as_ref(app).host_id_for_session(session_id)?;
+        let repo_metadata = RepoMetadataModel::as_ref(app);
+        repo_metadata
+            .remote_repository_ids(app)
+            .filter(|id| &id.host_id == host_id && cwd.starts_with(&id.path))
+            .filter(|id| {
+                repo_metadata.has_repository(&RepositoryIdentifier::Remote((*id).clone()), app)
+            })
+            .max_by_key(|id| id.path.as_str().len())
+            .cloned()
+    }
+
+    /// Flattens a remote repository's indexed tree into paths relative to its root.
+    #[cfg(feature = "local_fs")]
+    fn get_remote_repo_contents(
+        &self,
+        remote_id: RemoteRepositoryIdentifier,
+        app: &AppContext,
+    ) -> Arc<Vec<FileSearchResult>> {
+        let root = remote_id.path.clone();
+        let id = RepositoryIdentifier::Remote(remote_id);
+        if let Some(cached) = self.repo_contents_cache.borrow().get(&id) {
+            return cached.clone();
+        }
+        let project_directory = root.as_str().to_string();
+        let contents: Vec<FileSearchResult> = RepoMetadataModel::as_ref(app)
+            .get_repo_contents(&id, GetContentsArgs::default(), app)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|content| {
+                let (path, is_directory) = match content {
+                    repo_metadata::RepoContent::File(file) => (&file.path, false),
+                    repo_metadata::RepoContent::Directory(dir) => (&dir.path, true),
+                };
+                if !path.starts_with(&root) {
+                    return None;
+                }
+                let mut relative = path.strip_prefix(&root)?.to_string();
+                if relative.is_empty() {
+                    return None;
+                }
+                if is_directory && !relative.ends_with('/') {
+                    relative.push('/');
+                }
+                Some(FileSearchResult {
+                    path: relative,
+                    project_directory: project_directory.clone(),
+                    is_directory,
+                })
+            })
+            .collect();
+
+        let arc = Arc::new(contents);
+        self.repo_contents_cache
+            .borrow_mut()
+            .insert(id, arc.clone());
+        arc
+    }
+
+    /// Direct children of the active SSH session's working directory, taken from the
+    /// remote index.
+    #[cfg(feature = "local_fs")]
+    fn get_remote_folder_contents(&self, app: &AppContext) -> Vec<FileSearchResult> {
+        let Some(remote_id) = self.remote_repo(app) else {
+            return Vec::new();
+        };
+        let Some(cwd) = app
+            .windows()
+            .state()
+            .active_window
+            .and_then(|window_id| ActiveSession::as_ref(app).remote_cwd(window_id))
+            .and_then(|cwd| StandardizedPath::try_new(cwd).ok())
+        else {
+            return Vec::new();
+        };
+        let root = remote_id.path.clone();
+        let contents = self.get_remote_repo_contents(remote_id, app);
+        Self::direct_children(&root, &cwd, &contents)
+    }
+
+    /// Picks the entries of `contents` (paths relative to `root`) that are direct children of
+    /// `cwd`, re-rooted at `cwd`.
+    #[cfg(feature = "local_fs")]
+    fn direct_children(
+        root: &StandardizedPath,
+        cwd: &StandardizedPath,
+        contents: &[FileSearchResult],
+    ) -> Vec<FileSearchResult> {
+        let cwd_str = cwd.as_str().to_string();
+        contents
+            .iter()
+            .filter_map(|item| {
+                let absolute = root.join(item.path.trim_end_matches('/'));
+                // `strip_prefix` is string-based (`/repo` would match `/repo2`), so also require
+                // that the path lies under `cwd` component-wise.
+                if !absolute.starts_with(cwd) {
+                    return None;
+                }
+                let name = absolute.strip_prefix(cwd)?;
+                if name.is_empty() || name.contains('/') {
+                    return None;
+                }
+                Some(FileSearchResult {
+                    path: name.to_string(),
+                    project_directory: cwd_str.clone(),
+                    is_directory: item.is_directory,
+                })
+            })
+            .collect()
     }
 
     /// Gets repository contents with git status information for prioritization.

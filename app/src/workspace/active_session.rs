@@ -30,6 +30,8 @@ struct WindowActiveSession {
     session: Option<Weak<Session>>,
     /// The active session's working directory, if it's local.
     path_if_local: Option<PathBuf>,
+    /// The active session's working directory on the remote host, if it's a remote session.
+    remote_cwd: Option<String>,
     /// The [`EntityId`]` for the [`TerminalView`] for the active session, if there is one.
     terminal_view_id: Option<EntityId>,
 }
@@ -54,6 +56,24 @@ impl ActiveSession {
             .get(&window_id)?
             .path_if_local
             .as_deref()
+    }
+
+    /// The current working directory of the active session on the remote host, if it's remote.
+    pub fn remote_cwd(&self, window_id: WindowId) -> Option<&str> {
+        self.window_sessions.get(&window_id)?.remote_cwd.as_deref()
+    }
+
+    pub(super) fn set_remote_cwd(
+        &mut self,
+        window_id: WindowId,
+        remote_cwd: Option<String>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let window_state = self.window_sessions.entry(window_id).or_default();
+        if window_state.remote_cwd != remote_cwd {
+            window_state.remote_cwd = remote_cwd;
+            ctx.notify();
+        }
     }
 
     /// Set the current session, for use in tests.
