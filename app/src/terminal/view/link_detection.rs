@@ -437,7 +437,7 @@ impl super::TerminalView {
     ///
     /// 当 `local_tty` 未启用 / 在 wasm 上 / `SshRemoteServer` feature flag 关闭时,
     /// 一律返回 `false`,即保持本地行为完全不变。
-    fn session_is_remote(
+    pub(super) fn session_is_remote(
         &self,
         session_id: Option<crate::terminal::model::session::SessionId>,
         ctx: &warpui::AppContext,
@@ -607,15 +607,10 @@ impl super::TerminalView {
         find_link_arg: FindLinkArg,
         ctx: &mut ViewContext<Self>,
     ) {
-        use warpui::SingletonEntity as _;
-
         use super::RemoteResolvedPath;
-        use crate::remote_server::manager::RemoteServerManager;
 
         // 一次悬停最多查这么多个路径,控制 RPC 数量。
         const MAX_RESOLVES_PER_SCAN: usize = 8;
-        // 缓存上限,超出后按插入顺序 FIFO 淘汰。
-        const MAX_ENTRIES: usize = 512;
 
         let mut to_resolve: Vec<PathBuf> = Vec::new();
         for path in candidates {
@@ -630,15 +625,51 @@ impl super::TerminalView {
                 to_resolve.push(path);
             }
         }
+        self.resolve_remote_paths(session_id, to_resolve, ctx, move |me, ctx| {
+            let still_hovering = me
+                .last_hover_fragment_boundary
+                .as_ref()
+                .is_some_and(|boundary| boundary.contains(&find_link_arg.position));
+            if still_hovering {
+                me.scan_for_file_path(find_link_arg.position, find_link_arg.from_editor, ctx);
+            }
+        });
+    }
+
+    /// Zap:对 `to_resolve` 中的远端绝对路径发起 daemon `ResolvePath`,结果写入
+    /// `remote_resolved_paths`,全部到达后调用 `on_resolved`。
+    ///
+    /// 返回 `false` 表示没有发起查询(列表为空或会话没有 daemon 客户端),
+    /// 此时 `on_resolved` 不会被调用。
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    pub(super) fn resolve_remote_paths(
+        &mut self,
+        session_id: crate::terminal::model::session::SessionId,
+        to_resolve: Vec<PathBuf>,
+        ctx: &mut ViewContext<Self>,
+        on_resolved: impl FnOnce(&mut Self, &mut ViewContext<Self>) + 'static,
+    ) -> bool {
+        use warpui::SingletonEntity as _;
+
+        use super::RemoteResolvedPath;
+        use crate::remote_server::manager::RemoteServerManager;
+
+        // 缓存上限,超出后按插入顺序 FIFO 淘汰。
+        const MAX_ENTRIES: usize = 512;
+
         if to_resolve.is_empty() {
-            return;
+            return false;
         }
         let Some(client) = RemoteServerManager::handle(ctx)
             .as_ref(ctx)
             .client_for_session(session_id)
             .cloned()
         else {
-            return;
+            return false;
         };
 
         while self.remote_resolved_paths.len() + to_resolve.len() > MAX_ENTRIES {
@@ -676,15 +707,10 @@ impl super::TerminalView {
                     me.remote_resolved_paths
                         .insert((session_id, path), RemoteResolvedPath::new(is_dir));
                 }
-                let still_hovering = me
-                    .last_hover_fragment_boundary
-                    .as_ref()
-                    .is_some_and(|boundary| boundary.contains(&find_link_arg.position));
-                if still_hovering {
-                    me.scan_for_file_path(find_link_arg.position, find_link_arg.from_editor, ctx);
-                }
+                on_resolved(me, ctx);
             },
         );
+        true
     }
 
     /// Scans the terminal model at the given position to see if it is

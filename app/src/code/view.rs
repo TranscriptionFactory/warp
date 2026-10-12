@@ -93,11 +93,16 @@ use crate::{
     settings::FontSettings,
     util::file::external_editor::EditorSettings,
 };
+#[cfg(feature = "local_fs")]
+use warpui::r#async::Timer;
 
 type SaveCallback =
     Box<dyn FnOnce(SaveOutcome, &mut CodeView, &mut ViewContext<CodeView>) + Send + Sync + 'static>;
 
 const CLOSE_BUTTON_WIDTH: f32 = 24.;
+/// 远端 Markdown 渲染预览在 buffer 变化后的刷新防抖间隔。
+#[cfg(feature = "local_fs")]
+const REMOTE_MARKDOWN_REFRESH_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(300);
 const LANGUAGE_ICON_WIDTH: f32 = 16.;
 const TAB_INTERNAL_MARGIN: f32 = 4.;
 const TAB_HORIZONTAL_MARGIN: f32 = 8.;
@@ -233,6 +238,9 @@ pub struct TabData {
     /// 仅在 `local_fs` 下读取(分段控件本身也只在该特性下存在)。
     #[cfg(feature = "local_fs")]
     markdown_default_applied: bool,
+    /// 渲染预览刷新防抖的代号:每次 buffer 变化 +1,定时器到期时只有代号未变才刷新。
+    #[cfg(feature = "local_fs")]
+    markdown_refresh_generation: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -411,11 +419,11 @@ impl CodeView {
     /// (`InteractionState::Selectable`)的 [`RichTextEditorView`],存到当前 tab。
     /// `rendered = false`:清除该视图,回到源码编辑器。
     ///
-    /// 注意:这是**快照**式渲染 —— buffer 后续经 sync 更新时预览不会自动刷新,
-    /// 用户切回 Raw 再切回 Rendered 即可重新渲染。远端初始内容到达
-    /// (`FileLoaded`)时会对已处于 Rendered 的 tab 重新快照一次,否则打开时
-    /// 拍到的是空 buffer。本地文件不走这里
-    /// (走 `RenderMarkdown` → `ReplaceWithFilePane`)。
+    /// 远端初始内容到达(`FileLoaded`)时会对已处于 Rendered 的 tab 重建一次,
+    /// 否则打开时拍到的是空 buffer。之后的 buffer 变化(daemon 的
+    /// `BufferUpdatedPush`、共享同一 buffer 的其他 tab 中的编辑)经
+    /// [`Self::schedule_remote_markdown_refresh`] 防抖后增量刷新预览。
+    /// 本地文件不走这里(走 `RenderMarkdown` → `ReplaceWithFilePane`)。
     #[cfg(feature = "local_fs")]
     fn set_remote_markdown_rendered(
         &mut self,
@@ -490,6 +498,58 @@ impl CodeView {
                 editor.reset_with_markdown(&content, ctx);
             });
         });
+    }
+
+    /// buffer 内容变化时,为处于 Rendered 状态的远端 Markdown tab 安排一次防抖刷新。
+    ///
+    /// 刷新复用现有预览视图,用 `update_to_new_markdown` 只改动变化的部分,因此滚动
+    /// 位置得以保留。视图已处于 Selectable,不会再切换交互状态,所以
+    /// [`Self::set_remote_markdown_rendered`] 中描述的重复渲染问题不会出现;
+    /// 防抖间隔也远长于该函数推迟的首次内容写入。
+    #[cfg(feature = "local_fs")]
+    fn schedule_remote_markdown_refresh(
+        &mut self,
+        editor: &ViewHandle<CodeEditorView>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(tab) = self
+            .tab_group
+            .iter_mut()
+            .find(|tab| tab.editor_view.as_ref(ctx).editor() == editor)
+        else {
+            return;
+        };
+        if tab.rendered_markdown_view.is_none() {
+            return;
+        }
+        tab.markdown_refresh_generation += 1;
+        let generation = tab.markdown_refresh_generation;
+        let editor_view = tab.editor_view.clone();
+        ctx.spawn(
+            Timer::after(REMOTE_MARKDOWN_REFRESH_DEBOUNCE),
+            move |me, _, ctx| {
+                let Some(tab) = me.tab_group.iter().find(|tab| {
+                    tab.editor_view == editor_view && tab.markdown_refresh_generation == generation
+                }) else {
+                    return;
+                };
+                let Some(rendered_view) = tab.rendered_markdown_view.clone() else {
+                    return;
+                };
+                let content = editor_view
+                    .as_ref(ctx)
+                    .editor()
+                    .as_ref(ctx)
+                    .text(ctx)
+                    .as_str()
+                    .to_string();
+                rendered_view.update(ctx, |rendered, ctx| {
+                    rendered.model().update(ctx, |model, ctx| {
+                        model.update_to_new_markdown(&content, ctx);
+                    });
+                });
+            },
+        );
     }
 
     /// Restore a code view from a persisted multi-tab snapshot.
@@ -700,13 +760,15 @@ impl CodeView {
 
         let editor = code_editor.as_ref(ctx).editor().clone();
 
-        ctx.subscribe_to_view(&editor, |me, _, event, ctx| match event {
+        ctx.subscribe_to_view(&editor, |me, emitter, event, ctx| match event {
             CodeEditorEvent::Focused => {
                 me.promote_if_preview(ctx);
                 ctx.emit(CodeViewEvent::Pane(PaneEvent::FocusSelf));
             }
             CodeEditorEvent::ContentChanged { .. } => {
                 me.set_title_after_content_update(ctx);
+                #[cfg(feature = "local_fs")]
+                me.schedule_remote_markdown_refresh(&emitter, ctx);
             }
             _ => {}
         });
@@ -854,6 +916,8 @@ impl CodeView {
             rendered_markdown_view: None,
             #[cfg(feature = "local_fs")]
             markdown_default_applied: false,
+            #[cfg(feature = "local_fs")]
+            markdown_refresh_generation: 0,
         }
     }
 

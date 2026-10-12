@@ -66,6 +66,23 @@ impl TerminalView {
                 return;
             };
             if !session.is_local() {
+                #[cfg(all(
+                    feature = "local_tty",
+                    feature = "local_fs",
+                    not(target_family = "wasm")
+                ))]
+                if self.session_is_remote(Some(session.id()), ctx) {
+                    let command = block_completed.command.clone();
+                    let working_directory = active_block_metadata
+                        .current_working_directory()
+                        .map(PathBuf::from);
+                    self.maybe_suggest_open_remote_in_warp(
+                        command,
+                        working_directory,
+                        session,
+                        ctx,
+                    );
+                }
                 return;
             }
 
@@ -97,6 +114,88 @@ impl TerminalView {
                 },
             );
         }
+    }
+
+    /// Remote-server sessions: resolve the command's file arguments on the host via
+    /// `ResolvePath` (sharing the link-detection cache) instead of the local filesystem.
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn maybe_suggest_open_remote_in_warp(
+        &mut self,
+        command: String,
+        working_directory: Option<PathBuf>,
+        session: Arc<Session>,
+        ctx: &mut ViewContext<TerminalView>,
+    ) {
+        // Matches the link-detection per-scan cap.
+        const MAX_REMOTE_RESOLVES: usize = 8;
+
+        let command_case_sensitivity = session.command_case_sensitivity();
+        let escape_char = session.shell_family().escape_char();
+        ctx.spawn(
+            async move {
+                openable_candidates(
+                    command,
+                    working_directory.as_deref(),
+                    command_case_sensitivity,
+                    escape_char,
+                )
+                .into_iter()
+                // Relative paths can't be resolved on the host without a cwd.
+                .filter(|candidate| candidate.path.is_absolute())
+                .take(MAX_REMOTE_RESOLVES)
+                .collect_vec()
+            },
+            move |view, candidates, ctx| {
+                let session_id = session.id();
+                let to_resolve = candidates
+                    .iter()
+                    .filter(|candidate| {
+                        !view.remote_path_is_known_file(session_id, &candidate.path)
+                    })
+                    .map(|candidate| candidate.path.clone())
+                    .collect_vec();
+                let suggest =
+                    move |view: &mut TerminalView, ctx: &mut ViewContext<TerminalView>| {
+                        let first_existing = candidates.into_iter().find(|candidate| {
+                            view.remote_path_is_known_file(session_id, &candidate.path)
+                        });
+                        if let Some(openable_path) = first_existing
+                            && matches!(
+                                openable_path.file_type,
+                                OpenableFileType::Markdown | OpenableFileType::Code
+                            )
+                        {
+                            view.suggest_open_in_warp(openable_path, session, ctx);
+                        }
+                    };
+                // Resolve unknown paths first, unless every candidate is already cached.
+                if to_resolve.is_empty() {
+                    suggest(view, ctx);
+                } else {
+                    view.resolve_remote_paths(session_id, to_resolve, ctx, suggest);
+                }
+            },
+        );
+    }
+
+    /// Whether the link-detection `ResolvePath` cache knows `path` to be an existing file.
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn remote_path_is_known_file(
+        &self,
+        session_id: crate::terminal::model::session::SessionId,
+        path: &Path,
+    ) -> bool {
+        self.remote_resolved_paths
+            .get(&(session_id, path.to_path_buf()))
+            .is_some_and(|entry| entry.is_dir == Some(false))
     }
 
     /// Whether or not the "Open in Zap" banner is open.
@@ -169,6 +268,23 @@ impl TerminalView {
         match action {
             OpenInWarpBannerAction::OpenFile => {
                 if let Some(banner_state) = self.inline_banners_state.open_in_warp_banner.take() {
+                    // Remote-server sessions open the file on the host.
+                    #[cfg(all(feature = "local_tty", feature = "local_fs"))]
+                    if let Some(host_id) =
+                        crate::remote_server::manager::RemoteServerManager::as_ref(ctx)
+                            .host_id_for_session(banner_state.session.id())
+                            .cloned()
+                    {
+                        self.open_remote_terminal_path(
+                            host_id,
+                            banner_state.target.path,
+                            None,
+                            ctx,
+                        );
+                        self.close_open_in_warp_banner(banner_state.id);
+                        ctx.notify();
+                        return;
+                    }
                     match banner_state.target.file_type {
                         OpenableFileType::Markdown => {
                             ctx.emit(Event::OpenFileInWarp {
@@ -273,8 +389,31 @@ async fn check_openable_in_warp(
     command_case_sensitivity: TopLevelCommandCaseSensitivity,
     escape_char: EscapeChar,
 ) -> Option<OpenablePath> {
-    // We can use PathBuf/Path here because, at the moment, only local sessions are supported.
     let working_directory = working_directory.map(PathBuf::from);
+    for candidate in openable_candidates(
+        command,
+        working_directory.as_deref(),
+        command_case_sensitivity,
+        escape_char,
+    ) {
+        if async_fs::metadata(&candidate.path).await.is_ok() {
+            // We've found a file that exists and can be opened in Zap.
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// The file arguments of the file-viewer commands in `command` that Zap can open, joined to
+/// `working_directory`, in command order. Existence is not checked. Remote sessions pass the
+/// block's remote cwd, so the joined paths are host paths.
+fn openable_candidates(
+    command: String,
+    working_directory: Option<&Path>,
+    command_case_sensitivity: TopLevelCommandCaseSensitivity,
+    escape_char: EscapeChar,
+) -> Vec<OpenablePath> {
+    let mut candidates = Vec::new();
     for command in all_parsed_commands(command, escape_char) {
         // We want to parse the command enough to distinguish file names from arguments, but no
         // more than necessary.
@@ -315,20 +454,16 @@ async fn check_openable_in_warp(
                     continue;
                 };
 
-                let resolved = working_directory.as_ref().map_or_else(
+                let resolved = working_directory.map_or_else(
                     || relative_path.to_path_buf(),
                     |cwd| cwd.join(relative_path),
                 );
-
-                if async_fs::metadata(&resolved).await.is_ok() {
-                    // We've found a file that exists and can be opened in Zap.
-                    return Some(OpenablePath {
-                        path: resolved,
-                        file_type,
-                    });
-                }
+                candidates.push(OpenablePath {
+                    path: resolved,
+                    file_type,
+                });
             }
         }
     }
-    None
+    candidates
 }
