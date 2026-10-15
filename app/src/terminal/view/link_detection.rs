@@ -166,6 +166,32 @@ impl RichContentLink {
     }
 }
 
+/// Where the session that owns a terminal file-path link runs. This decides how the link is
+/// validated and where it opens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum LinkSessionLocation {
+    /// Validate and open paths on the local filesystem.
+    Local,
+    /// Remote-server session with a connected daemon: validate and open paths on the host.
+    Remote(warp_core::HostId),
+    /// Remote session without a connected daemon (legacy SSH, or the daemon is not attached).
+    /// Its paths cannot be validated, so no file-path link is shown. Checking them against the
+    /// local filesystem would highlight paths that do not exist on the host, or open the local
+    /// file with the same path.
+    RemoteUnavailable,
+}
+
+impl LinkSessionLocation {
+    /// `session_is_local` is `None` when the session is unknown; that keeps the local behavior.
+    fn new(session_is_local: Option<bool>, remote_host_id: Option<warp_core::HostId>) -> Self {
+        match (remote_host_id, session_is_local) {
+            (Some(host_id), _) => Self::Remote(host_id),
+            (None, Some(false)) => Self::RemoteUnavailable,
+            (None, Some(true) | None) => Self::Local,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct RichContentLinkTooltipInfo {
     pub link: RichContentLink,
@@ -383,9 +409,10 @@ impl super::TerminalView {
         match link {
             #[cfg(feature = "local_fs")]
             GridHighlightedLink::File(link) => {
+                let session_id = self.link_session_id(link);
                 let link = link.get_inner();
                 if let Some(path) = link.absolute_path() {
-                    self.open_file_path(path.clone(), link.line_and_column_num, ctx);
+                    self.open_file_path(path.clone(), link.line_and_column_num, session_id, ctx);
                 }
             }
             GridHighlightedLink::Url(url) => {
@@ -416,10 +443,16 @@ impl super::TerminalView {
                         absolute_path.clone(),
                         target_override.clone(),
                         *line_and_column_num,
+                        self.active_block_session_id(),
                         ctx,
                     );
                 } else {
-                    self.open_file_path(absolute_path.clone(), *line_and_column_num, ctx);
+                    self.open_file_path(
+                        absolute_path.clone(),
+                        *line_and_column_num,
+                        self.active_block_session_id(),
+                        ctx,
+                    );
                 }
             }
             RichContentLink::Url(url) => {
@@ -442,6 +475,16 @@ impl super::TerminalView {
         session_id: Option<crate::terminal::model::session::SessionId>,
         ctx: &warpui::AppContext,
     ) -> bool {
+        self.session_remote_host_id(session_id, ctx).is_some()
+    }
+
+    /// Returns the `HostId` of the given session if it is a remote-server session with a
+    /// connected daemon.
+    pub(super) fn session_remote_host_id(
+        &self,
+        session_id: Option<crate::terminal::model::session::SessionId>,
+        ctx: &warpui::AppContext,
+    ) -> Option<warp_core::HostId> {
         #[cfg(all(feature = "local_tty", not(target_family = "wasm")))]
         {
             use warpui::SingletonEntity as _;
@@ -454,13 +497,43 @@ impl super::TerminalView {
                     return RemoteServerManager::handle(ctx)
                         .as_ref(ctx)
                         .host_id_for_session(session_id)
-                        .is_some();
+                        .cloned();
                 }
             }
         }
 
         let _ = (session_id, ctx);
-        false
+        None
+    }
+
+    /// The session that owns the block (or alt screen) the link location is in.
+    pub(super) fn link_session_id<T>(
+        &self,
+        location: &WithinModel<T>,
+    ) -> Option<crate::terminal::model::session::SessionId> {
+        match location {
+            WithinModel::AltScreen(_) => self.active_block_session_id(),
+            WithinModel::BlockList(inner) => self
+                .model
+                .lock()
+                .block_list()
+                .block_at(inner.block_index)
+                .and_then(|block| block.session_id()),
+        }
+    }
+
+    pub(super) fn link_session_location(
+        &self,
+        session_id: Option<crate::terminal::model::session::SessionId>,
+        ctx: &warpui::AppContext,
+    ) -> LinkSessionLocation {
+        let session_is_local = session_id
+            .and_then(|session_id| self.sessions.as_ref(ctx).get(session_id))
+            .map(|session| session.is_local());
+        LinkSessionLocation::new(
+            session_is_local,
+            self.session_remote_host_id(session_id, ctx),
+        )
     }
 
     /// Zap:取得远端会话某个 cwd 的目录列表。
@@ -726,32 +799,25 @@ impl super::TerminalView {
         // Zap:判断被悬停 block 所属会话是否是 remote-server 会话。
         // 远端会话的文件不在本地磁盘上,需要用 `LinkValidationContext::Remote`
         // 携带 daemon 拉取来的真实目录列表做精确校验。
-        let block_session_id = match position {
-            WithinModel::AltScreen(_) => self.active_block_session_id(),
-            WithinModel::BlockList(inner) => self
-                .model
-                .lock()
-                .block_list()
-                .block_at(inner.block_index)
-                .and_then(|block| block.session_id()),
-        };
-        let is_remote = self.session_is_remote(block_session_id, ctx);
+        let block_session_id = self.link_session_id(&position);
+        let location = self.link_session_location(block_session_id, ctx);
 
         // For AltScreen we scan for relative path with the current working directory.
         // For BlockList we scan for relative path with the pwd of the hovered block.
         //
         // Zap:远端会话的 block `pwd()` 是 shell-integration 上报的远端 cwd,
         // 拼接后即得到正确的远端绝对路径,因此远端 block 也参与扫描(不再跳过)。
-        let pwd_to_scan_for = match position {
-            WithinModel::AltScreen(_) => {
-                if is_remote {
-                    // 远端会话:`pwd()` 返回的是 shell-integration 上报的远端活动 cwd。
-                    self.pwd()
-                } else {
-                    self.pwd_if_local(ctx)
-                }
-            }
-            WithinModel::BlockList(inner) => self
+        // A remote session without a daemon has no way to validate its paths, so it
+        // gets no file-path links.
+        let pwd_to_scan_for = match (&location, position) {
+            (LinkSessionLocation::RemoteUnavailable, _) => None,
+            // 远端会话:`pwd()` 返回的是 shell-integration 上报的远端活动 cwd。
+            (LinkSessionLocation::Remote(_), WithinModel::AltScreen(_)) => self.pwd(),
+            (LinkSessionLocation::Local, WithinModel::AltScreen(_)) => self.pwd_if_local(ctx),
+            (
+                LinkSessionLocation::Local | LinkSessionLocation::Remote(_),
+                WithinModel::BlockList(inner),
+            ) => self
                 .model
                 .lock()
                 .block_list()
@@ -760,9 +826,9 @@ impl super::TerminalView {
         };
 
         // Zap:远端会话用缓存的远端文件信息精确校验;本地会话保持 `Local`。
-        let validation_ctx = match (&pwd_to_scan_for, block_session_id) {
+        let validation_ctx = match (&location, &pwd_to_scan_for, block_session_id) {
             #[cfg(all(feature = "local_tty", not(target_family = "wasm")))]
-            (Some(cwd), Some(session_id)) if is_remote => {
+            (LinkSessionLocation::Remote(_), Some(cwd), Some(session_id)) => {
                 LinkValidationContext::Remote(self.remote_link_validation(session_id, cwd, ctx))
             }
             _ => LinkValidationContext::Local,
@@ -980,3 +1046,7 @@ impl super::TerminalView {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "link_detection_tests.rs"]
+mod tests;

@@ -277,6 +277,7 @@ impl TerminalView {
                     {
                         self.open_remote_terminal_path(
                             host_id,
+                            Some(banner_state.session.id()),
                             banner_state.target.path,
                             None,
                             ctx,

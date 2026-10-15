@@ -16713,28 +16713,6 @@ impl TerminalView {
         }
     }
 
-    /// Zap:若当前活动 block 所属会话是 remote-server 会话,返回其 `HostId`。
-    ///
-    /// 用于在终端里 Ctrl/Cmd+点击文件路径时,判断应当走本地还是远端 buffer-sync
-    /// 打开流程。非 remote-server 会话返回 `None`(保持本地行为不变)。
-    #[cfg(all(feature = "local_tty", feature = "local_fs"))]
-    fn active_session_remote_host_id(&self, ctx: &AppContext) -> Option<warp_core::HostId> {
-        #[cfg(not(target_family = "wasm"))]
-        {
-            if !FeatureFlag::SshRemoteServer.is_enabled() {
-                return None;
-            }
-            let session_id = self.active_block_session_id()?;
-            let mgr = RemoteServerManager::handle(ctx);
-            mgr.as_ref(ctx).host_id_for_session(session_id).cloned()
-        }
-        #[cfg(target_family = "wasm")]
-        {
-            let _ = ctx;
-            None
-        }
-    }
-
     /// Zap:把终端文件链接里已解析出的绝对路径当作远端路径,构造 `RemotePath`。
     /// 远端 SSH 主机均为 Unix,路径字符串由 shell-integration 上报的远端 cwd 拼接而来。
     #[cfg(all(feature = "local_tty", feature = "local_fs"))]
@@ -16791,12 +16769,13 @@ impl TerminalView {
     fn open_remote_terminal_path(
         &mut self,
         host_id: warp_core::HostId,
+        session_id: Option<SessionId>,
         path: PathBuf,
         line_col: Option<LineAndColumnArg>,
         ctx: &mut ViewContext<Self>,
     ) {
         #[cfg(not(target_family = "wasm"))]
-        if let Some(session_id) = self.active_block_session_id() {
+        if let Some(session_id) = session_id {
             if self.remote_clicked_path_is_dir(session_id, &path) {
                 self.cd_into_remote_directory(&path, ctx);
                 return;
@@ -16900,18 +16879,20 @@ impl TerminalView {
     }
 
     #[cfg(feature = "local_fs")]
+    #[cfg_attr(not(feature = "local_tty"), allow(unused_variables))]
     fn open_file_path(
         &mut self,
         path: PathBuf,
         line_and_column_num: Option<LineAndColumnArg>,
+        session_id: Option<SessionId>,
         ctx: &mut ViewContext<Self>,
     ) {
         ctx.notify();
 
         // Zap:远端 SSH 会话走远端打开流程。
         #[cfg(all(feature = "local_tty", feature = "local_fs"))]
-        if let Some(host_id) = self.active_session_remote_host_id(ctx) {
-            self.open_remote_terminal_path(host_id, path, line_and_column_num, ctx);
+        if let Some(host_id) = self.session_remote_host_id(session_id, ctx) {
+            self.open_remote_terminal_path(host_id, session_id, path, line_and_column_num, ctx);
             return;
         }
 
@@ -16926,19 +16907,21 @@ impl TerminalView {
     }
 
     #[cfg(feature = "local_fs")]
+    #[cfg_attr(not(feature = "local_tty"), allow(unused_variables))]
     fn open_file_path_with_target(
         &mut self,
         path: PathBuf,
         target: FileTarget,
         line_and_column_num: Option<LineAndColumnArg>,
+        session_id: Option<SessionId>,
         ctx: &mut ViewContext<Self>,
     ) {
         ctx.notify();
 
         // Zap:远端 SSH 会话走远端打开流程,忽略 `target`(外部编辑器无法访问远端文件)。
         #[cfg(all(feature = "local_tty", feature = "local_fs"))]
-        if let Some(host_id) = self.active_session_remote_host_id(ctx) {
-            self.open_remote_terminal_path(host_id, path, line_and_column_num, ctx);
+        if let Some(host_id) = self.session_remote_host_id(session_id, ctx) {
+            self.open_remote_terminal_path(host_id, session_id, path, line_and_column_num, ctx);
             return;
         }
 
@@ -16969,9 +16952,10 @@ impl TerminalView {
         match link {
             #[cfg(feature = "local_fs")]
             GridHighlightedLink::File(link) if link.contains(position) => {
+                let session_id = self.link_session_id(link);
                 let link = link.get_inner();
                 if let Some(path) = link.absolute_path() {
-                    self.open_file_path(path, link.line_and_column_num, ctx);
+                    self.open_file_path(path, link.line_and_column_num, session_id, ctx);
                 }
             }
             GridHighlightedLink::Url(url) if url.contains(position) => {
@@ -18902,10 +18886,16 @@ impl TerminalView {
                         absolute_path.to_path_buf(),
                         target_override.clone(),
                         *line_and_column_num,
+                        self.active_block_session_id(),
                         ctx,
                     );
                 } else {
-                    self.open_file_path(absolute_path.to_path_buf(), *line_and_column_num, ctx);
+                    self.open_file_path(
+                        absolute_path.to_path_buf(),
+                        *line_and_column_num,
+                        self.active_block_session_id(),
+                        ctx,
+                    );
                 }
             }
             AIBlockEvent::ShowLinkTooltip(tooltip_info) => {
