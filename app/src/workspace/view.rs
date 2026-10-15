@@ -8367,8 +8367,13 @@ impl Workspace {
         if let MenuEvent::Close { via_select_item: _ } = event {
             self.show_tab_right_click_menu = None;
             // Closing the menu leaves focus on the now-hidden menu view, so the
-            // keyboard goes nowhere until the user clicks. Hand it back to the tab.
-            self.focus_active_tab(ctx);
+            // keyboard goes nowhere until the user clicks. Hand it back to the tab,
+            // unless the menu just started an inline rename that now owns focus.
+            if !self.current_workspace_state.is_tab_being_renamed()
+                && !self.current_workspace_state.is_any_pane_being_renamed()
+            {
+                self.focus_active_tab(ctx);
+            }
             ctx.notify();
         }
     }
