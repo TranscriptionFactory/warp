@@ -1069,6 +1069,10 @@ pub enum InputAction {
     CtrlR,
     CtrlD,
     Up,
+    /// Deferred so Up does not update InlineHistoryMenuView while it is already checked out.
+    SelectPreviousInlineHistoryItem,
+    /// Deferred so Down does not update InlineHistoryMenuView while it is already checked out.
+    SelectNextInlineHistoryItem,
     PageUp,
     PageDown,
     ClearScreen,
@@ -7394,6 +7398,32 @@ impl Input {
         ctx.notify();
     }
 
+    fn select_previous_inline_history_item(&mut self, ctx: &mut ViewContext<Self>) {
+        if !self
+            .suggestions_mode_model
+            .as_ref(ctx)
+            .is_inline_history_menu()
+        {
+            return;
+        }
+
+        self.inline_history_menu_view
+            .update(ctx, |view, ctx| view.select_up(ctx));
+    }
+
+    fn select_next_inline_history_item(&mut self, ctx: &mut ViewContext<Self>) {
+        if !self
+            .suggestions_mode_model
+            .as_ref(ctx)
+            .is_inline_history_menu()
+        {
+            return;
+        }
+
+        self.inline_history_menu_view
+            .update(ctx, |view, ctx| view.select_down(ctx));
+    }
+
     fn editor_up(&mut self, ctx: &mut ViewContext<Self>) {
         // History and input suggestions are not available for
         // read-only viewers in a shared session
@@ -7468,9 +7498,7 @@ impl Input {
                 true
             }
             InputSuggestionsMode::InlineHistoryMenu { .. } => {
-                self.inline_history_menu_view.update(ctx, |view, ctx| {
-                    view.select_up(ctx);
-                });
+                ctx.dispatch_typed_action_deferred(InputAction::SelectPreviousInlineHistoryItem);
                 true
             }
             InputSuggestionsMode::IndexedReposMenu => {
@@ -7843,9 +7871,7 @@ impl Input {
             .as_ref(ctx)
             .is_inline_history_menu()
         {
-            self.inline_history_menu_view.update(ctx, |view, ctx| {
-                view.select_down(ctx);
-            });
+            ctx.dispatch_typed_action_deferred(InputAction::SelectNextInlineHistoryItem);
             return;
         }
 
@@ -13591,6 +13617,10 @@ impl TypedActionView for Input {
         match action {
             InputAction::FocusInputBox => self.focus_input_box(ctx),
             InputAction::Up => self.editor_up(ctx),
+            InputAction::SelectPreviousInlineHistoryItem => {
+                self.select_previous_inline_history_item(ctx)
+            }
+            InputAction::SelectNextInlineHistoryItem => self.select_next_inline_history_item(ctx),
             InputAction::PageUp => self.editor_page_up(ctx),
             InputAction::PageDown => self.editor_page_down(ctx),
             InputAction::CtrlD => self.ctrl_d(ctx),
