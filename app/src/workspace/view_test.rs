@@ -2499,3 +2499,33 @@ fn test_closing_tab_context_menu_restores_active_tab_focus() {
         });
     });
 }
+
+#[test]
+fn test_closing_tab_context_menu_preserves_rename_editor_focus() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let workspace = mock_workspace(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.show_tab_right_click_menu =
+                Some((0, TabContextMenuAnchor::Pointer(Vector2F::zero())));
+            ctx.focus(&workspace.tab_right_click_menu);
+            // Selecting "Rename tab" opens the rename editor before the menu closes.
+            workspace.rename_tab(0, ctx);
+            workspace.handle_tab_right_click_menu_event(
+                &MenuEvent::Close {
+                    via_select_item: true,
+                },
+                ctx,
+            );
+        });
+
+        workspace.read(&app, |workspace, ctx| {
+            assert_eq!(
+                workspace.current_workspace_state.tab_being_renamed(),
+                Some(0)
+            );
+            assert!(workspace.tab_rename_editor.is_focused(ctx));
+        });
+    });
+}

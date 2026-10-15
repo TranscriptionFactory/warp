@@ -2390,13 +2390,12 @@ impl Workspace {
         });
     }
 
-    /// Pushes the current settings-file error + banner-dismissal state into
-    /// the settings pane so its nav-rail footer ("Open settings file" button
-    /// or inline error alert) stays in sync with the workspace banner.
+    /// Mirrors the current settings-file error and banner-dismissal state into the settings pane's
+    /// nav-rail footer when the pane is available.
     fn sync_settings_error_state_into_settings_pane(&mut self, ctx: &mut ViewContext<Self>) {
         let error = self.settings_file_error.clone();
         let dismissed = self.settings_error_banner_dismissed;
-        self.settings_pane.update(ctx, |view, ctx| {
+        let _ = self.settings_pane.try_update(ctx, |view, ctx| {
             view.set_settings_error_state(error, dismissed, ctx);
         });
     }
@@ -8368,8 +8367,13 @@ impl Workspace {
         if let MenuEvent::Close { via_select_item: _ } = event {
             self.show_tab_right_click_menu = None;
             // Closing the menu leaves focus on the now-hidden menu view, so the
-            // keyboard goes nowhere until the user clicks. Hand it back to the tab.
-            self.focus_active_tab(ctx);
+            // keyboard goes nowhere until the user clicks. Hand it back to the tab,
+            // unless the menu just started an inline rename that now owns focus.
+            if !self.current_workspace_state.is_tab_being_renamed()
+                && !self.current_workspace_state.is_any_pane_being_renamed()
+            {
+                self.focus_active_tab(ctx);
+            }
             ctx.notify();
         }
     }
