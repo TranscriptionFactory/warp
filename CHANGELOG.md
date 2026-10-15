@@ -3,6 +3,12 @@
 本文档记录 OpenWarp 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
 
 ## [Unreleased]
+## [v2026.10.14.1] — 2026-10-14
+
+- **外部链接 / 文档**:此前点击「了解更多」等文档链接会弹出 -50 错误(上游把约 75 处 docs.warp.dev 链接清空为空串)。现已恢复原链接;空链接或无效链接会被记录日志并忽略,不再弹错。移除了指向 Warp 官方 Slack 与隐私政策的菜单项。
+- **检查更新**:标签栏菜单与资源中心中的「检查更新」项现在可见,macOS 应用菜单新增「Check for Updates...」,均从 TranscriptionFactory/warp 的 GitHub Release 检查新版本。
+- **终端 / SSH 文件链接**:文件链接的校验与打开目标改为由链接所在 block 的会话决定,而不是当前活动会话;没有 remote-server daemon 的远端会话(warpify 后的普通 SSH)不再用本地磁盘校验远端路径,因此不再出现误点亮或打开本地同名文件的情况(URL 链接不受影响)。
+- **引用整理**:问题反馈、下载、Logo 链接及内置 `/feedback` skill 统一指向 TranscriptionFactory/warp。
 ## [v2026.10.12.1] — 2026-10-12
 
 - **命令面板 / 远端文件搜索**:在已连接 remote-server 的 SSH 会话里,命令面板的文件搜索此前没有任何结果。现在会搜索远端仓库(或远端当前目录)的文件,选中后在远端编辑器中打开。
