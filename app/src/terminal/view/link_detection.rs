@@ -411,9 +411,10 @@ impl super::TerminalView {
         match link {
             #[cfg(feature = "local_fs")]
             GridHighlightedLink::File(link) => {
+                let session_id = self.link_session_id(link);
                 let link = link.get_inner();
                 if let Some(path) = link.absolute_path() {
-                    self.open_file_path(path.clone(), link.line_and_column_num, ctx);
+                    self.open_file_path(path.clone(), link.line_and_column_num, session_id, ctx);
                 }
             }
             GridHighlightedLink::Url(url) => {
@@ -444,10 +445,16 @@ impl super::TerminalView {
                         absolute_path.clone(),
                         target_override.clone(),
                         *line_and_column_num,
+                        self.active_block_session_id(),
                         ctx,
                     );
                 } else {
-                    self.open_file_path(absolute_path.clone(), *line_and_column_num, ctx);
+                    self.open_file_path(
+                        absolute_path.clone(),
+                        *line_and_column_num,
+                        self.active_block_session_id(),
+                        ctx,
+                    );
                 }
             }
             RichContentLink::Url(url) => {
