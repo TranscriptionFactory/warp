@@ -1412,12 +1412,6 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
     // 去中心化分支:"Invite People..." 命令对应 ShowReferralSettingsPage,已删除。
     app.register_editable_bindings([
         EditableBinding::new(
-            "workspace:link_to_slack",
-            crate::t!("keybinding-desc-workspace-link-to-slack"),
-            WorkspaceAction::JoinSlack,
-        )
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
             "workspace:link_to_user_docs",
             crate::t!("keybinding-desc-workspace-link-to-user-docs"),
             WorkspaceAction::ViewUserDocs,
@@ -1438,12 +1432,6 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
             "workspace:view_logs",
             crate::t!("keybinding-desc-workspace-view-logs"),
             WorkspaceAction::ViewLogs,
-        )
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:link_to_privacy_policy",
-            crate::t!("keybinding-desc-workspace-link-to-privacy-policy"),
-            WorkspaceAction::ViewPrivacyPolicy,
         )
         .with_context_predicate(id!("Workspace")),
     ]);

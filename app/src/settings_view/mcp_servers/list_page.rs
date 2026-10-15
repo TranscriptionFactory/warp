@@ -1074,7 +1074,7 @@ impl MCPServersListPageView {
             )),
             FormattedTextFragment::hyperlink(
                 crate::t!("settings-mcp-list-file-based-supported-providers"),
-                "",
+                "https://docs.warp.dev/agent-platform/capabilities/mcp#file-based-mcp-servers",
             ),
         ];
 
@@ -1115,7 +1115,7 @@ impl MCPServersListPageView {
             )),
             FormattedTextFragment::hyperlink(
                 crate::t!("settings-mcp-list-learn-more"),
-                "",
+                "https://docs.warp.dev/agent-platform/capabilities/mcp",
             ),
         ];
 

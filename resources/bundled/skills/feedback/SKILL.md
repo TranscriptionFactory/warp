@@ -1,16 +1,16 @@
 ---
 name: feedback
-description: Turn rough feedback about the Warp app into a filed GitHub issue or duplicate-issue response for `warpdotdev/warp`. Use when the user shares a Warp bug report, regression, confusing UX note, feature gap, or short complaint and wants it clarified into reproduction steps, expected vs actual behavior, concrete impact, and grounded source references from local Warp repos when available.
+description: Turn rough feedback about the Warp app into a filed GitHub issue or duplicate-issue response for `TranscriptionFactory/warp`. Use when the user shares a Warp bug report, regression, confusing UX note, feature gap, or short complaint and wants it clarified into reproduction steps, expected vs actual behavior, concrete impact, and grounded source references from local Warp repos when available.
 ---
 
 # Feedback
 
-Turn rough Warp app feedback into a crisp filed issue or duplicate-issue response for `warpdotdev/warp`.
+Turn rough Warp app feedback into a crisp filed issue or duplicate-issue response for `TranscriptionFactory/warp`.
 
-Treat Warp client, Warp app, Warp terminal, and Warp UX feedback as `warpdotdev/warp` unless the user clearly asks for a different destination.
+Treat Warp client, Warp app, Warp terminal, and Warp UX feedback as `TranscriptionFactory/warp` unless the user clearly asks for a different destination.
 
 ## Overview
-- Use the `gh` CLI to search for and fetch code from `warpdotdev/warp` when product or implementation context would improve the report.
+- Use the `gh` CLI to search for and fetch code from `TranscriptionFactory/warp` when product or implementation context would improve the report.
 - If those repos are not available, draft the issue from the user's report alone rather than blocking on more context.
 - This skill is strictly for issue filing and duplicate detection. Never modify code, generate patches, propose implementation diffs, or open a pull request as part of this workflow.
 - If you cannot file an issue, say so explicitly in the response instead of attempting another side effect.
@@ -23,7 +23,7 @@ This skill runs in environments where Warp source code may be present in the cur
 - **Never write, edit, or delete any source file.** Do not use Edit, Write, or any tool that modifies files on disk, even if asked to do so as part of filing feedback or "while you're in the code."
 - **Never create or modify any git artifact.** Do not stage files, create commits, create branches, produce patches, or modify any git state.
 - **Local source code is read-only context at most.** You may read local Warp source files (e.g., with Read or grep) only to find concrete file paths, symbol names, or setting names that would make a source reference more precise. Never read local files to produce a code fix or diff.
-- **Prefer `gh` CLI for code lookups.** Use `gh` to search and fetch code from `warpdotdev/warp` rather than reading the local checkout when both are available.
+- **Prefer `gh` CLI for code lookups.** Use `gh` to search and fetch code from `TranscriptionFactory/warp` rather than reading the local checkout when both are available.
 - **The presence of local source code is not an invitation to fix it.** Observing that you are inside a Warp source directory changes nothing about the permitted outputs of this skill: issue filed, duplicate found, or explicit refusal.
 
 Load the bundled reference files only when relevant:
@@ -67,8 +67,8 @@ Load the bundled reference files only when relevant:
 
 ### 4. Ground the report in product and code context when helpful
 
-- Search the `warpdotdev/warp` repo via the `gh` CLI for matching product language, expected workflows, setting names, or UX intent when that context would make the draft more actionable.
-- Search the `warpdotdev/warp` repo via the `gh` CLI for matching components, settings surfaces, feature flags, and likely code paths when implementation context would help triage.
+- Search the `TranscriptionFactory/warp` repo via the `gh` CLI for matching product language, expected workflows, setting names, or UX intent when that context would make the draft more actionable.
+- Search the `TranscriptionFactory/warp` repo via the `gh` CLI for matching components, settings surfaces, feature flags, and likely code paths when implementation context would help triage.
 - Add source references only when they point to real files, symbols, settings names, or spec text that plausibly relate to the feedback.
 - Never invent a root cause just to make the report sound complete.
 
@@ -98,14 +98,14 @@ Load the bundled reference files only when relevant:
 
 ### 7. Check for likely duplicates before filing
 
-- Before invoking `scripts/file_feedback_issue.py`, search issues in `warpdotdev/warp` for likely title matches using the drafted title as the primary query.
+- Before invoking `scripts/file_feedback_issue.py`, search issues in `TranscriptionFactory/warp` for likely title matches using the drafted title as the primary query.
 - Use a lightweight title-based check only. Prefer precision over recall, and do not run a broad semantic fishing expedition.
 - Start with the exact drafted title. If the exact title returns no clear title match, try one shorter normalized variant that removes filler words while preserving the same user-visible problem.
 - A suitable command is:
 
 ```bash
 GH_PAGER=cat gh issue list \
-  --repo warpdotdev/warp \
+  --repo TranscriptionFactory/warp \
   --state all \
   --limit 10 \
   --search "<title> in:title" \
@@ -163,11 +163,11 @@ Section rules:
 
 ## Output
 
-Use the bundled helper script `scripts/file_feedback_issue.py` to file the issue in `warpdotdev/warp` instead of calling `gh` directly. The script requires a `--use` flag that selects the filing method explicitly:
+Use the bundled helper script `scripts/file_feedback_issue.py` to file the issue in `TranscriptionFactory/warp` instead of calling `gh` directly. The script requires a `--use` flag that selects the filing method explicitly:
 
 - `--use gh`: creates the issue with `gh issue create`. Requires `gh` to be installed and authenticated for `github.com`. Prints a `created` result with `issue_url` on success, or `unavailable` when `gh` is missing or unauthenticated. Does not silently fall back to the browser.
 - `--use browser`: opens the prefilled new-issue page in the browser so the user can upload image attachments via GitHub's web UI. Prints a `browser_opened` result on success. If the browser cannot be opened, automatically falls back to `gh issue create` and prints a `created` result with `browser_unavailable: true`; if both are unavailable, prints `failed`. Use this whenever the user attached one or more images to the query.
-- The script always targets `warpdotdev/warp` on `github.com`.
+- The script always targets `TranscriptionFactory/warp` on `github.com`.
 
 Write the final body to a temporary UTF-8 file and pass the final title directly as an argument. When the user has no image attachments:
 

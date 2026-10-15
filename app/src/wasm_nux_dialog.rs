@@ -280,12 +280,12 @@ impl TypedActionView for WasmNUXDialog {
                 }
             }
             WasmNUXDialogAction::OpenDownloadDesktopAppLink => {
-                ctx.open_url("https://warp.dev/download");
+                ctx.open_url("https://github.com/TranscriptionFactory/warp/releases/latest");
                 self.requested_download = true;
                 ctx.notify();
             }
             WasmNUXDialogAction::LearnMore => {
-                ctx.open_url("https://www.warp.dev");
+                ctx.open_url("https://github.com/TranscriptionFactory/warp");
             }
         }
     }

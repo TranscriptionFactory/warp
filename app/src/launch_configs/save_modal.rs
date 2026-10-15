@@ -529,7 +529,7 @@ impl LaunchConfigSaveModal {
                     .link(
                         crate::t!("launch-config-link-to-documentation"),
                         Some(
-                            ""
+                            "https://docs.warp.dev/terminal/sessions/launch-configurations"
                                 .to_string(),
                         ),
                         None,

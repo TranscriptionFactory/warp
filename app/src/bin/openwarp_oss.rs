@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use warp_core::{
-    channel::{Channel, ChannelConfig, ChannelState},
+    channel::{AutoupdateConfig, Channel, ChannelConfig, ChannelState},
     features::DEBUG_FLAGS,
     AppId,
 };
@@ -28,7 +28,12 @@ fn main() -> Result<()> {
         ChannelConfig {
             app_id: AppId::new("dev", "openwarp", "OpenWarp"),
             logfile_name: "openwarp.log".into(),
-            autoupdate_config: None,
+            // Releases come from GitHub (see autoupdate::github), so no base URL is needed;
+            // this only turns on the "Check for updates" menu entries.
+            autoupdate_config: Some(AutoupdateConfig {
+                releases_base_url: "".into(),
+                show_autoupdate_menu_items: true,
+            }),
             mcp_static_config: None,
         },
     );

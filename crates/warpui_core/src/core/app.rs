@@ -4672,6 +4672,10 @@ impl AppContext {
 
     /// Opens the given URL in the default application configured to handle the URL.
     pub fn open_url(&self, url: &str) {
+        if url.trim().is_empty() {
+            log::warn!("Ignoring request to open an empty URL");
+            return;
+        }
         let effective_url = (self.before_open_url_callback)(url, self);
         self.platform_delegate.open_url(&effective_url);
     }

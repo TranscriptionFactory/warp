@@ -205,10 +205,8 @@ pub enum WorkspaceAction {
         source: PaletteSource,
     },
     // 去中心化分支:`ShowUpgrade` / `ShowReferralSettingsPage` 已删除。
-    JoinSlack,
     ViewUserDocs,
     ViewLatestChangelog,
-    ViewPrivacyPolicy,
     SendFeedback,
     /// Open the log directory in the system file explorer with the current log file selected.
     #[cfg(not(target_family = "wasm"))]
@@ -729,10 +727,8 @@ impl WorkspaceAction {
             | ResetZoom
             | OpenPalette { .. }
             | TogglePalette { mode: _, source: _ }
-            | JoinSlack
             | ViewUserDocs
             | ViewLatestChangelog
-            | ViewPrivacyPolicy
             | SendFeedback
             | ChangeCursor(_)
             | ToggleBlockSnackbar

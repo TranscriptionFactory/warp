@@ -1026,6 +1026,10 @@ void open_save_file_picker(void *callback, NSString *defaultFilename, NSString *
 // Open a given url.
 void open_url(NSString *urlString) {
     NSURL *url = [NSURL URLWithString:urlString];
+    if (url == nil || url.scheme == nil) {
+        NSLog(@"Ignoring request to open invalid URL: %@", urlString);
+        return;
+    }
     [[NSWorkspace sharedWorkspace] openURL:url];
 }
 

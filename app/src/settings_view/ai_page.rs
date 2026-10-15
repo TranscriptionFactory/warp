@@ -5075,7 +5075,7 @@ impl AgentsWidget {
                 FormattedTextFragment::plain_text(" or "),
                 FormattedTextFragment::hyperlink(
                     "learn more about MCPs.",
-                    "",
+                    "https://docs.warp.dev/agent-platform/capabilities/mcp",
                 ),
             ];
 
@@ -5384,7 +5384,7 @@ impl AIInputWidget {
                         FormattedTextFragment::plain_text("Encountered an incorrect detection? "),
                         FormattedTextFragment::hyperlink(
                             "Let us know",
-                            "https://warpdotdev.typeform.com/to/offrTIpq",
+                            "https://github.com/TranscriptionFactory/warp/issues/new/choose",
                         ),
                     ]
                 });
@@ -5444,7 +5444,7 @@ impl AIInputWidget {
                     ),
                     FormattedTextFragment::hyperlink(
                         "Let us know",
-                        "https://warpdotdev.typeform.com/to/offrTIpq",
+                        "https://github.com/TranscriptionFactory/warp/issues/new/choose",
                     ),
                 ]
             });
@@ -5554,7 +5554,7 @@ impl SettingsWidget for MCPServersWidget {
             ),
             FormattedTextFragment::hyperlink(
                 crate::t!("common-learn-more"),
-                "",
+                "https://docs.warp.dev/agent-platform/capabilities/mcp",
             ),
         ];
 
@@ -5601,7 +5601,7 @@ impl SettingsWidget for MCPServersWidget {
                                 ),
                                 FormattedTextFragment::hyperlink(
                                     "See supported providers.",
-                                    "",
+                                    "https://docs.warp.dev/agent-platform/capabilities/mcp#file-based-mcp-servers",
                                 ),
                             ]
                         });
@@ -5685,7 +5685,10 @@ impl AIFactWidget {
                 "{} ",
                 crate::t!("settings-ai-rules-description")
             )),
-            FormattedTextFragment::hyperlink(crate::t!("settings-ai-learn-more"), ""),
+            FormattedTextFragment::hyperlink(
+                crate::t!("settings-ai-learn-more"),
+                "https://docs.warp.dev/agent-platform/capabilities/rules",
+            ),
         ];
         let description = Container::new(
             FormattedTextElement::new(

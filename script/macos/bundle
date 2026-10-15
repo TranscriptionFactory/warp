@@ -315,7 +315,7 @@ elif [[ $RELEASE_CHANNEL = "oss" ]]; then
     BUNDLE_ID="dev.openwarp.OpenWarp"
     WARP_APP_NAME="OpenWarp"
     WARP_SCHEME_NAME="openwarp"
-    # autoupdate 走 GitHub Release(zerx-lab/warp),仅下载 DMG 到 Downloads,不自动覆盖 .app。
+    # autoupdate 走 GitHub Release(TranscriptionFactory/warp),仅下载 DMG 到 Downloads,不自动覆盖 .app。
     FEATURES="release_bundle,extern_plist,autoupdate"
 fi
 

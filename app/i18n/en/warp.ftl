@@ -149,7 +149,6 @@ workspace-menu-keyboard-shortcuts = Keyboard shortcuts
 workspace-menu-documentation = Documentation
 workspace-menu-feedback = Feedback
 workspace-menu-view-warp-logs = View OpenWarp logs
-workspace-menu-slack = Slack
 workspace-toast-failed-load-conversation = Failed to load conversation.
 workspace-toast-failed-load-conversation-for-forking = Failed to load conversation for forking.
 workspace-toast-conversation-forking-failed = Conversation forking failed.
@@ -178,7 +177,7 @@ app-menu-save-new = Save New...
 app-menu-launch-configurations = Launch Configurations
 app-menu-warp = OpenWarp
 app-menu-preferences = Preferences
-app-menu-privacy-policy = Privacy Policy...
+app-menu-check-for-updates = Check for Updates...
 app-menu-debug = Debug
 app-menu-set-default-terminal = Set OpenWarp as Default Terminal
 app-menu-file = File
@@ -215,7 +214,6 @@ app-menu-send-feedback = Send Feedback...
 app-menu-help = Help
 app-menu-warp-documentation = OpenWarp Documentation...
 app-menu-github-issues = GitHub Issues...
-app-menu-warp-slack-community = OpenWarp Slack Community...
 workspace-update-and-relaunch-warp = Update and relaunch OpenWarp
 workspace-updating-to-version = Updating to ({ $version })
 workspace-update-warp-manually = Update OpenWarp manually
@@ -1844,12 +1842,10 @@ keybinding-desc-workspace-show-settings-mcp-servers = Open Settings: MCP Servers
 keybinding-desc-workspace-open-settings-file = Open settings file
 
 # Overflow menu / external links
-keybinding-desc-workspace-link-to-slack = Join our Slack community (opens external link)
 keybinding-desc-workspace-link-to-user-docs = View user docs (opens external link)
 keybinding-desc-workspace-send-feedback = Send feedback (opens external link)
 keybinding-desc-workspace-send-feedback-oz = Send feedback with Oz
 keybinding-desc-workspace-view-logs = View OpenWarp logs
-keybinding-desc-workspace-link-to-privacy-policy = View privacy policy (opens external link)
 
 # Input / terminal / project bindings (registered outside workspace/mod.rs)
 keybinding-desc-input-edit-prompt = Edit Prompt

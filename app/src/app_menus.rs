@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fs::File;
 
+use crate::autoupdate::AutoupdateState;
 use crate::default_terminal::DefaultTerminal;
 use crate::features::{runtime_flags_menu_items, FeatureFlag};
 use crate::report_if_error;
@@ -21,6 +22,7 @@ use csv::Writer;
 use enclose::enclose;
 use settings::manager::SettingsManager;
 use settings::Setting as _;
+use warp_core::channel::ChannelState;
 use warp_core::context_flag::ContextFlag;
 use warpui::actions::StandardAction;
 use warpui::keymap::{Keystroke, Trigger};
@@ -117,6 +119,19 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         ctx,
     )];
 
+    if FeatureFlag::Autoupdate.is_enabled() && ChannelState::show_autoupdate_menu_items() {
+        menu_items.push(MenuItem::Custom(CustomMenuItem::new(
+            &crate::t!("app-menu-check-for-updates"),
+            |ctx| {
+                AutoupdateState::handle(ctx).update(ctx, |autoupdate_state, ctx| {
+                    autoupdate_state.manually_check_for_update(ctx);
+                });
+            },
+            no_updates,
+            None,
+        )));
+    }
+
     if !FeatureFlag::AvatarInTabBar.is_enabled() {
         menu_items.push(updateable_custom_item_without_checkmark(
             CustomAction::ToggleResourceCenter,
@@ -157,10 +172,6 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
     }
 
     menu_items.push(MenuItem::Separator);
-    menu_items.push(link_menu_item(
-        crate::t!("app-menu-privacy-policy"),
-        links::PRIVACY_POLICY_URL.into(),
-    ));
 
     let debug_menu_items = debug_menu_items();
     if !debug_menu_items.is_empty() {
@@ -847,10 +858,6 @@ fn make_new_help_menu() -> Menu {
             link_menu_item(
                 crate::t!("app-menu-github-issues"),
                 links::GITHUB_ISSUES_URL.into(),
-            ),
-            link_menu_item(
-                crate::t!("app-menu-warp-slack-community"),
-                links::SLACK_URL.into(),
             ),
         ],
     )

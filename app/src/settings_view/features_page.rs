@@ -735,7 +735,7 @@ lazy_static! {
 const NOTIFICATION_CHECKBOX_MARGIN_RIGHT: f32 = 5.;
 const NOTIFICATION_EDITOR_MARGIN: f32 = 5.;
 
-const NOTIFICATIONS_DOCS_URL: &str = "";
+const NOTIFICATIONS_DOCS_URL: &str = "https://docs.warp.dev/terminal/more-features/notifications";
 
 /// WARNING: this constant was computed manually by determining the pixel width
 /// of the quake mode dropdowns based on the number of expanded items in the flex row.
@@ -4333,7 +4333,7 @@ impl SettingsWidget for SessionRestorationWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "".into(),
+                    "https://docs.warp.dev/terminal/sessions/session-restoration".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,
@@ -4365,7 +4365,7 @@ impl SettingsWidget for SessionRestorationWidget {
             let link = ui_builder
                 .link(
                     crate::t!("settings-features-see-docs"),
-                    Some("".to_owned()),
+                    Some("https://docs.warp.dev/terminal/sessions/session-restoration".to_owned()),
                     None,
                     self.docs_link.clone(),
                 )
@@ -4467,7 +4467,7 @@ impl SettingsWidget for SnackbarHeaderWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "".into(),
+                    "https://docs.warp.dev/terminal/blocks/sticky-command-header".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,
@@ -4924,7 +4924,7 @@ impl SettingsWidget for SSHWrapperWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "".into(),
+                    "https://docs.warp.dev/terminal/warpify/ssh-legacy#implementation".into(),
                 )),
                 secondary_text: if view.ssh_wrapper_toggled {
                     Some(crate::t!("settings-features-takes-effect-new-sessions"))
@@ -5448,7 +5448,7 @@ impl SettingsWidget for GlobalHotkeyWidget {
                             .link(
                                 crate::t!("settings-features-see-docs"),
                                 Some(
-                                    ""
+                                    "https://docs.warp.dev/terminal/windows/global-hotkey"
                                         .to_owned(),
                                 ),
                                 None,
@@ -6473,7 +6473,7 @@ impl SettingsWidget for MouseReportingWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    ""
+                    "https://docs.warp.dev/terminal/more-features/full-screen-apps#mouse-and-scroll-reporting"
                         .into(),
                 )),
                 secondary_text: None,
@@ -6738,7 +6738,7 @@ impl SettingsWidget for SmartSelectWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "".into(),
+                    "https://docs.warp.dev/terminal/more-features/text-selection".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,
@@ -6989,7 +6989,7 @@ impl SettingsWidget for WorkflowsInCommandSearch {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "".into(),
+                    "https://docs.warp.dev/terminal/entry/yaml-workflows".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,

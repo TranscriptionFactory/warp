@@ -5613,10 +5613,6 @@ impl Workspace {
         let _ = (event, ctx);
     }
 
-    fn join_slack(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.open_url(links::SLACK_URL);
-    }
-
     fn view_user_docs(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.open_url(links::USER_DOCS_URL);
     }
@@ -5634,10 +5630,6 @@ impl Workspace {
             ctx.notify();
         });
         self.check_for_changelog(ChangelogRequestType::UserAction, ctx);
-    }
-
-    fn view_privacy_policy(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.open_url(links::PRIVACY_POLICY_URL);
     }
 
     fn send_feedback(&mut self, ctx: &mut ViewContext<Self>) {
@@ -6220,7 +6212,7 @@ impl Workspace {
                 },
             ),
             NewSessionMenuItem::OpenLaunchConfigDocs => {
-                ctx.open_url("")
+                ctx.open_url("https://docs.warp.dev/terminal/sessions/launch-configurations")
             }
             #[cfg(feature = "local_fs")]
             NewSessionMenuItem::CreateNewTabConfig => {
@@ -7507,7 +7499,7 @@ impl Workspace {
                         let toast = DismissibleToast::success(message.to_string())
                             .with_link(
                                 ToastLink::new(crate::t!("common-learn-more")).with_href(
-                                    "".to_string(),
+                                    "https://docs.warp.dev/reference/cli".to_string(),
                                 ),
                             );
                         toast_stack.add_ephemeral_toast(toast, ctx);
@@ -8278,12 +8270,7 @@ impl Workspace {
                 .into_item(),
         );
 
-        items.extend([
-            MenuItemFields::new(crate::t!("workspace-menu-slack"))
-                .with_on_select_action(WorkspaceAction::JoinSlack)
-                .into_item(),
-            MenuItem::Separator,
-        ]);
+        items.push(MenuItem::Separator);
 
         // 去中心化分支:此处原本会追加账号 CTA / Upgrade / Billing / Invite / Log out
         // 等账号相关项,本地模式下全部移除。
@@ -10329,7 +10316,7 @@ impl Workspace {
 
     pub fn open_autoupdate_failure_link(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.open_url(
-            "",
+            "https://docs.warp.dev/support-and-community/troubleshooting-and-support/updating-warp",
         );
     }
 
@@ -16374,7 +16361,7 @@ impl Workspace {
                 .finish()
             })
             .on_click(|ctx, _, _| {
-                ctx.dispatch_typed_action(WorkspaceAction::OpenLink("https://warp.dev".to_owned()));
+                ctx.dispatch_typed_action(WorkspaceAction::OpenLink("https://github.com/TranscriptionFactory/warp".to_owned()));
             })
             .with_cursor(Cursor::PointingHand)
             .finish();
@@ -18841,7 +18828,7 @@ impl Workspace {
 
         if !is_app_installed {
             // App not installed - redirect to download page
-            ctx.open_url("https://warp.dev/download");
+            ctx.open_url("https://github.com/TranscriptionFactory/warp/releases/latest");
             // In webapp code we cannot distinguish between
             // the localhost:9277/install_detection endpoint not running (not installed) vs
             // the browser blocking Local Network Access which results in CORS error;
@@ -19221,10 +19208,8 @@ impl TypedActionView for Workspace {
                 source,
             } => self.toggle_palette(*palette_mode, *source, ctx),
             // 去中心化分支:`ShowUpgrade` / `ShowReferralSettingsPage` 已删除。
-            JoinSlack => self.join_slack(ctx),
             ViewUserDocs => self.view_user_docs(ctx),
             ViewLatestChangelog => self.view_latest_changelog(ctx),
-            ViewPrivacyPolicy => self.view_privacy_policy(ctx),
             SendFeedback => self.send_feedback(ctx),
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => self.view_logs(ctx),
@@ -19926,7 +19911,7 @@ impl TypedActionView for Workspace {
             #[cfg(all(enable_crash_recovery, target_os = "linux"))]
             DismissWaylandCrashRecoveryBannerAndOpenLink => {
                 self.dismiss_workspace_banner(ctx, &WorkspaceBanner::WaylandCrashRecovery);
-                ctx.open_url("");
+                ctx.open_url("https://docs.warp.dev/terminal/more-features/linux#native-wayland");
             }
             FixInAgentMode { query } => {
                 self.active_tab_pane_group().update(ctx, |pane_group, ctx| {

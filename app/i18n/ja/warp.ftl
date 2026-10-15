@@ -151,7 +151,6 @@ workspace-menu-keyboard-shortcuts = キーボードショートカット
 workspace-menu-documentation = ドキュメント
 workspace-menu-feedback = フィードバック
 workspace-menu-view-warp-logs = OpenWarp ログを表示
-workspace-menu-slack = Slack
 workspace-toast-failed-load-conversation = 会話の読み込みに失敗しました。
 workspace-toast-failed-load-conversation-for-forking = フォーク用の会話の読み込みに失敗しました。
 workspace-toast-conversation-forking-failed = 会話のフォークに失敗しました。
@@ -1762,12 +1761,10 @@ keybinding-desc-workspace-show-settings-mcp-servers = 設定を開く: MCP サ�
 keybinding-desc-workspace-open-settings-file = 設定ファイルを開く
 
 # Overflow menu / external links
-keybinding-desc-workspace-link-to-slack = Slack コミュニティに参加 (外部リンクを開く)
 keybinding-desc-workspace-link-to-user-docs = ユーザードキュメントを表示 (外部リンクを開く)
 keybinding-desc-workspace-send-feedback = フィードバックを送信 (外部リンクを開く)
 keybinding-desc-workspace-send-feedback-oz = Oz でフィードバックを送信
 keybinding-desc-workspace-view-logs = OpenWarp ログを表示
-keybinding-desc-workspace-link-to-privacy-policy = プライバシーポリシーを表示 (外部リンクを開く)
 
 # Input / terminal / project bindings (registered outside workspace/mod.rs)
 keybinding-desc-input-edit-prompt = プロンプトを編集

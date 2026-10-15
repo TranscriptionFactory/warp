@@ -2200,7 +2200,7 @@ impl TypedActionView for CLISubagentView {
                     .write(ClipboardContent::plain_text(debug_id.clone()));
             }
             CLISubagentAction::OpenFeedbackDocs => {
-                ctx.open_url("");
+                ctx.open_url("https://docs.warp.dev/support-and-billing/sending-us-feedback");
             }
             CLISubagentAction::ConversationScrollWheel { vertical_delta } => {
                 let did_change = cli_subagent_update_conversation_scroll_pin_after_wheel(

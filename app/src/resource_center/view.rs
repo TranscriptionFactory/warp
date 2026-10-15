@@ -36,13 +36,11 @@ use crate::{
 
 // Footer icons
 const DOCS_SVG_PATH: &str = "bundled/svg/gitbook-logo.svg";
-const SLACK_SVG_PATH: &str = "bundled/svg/slack-logo.svg";
 const FEEDBACK_SVG_PATH: &str = "bundled/svg/feedback.svg";
 
 #[derive(Debug, Clone, Copy)]
 pub enum ResourceCenterFooterItem {
     Docs,
-    Slack,
     Feedback,
 }
 
@@ -50,7 +48,6 @@ impl ResourceCenterFooterItem {
     pub fn ui_label(&self) -> &'static str {
         match self {
             ResourceCenterFooterItem::Docs => "Docs",
-            ResourceCenterFooterItem::Slack => "Slack",
             ResourceCenterFooterItem::Feedback => "Feedback",
         }
     }
@@ -58,7 +55,6 @@ impl ResourceCenterFooterItem {
     pub fn svg_path(&self) -> &'static str {
         match self {
             ResourceCenterFooterItem::Docs => DOCS_SVG_PATH,
-            ResourceCenterFooterItem::Slack => SLACK_SVG_PATH,
             ResourceCenterFooterItem::Feedback => FEEDBACK_SVG_PATH,
         }
     }
@@ -89,7 +85,6 @@ struct MouseStateHandles {
     close: MouseStateHandle,
     // Footer mouse state handles
     view_user_docs: MouseStateHandle,
-    join_slack: MouseStateHandle,
     share_feedback: MouseStateHandle,
 }
 
@@ -258,7 +253,6 @@ impl ResourceCenterView {
     ) {
         match item {
             ResourceCenterFooterItem::Docs => ctx.open_url(links::USER_DOCS_URL),
-            ResourceCenterFooterItem::Slack => ctx.open_url(links::SLACK_URL),
             // Route feedback through the workspace action so the guided agent experience is
             // launched when AI is available, and the GitHub issue form is opened otherwise.
             ResourceCenterFooterItem::Feedback => {
@@ -417,7 +411,6 @@ impl ResourceCenterView {
     ) -> Box<dyn Element> {
         let mouse_state = match item {
             ResourceCenterFooterItem::Docs => self.button_mouse_states.view_user_docs.clone(),
-            ResourceCenterFooterItem::Slack => self.button_mouse_states.join_slack.clone(),
             ResourceCenterFooterItem::Feedback => self.button_mouse_states.share_feedback.clone(),
         };
 
@@ -454,13 +447,11 @@ impl ResourceCenterView {
 
     fn render_footer(&self, appearance: &Appearance) -> Box<dyn Element> {
         let docs_button = self.render_footer_button(ResourceCenterFooterItem::Docs, appearance);
-        let slack_button = self.render_footer_button(ResourceCenterFooterItem::Slack, appearance);
         let feedback_button =
             self.render_footer_button(ResourceCenterFooterItem::Feedback, appearance);
 
         let footer = Flex::row()
             .with_child(docs_button)
-            .with_child(slack_button)
             .with_child(feedback_button)
             .with_main_axis_size(MainAxisSize::Max)
             .with_main_axis_alignment(MainAxisAlignment::SpaceEvenly)

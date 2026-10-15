@@ -144,7 +144,6 @@ workspace-menu-keyboard-shortcuts = 快捷键
 workspace-menu-documentation = 文档
 workspace-menu-feedback = 反馈
 workspace-menu-view-warp-logs = 查看 OpenWarp 日志
-workspace-menu-slack = Slack
 workspace-toast-failed-load-conversation = 加载对话失败。
 workspace-toast-failed-load-conversation-for-forking = 加载要 fork 的对话失败。
 workspace-toast-conversation-forking-failed = 对话 fork 失败。
@@ -173,7 +172,7 @@ app-menu-save-new = 另存为新配置...
 app-menu-launch-configurations = 启动配置
 app-menu-warp = OpenWarp
 app-menu-preferences = 偏好设置
-app-menu-privacy-policy = 隐私政策...
+app-menu-check-for-updates = 检查更新...
 app-menu-debug = 调试
 app-menu-set-default-terminal = 将 OpenWarp 设为默认终端
 app-menu-file = 文件
@@ -210,7 +209,6 @@ app-menu-send-feedback = 发送反馈...
 app-menu-help = 帮助
 app-menu-warp-documentation = OpenWarp 文档...
 app-menu-github-issues = GitHub Issues...
-app-menu-warp-slack-community = OpenWarp Slack 社区...
 workspace-update-and-relaunch-warp = 更新并重启 OpenWarp
 workspace-updating-to-version = 正在更新到（{ $version }）
 workspace-update-warp-manually = 手动更新 OpenWarp
@@ -1767,12 +1765,10 @@ keybinding-desc-workspace-show-settings-mcp-servers = 打开设置：MCP 服务�
 keybinding-desc-workspace-open-settings-file = 打开设置文件
 
 # 溢出菜单 / 外部链接
-keybinding-desc-workspace-link-to-slack = 加入我们的 Slack 社区（打开外部链接）
 keybinding-desc-workspace-link-to-user-docs = 查看用户文档（打开外部链接）
 keybinding-desc-workspace-send-feedback = 发送反馈（打开外部链接）
 keybinding-desc-workspace-send-feedback-oz = 用 Oz 发送反馈
 keybinding-desc-workspace-view-logs = 查看 OpenWarp 日志
-keybinding-desc-workspace-link-to-privacy-policy = 查看隐私政策（打开外部链接）
 
 # 输入 / 终端 / 项目相关 binding（注册在 workspace/mod.rs 之外）
 keybinding-desc-input-edit-prompt = 编辑 Prompt
