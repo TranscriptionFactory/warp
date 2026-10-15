@@ -168,7 +168,6 @@ impl RichContentLink {
 
 /// Where the session that owns a terminal file-path link runs. This decides how the link is
 /// validated and where it opens.
-#[cfg(feature = "local_fs")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum LinkSessionLocation {
     /// Validate and open paths on the local filesystem.
@@ -182,7 +181,6 @@ pub(super) enum LinkSessionLocation {
     RemoteUnavailable,
 }
 
-#[cfg(feature = "local_fs")]
 impl LinkSessionLocation {
     /// `session_is_local` is `None` when the session is unknown; that keeps the local behavior.
     fn new(session_is_local: Option<bool>, remote_host_id: Option<warp_core::HostId>) -> Self {
