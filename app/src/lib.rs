@@ -2668,6 +2668,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::LocalClaudeCodexChildHarnesses,
         #[cfg(feature = "wait_for_events_parent_registration")]
         FeatureFlag::WaitForEventsParentRegistration,
+        #[cfg(feature = "osc_hyperlinks")]
+        FeatureFlag::OscHyperlinks,
     ];
     flags.extend(extra_flags.iter().copied());
 

@@ -579,6 +579,7 @@ default = [
     "onekey_prompt",
     "directory_tab_colors",
     "configurable_context_window",
+    "osc_hyperlinks",
 ]
 # Enable this feature to automatically perform heap profiling.  NOTE: This will
 # substantially slow down program execution.
@@ -844,6 +845,7 @@ configurable_context_window = []
 orchestration_launch_modal = []
 local_claude_codex_child_harnesses = []
 wait_for_events_parent_registration = []
+osc_hyperlinks = []
 
 [package.metadata.bundle.bin.openwarp-oss]
 category = "public.app-category.developer-tools"
