@@ -248,6 +248,31 @@ fn parse_omp_tool_complete_notification() {
 }
 
 #[test]
+fn stop_failure_sets_error_status() {
+    let body = r#"{"event":"stop_failure","error_type":"aborted","response":"","v":1,"agent":"omp","session_id":"abc"}"#;
+    let event = parse_event(Some("warp://cli-agent"), body).unwrap();
+    assert_eq!(event.event, CLIAgentEventType::StopFailure);
+
+    let mut session = CLIAgentSession {
+        agent: CLIAgent::Omp,
+        status: CLIAgentSessionStatus::InProgress,
+        session_context: CLIAgentSessionContext::default(),
+        input_state: CLIAgentInputState::Closed,
+        should_auto_toggle_input: false,
+        listener: None,
+        remote_host: None,
+        plugin_version: None,
+        draft_text: None,
+        custom_command_prefix: None,
+    };
+
+    assert_eq!(
+        session.apply_event(&event),
+        Some(CLIAgentSessionStatus::Error)
+    );
+}
+
+#[test]
 fn apply_event_preserves_input_session() {
     let input_state = CLIAgentInputState::Open {
         entrypoint: CLIAgentInputEntrypoint::CtrlG,

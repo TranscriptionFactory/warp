@@ -18,6 +18,7 @@ pub enum CLIAgentEventType {
     PromptSubmit,
     ToolComplete,
     Stop,
+    StopFailure,
     PermissionRequest,
     PermissionReplied,
     QuestionAsked,

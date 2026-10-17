@@ -18,6 +18,7 @@ use event::{CLIAgentEvent, CLIAgentEventType};
 pub enum CLIAgentSessionStatus {
     InProgress,
     Success,
+    Error,
     Blocked { message: Option<String> },
 }
 
@@ -27,6 +28,7 @@ impl CLIAgentSessionStatus {
         match self {
             CLIAgentSessionStatus::InProgress => ConversationStatus::InProgress,
             CLIAgentSessionStatus::Success => ConversationStatus::Success,
+            CLIAgentSessionStatus::Error => ConversationStatus::Error,
             CLIAgentSessionStatus::Blocked { message } => ConversationStatus::Blocked {
                 blocked_action: message.clone().unwrap_or_default(),
             },
@@ -173,14 +175,18 @@ impl CLIAgentSession {
                 }
                 CLIAgentSessionStatus::InProgress
             }
-            CLIAgentEventType::Stop => {
+            CLIAgentEventType::Stop | CLIAgentEventType::StopFailure => {
                 if event.payload.query.is_some() {
                     self.session_context.query = event.payload.query.clone();
                 }
                 if event.payload.response.is_some() {
                     self.session_context.response = event.payload.response.clone();
                 }
-                CLIAgentSessionStatus::Success
+                if event.event == CLIAgentEventType::StopFailure {
+                    CLIAgentSessionStatus::Error
+                } else {
+                    CLIAgentSessionStatus::Success
+                }
             }
             CLIAgentEventType::PermissionRequest => {
                 self.session_context.summary = event.payload.summary.clone();
