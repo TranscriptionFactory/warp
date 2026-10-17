@@ -66,6 +66,7 @@ pub fn is_agent_supported(agent: &CLIAgent) -> bool {
             | CLIAgent::Gemini
             | CLIAgent::Auggie
             | CLIAgent::Pi
+            | CLIAgent::Omp
             | CLIAgent::DeepSeek
             | CLIAgent::Antigravity
     )
@@ -76,14 +77,16 @@ fn create_handler(agent: &CLIAgent) -> Option<Box<dyn CLIAgentSessionHandler>> {
     match agent {
         // Auggie and Pi are supported via community-maintained plugins
         // (https://github.com/augmentmoogi/auggie-warp,
-        // https://github.com/badlogic/pi-mono), which emit the same
-        // structured OSC 777 events as the first-party Claude/OpenCode/Gemini
-        // plugins. We don't ship install flows for them — we just listen.
+        // https://github.com/badlogic/pi-mono), and Omp (oh-my-pi) emits
+        // them natively, all using the same structured OSC 777 events as the
+        // first-party Claude/OpenCode/Gemini plugins. We don't ship install
+        // flows for them — we just listen.
         CLIAgent::Claude
         | CLIAgent::OpenCode
         | CLIAgent::Gemini
         | CLIAgent::Auggie
         | CLIAgent::Pi
+        | CLIAgent::Omp
         | CLIAgent::Antigravity => Some(Box::new(DefaultSessionListener)),
         CLIAgent::Codex => Some(Box::new(CodexSessionHandler)),
         CLIAgent::DeepSeek => Some(Box::new(DeepSeekSessionHandler)),
@@ -92,7 +95,6 @@ fn create_handler(agent: &CLIAgent) -> Option<Box<dyn CLIAgentSessionHandler>> {
         | CLIAgent::Copilot
         | CLIAgent::CursorCli
         | CLIAgent::Goose
-        | CLIAgent::Omp
         | CLIAgent::Unknown => None,
     }
 }

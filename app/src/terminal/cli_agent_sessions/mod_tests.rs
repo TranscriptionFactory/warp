@@ -237,6 +237,17 @@ fn parse_pi_stop_notification() {
 }
 
 #[test]
+fn parse_omp_tool_complete_notification() {
+    // oh-my-pi emits the structured protocol natively with `"agent":"omp"`.
+    let body = r#"{"event":"tool_complete","tool_name":"read","v":1,"agent":"omp","session_id":"abc","cwd":"/tmp/proj","project":"proj","plugin_version":"18.11.1"}"#;
+    let notif = parse_event(Some("warp://cli-agent"), body).unwrap();
+
+    assert_eq!(notif.agent, CLIAgent::Omp);
+    assert_eq!(notif.event, CLIAgentEventType::ToolComplete);
+    assert_eq!(notif.payload.tool_name.as_deref(), Some("read"));
+}
+
+#[test]
 fn apply_event_preserves_input_session() {
     let input_state = CLIAgentInputState::Open {
         entrypoint: CLIAgentInputEntrypoint::CtrlG,
