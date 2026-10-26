@@ -183,6 +183,7 @@ impl CLIAgent {
     fn command_prefix_aliases(&self) -> &'static [&'static str] {
         match self {
             CLIAgent::DeepSeek => &["deepseek-tui"],
+            CLIAgent::Antigravity => &["antigravity"],
             _ => &[],
         }
     }
