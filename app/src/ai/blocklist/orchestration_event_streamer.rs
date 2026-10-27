@@ -20,6 +20,7 @@ use super::orchestration_events::{
     LifecycleEventDetailPayload, LifecycleEventDetailStage, OrchestrationEventService,
     PendingEvent, PendingEventDetail, build_lifecycle_event,
 };
+use super::orchestration_local_feed::LocalChildFeed;
 use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
 use crate::ai::agent::{AIAgentExchangeId, AIAgentOutputMessageType, ReceivedMessageInput};
 use crate::ai::agent_events::{
@@ -293,6 +294,9 @@ pub struct OrchestrationEventStreamer {
     /// Run IDs killed locally; kept briefly to drop late server events.
     killed_run_ids: HashSet<String>,
     killed_run_id_order: VecDeque<String>,
+    /// Trackers for children launched in this process, fed from history
+    /// events rather than SSE.
+    pub(super) local_children: LocalChildFeed,
 }
 
 #[allow(private_interfaces)]
@@ -962,6 +966,7 @@ impl OrchestrationEventStreamer {
             next_wake_generation: 0,
             killed_run_ids: HashSet::new(),
             killed_run_id_order: VecDeque::new(),
+            local_children: LocalChildFeed::default(),
         }
     }
 
@@ -987,7 +992,18 @@ impl OrchestrationEventStreamer {
             next_wake_generation: 0,
             killed_run_ids: HashSet::new(),
             killed_run_id_order: VecDeque::new(),
+            local_children: LocalChildFeed::default(),
         }
+    }
+
+    /// The task id on `ChildSpawned` / `ChildStatusChanged` broadcasts for
+    /// local children of `parent_conversation_id`. Minted locally when the
+    /// parent has no task id; `None` until the parent has a local child.
+    pub fn local_child_parent_task_id(
+        &self,
+        parent_conversation_id: AIConversationId,
+    ) -> Option<AmbientAgentTaskId> {
+        self.local_children.parent_task_id(parent_conversation_id)
     }
 
     // ---- Public consumer registry API ---------------------------------
@@ -1614,6 +1630,8 @@ impl OrchestrationEventStreamer {
         event: &BlocklistAIHistoryEvent,
         ctx: &mut ModelContext<Self>,
     ) {
+        self.local_children
+            .on_history_event(event, &self.killed_run_ids, ctx);
         match event {
             BlocklistAIHistoryEvent::ConversationAgentIdAssigned {
                 conversation_id, ..

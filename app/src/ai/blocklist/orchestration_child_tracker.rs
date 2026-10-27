@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 
 use warp_multi_agent_api as api;
 
+use crate::ai::agent::conversation::ConversationStatus;
 use crate::terminal::shared_session::protocol::SessionId;
 use warpui::ModelContext;
 #[cfg(not(test))]
@@ -59,6 +60,10 @@ pub enum ChildSignal {
     /// A child created in this process, already backed by a local
     /// conversation that its executor hydrates.
     Registered,
+    /// A status change on a registered in-band child's own local
+    /// conversation. The status already lives in the history model, so it is
+    /// broadcast but not written back.
+    LocalStatus(ConversationStatus),
 }
 
 /// Per-child orchestration state, keyed by [`AmbientAgentTaskId`].
@@ -159,7 +164,15 @@ impl OrchestrationChildTracker {
             ChildSignal::Started => {
                 self.apply_started(task_id, child_run_id, ctx);
             }
+            ChildSignal::LocalStatus(status) => {
+                self.apply_local_status(task_id, child_run_id, status, ctx);
+            }
         }
+    }
+
+    /// The parent task id this tracker's broadcasts are keyed on.
+    pub fn parent_task_id(&self) -> AmbientAgentTaskId {
+        self.parent_task_id
     }
 
     /// Discovery via `child_agent_started`. Idempotent: an already-known child
@@ -267,6 +280,27 @@ impl OrchestrationChildTracker {
             },
             ctx,
         );
+    }
+
+    /// Broadcasts `ChildStatusChanged` for an in-band child. Unlike
+    /// [`Self::apply_lifecycle`] there is no history write-through: the status
+    /// came from the child's conversation, and writing it back would re-emit
+    /// the history event that produced it. Unregistered runs are ignored.
+    fn apply_local_status(
+        &mut self,
+        task_id: AmbientAgentTaskId,
+        run_id: &str,
+        status: ConversationStatus,
+        ctx: &mut ModelContext<OrchestrationEventStreamer>,
+    ) {
+        if !self.in_band_children.contains(&task_id) {
+            return;
+        }
+        ctx.emit(OrchestrationEventStreamerEvent::ChildStatusChanged {
+            parent_task_id: self.parent_task_id,
+            run_id: run_id.to_string(),
+            status,
+        });
     }
 
     /// Applies a REST seed / restore row. Creates the placeholder if new and
@@ -446,6 +480,12 @@ impl OrchestrationChildTracker {
     #[cfg(test)]
     pub(crate) fn metadata_fetch_dispatch_count(&self) -> usize {
         self.metadata_fetch_dispatch_count
+    }
+
+    /// Test-only: whether `task_id` is tracked as an in-band child.
+    #[cfg(test)]
+    pub(crate) fn is_in_band_child(&self, task_id: AmbientAgentTaskId) -> bool {
+        self.in_band_children.contains(&task_id) && self.children.contains_key(&task_id)
     }
 
     /// Test-only: whether metadata has been requested but not yet applied for
