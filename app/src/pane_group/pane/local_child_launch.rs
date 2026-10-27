@@ -78,8 +78,8 @@ fn complete(
 }
 
 /// Creates a hidden child pane and a child conversation in it, inheriting the
-/// parent's execution profile, and stamps `task_id` onto the conversation as its
-/// task id and run id.
+/// parent's execution profile, stamps `task_id` onto the conversation as its
+/// task id and run id, and makes it the pane's active conversation.
 fn create_hidden_child_conversation(
     group: &mut PaneGroup,
     parent_pane_id: PaneId,
@@ -128,6 +128,9 @@ fn create_hidden_child_conversation(
             terminal_view_id,
             ctx,
         );
+        // CLI harness status reaches the child only through the pane's active
+        // conversation (`TerminalView` maps `StatusChanged` onto it).
+        history_model.mark_active_conversation_id(conversation_id, terminal_view_id, ctx);
         conversation_id
     });
     group

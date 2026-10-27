@@ -130,6 +130,17 @@ fn warp_child_gets_hidden_pane_with_local_task_id_and_starts() {
             assert_eq!(children.len(), 1, "one child conversation");
             let child = children[0];
             assert_eq!(child.run_id(), child.task_id().map(|id| id.to_string()));
+            let child_view_id = fixture.pane_group.read(&app, |group, ctx| {
+                let child_pane_id = group.child_agent_panes[&child.id()];
+                group
+                    .terminal_view_from_pane_id(child_pane_id, ctx)
+                    .expect("child terminal view exists")
+                    .id()
+            });
+            assert_eq!(
+                model.active_conversation_id(child_view_id),
+                Some(child.id())
+            );
             (child.id(), child.task_id().expect("child task id is set"))
         });
         assert_eq!(
