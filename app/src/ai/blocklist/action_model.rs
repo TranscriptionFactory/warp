@@ -61,7 +61,8 @@ use crate::{
 
 use self::execute::{
     ask_user_question::AskUserQuestionExecutor, BlocklistAIActionExecutor,
-    BlocklistAIActionExecutorEvent, NotExecutedReason, RunningActionPhase, TryExecuteResult,
+    BlocklistAIActionExecutorEvent, NotExecutedReason, RunAgentsExecutor, RunningActionPhase,
+    StartAgentExecutor, TryExecuteResult,
 };
 
 use super::BlocklistAIHistoryModel;
@@ -387,6 +388,16 @@ impl BlocklistAIActionModel {
             .as_ref(app)
             .ask_user_question_executor()
             .clone()
+    }
+
+    /// Subscribe to this for `StartAgentExecutorEvent::CreateAgent` (one per
+    /// `run_agents` child); report launch outcomes via `StartAgentExecutor::complete`.
+    pub fn start_agent_executor(&self, app: &AppContext) -> ModelHandle<StartAgentExecutor> {
+        self.executor.as_ref(app).start_agent_executor().clone()
+    }
+
+    pub fn run_agents_executor(&self, app: &AppContext) -> ModelHandle<RunAgentsExecutor> {
+        self.executor.as_ref(app).run_agents_executor().clone()
     }
 
     pub fn set_ambient_agent_task_id(

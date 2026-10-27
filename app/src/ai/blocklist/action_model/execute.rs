@@ -10,7 +10,9 @@ pub(super) mod read_files;
 pub(super) mod read_mcp_resource;
 pub(super) mod read_skill;
 pub(super) mod request_file_edits;
+pub(super) mod run_agents;
 pub(super) mod shell_command;
+pub(super) mod start_agent;
 pub(super) mod suggest_new_conversation;
 pub(super) mod suggest_prompt;
 
@@ -35,10 +37,12 @@ pub use request_file_edits::{
     EditAcceptAndContinueClickedEvent, EditAcceptClickedEvent, EditResolvedEvent, EditStats,
     RequestFileEditsExecutor, RequestFileEditsFormatKind, RequestFileEditsTelemetryEvent,
 };
+pub use run_agents::RunAgentsExecutor;
 use serde::{Deserialize, Serialize};
 pub use shell_command::{ShellCommandExecutor, ShellCommandExecutorEvent};
 pub use suggest_new_conversation::NewConversationDecision;
 use suggest_new_conversation::SuggestNewConversationExecutor;
+pub use start_agent::StartAgentExecutor;
 pub use suggest_prompt::{PromptSuggestionExecutor, PromptSuggestionExecutorEvent};
 use warp_core::{execution_mode::AppExecutionMode, features::FeatureFlag};
 
@@ -241,6 +245,8 @@ pub struct BlocklistAIActionExecutor {
     create_documents_executor: ModelHandle<CreateDocumentsExecutor>,
     read_skill_executor: ModelHandle<ReadSkillExecutor>,
     ask_user_question_executor: ModelHandle<AskUserQuestionExecutor>,
+    start_agent_executor: ModelHandle<StartAgentExecutor>,
+    run_agents_executor: ModelHandle<RunAgentsExecutor>,
     /// The actions currently executing asynchronously, keyed by action ID.
     /// We track them per action rather than as a single slot so multiple actions from the same
     /// parallel phase can complete independently.
@@ -290,6 +296,9 @@ impl BlocklistAIActionExecutor {
         let read_skill_executor = ctx.add_model(|_| ReadSkillExecutor::new());
         let ask_user_question_executor =
             ctx.add_model(|_| AskUserQuestionExecutor::new(terminal_view_id));
+        let start_agent_executor = ctx.add_model(|_| StartAgentExecutor::new());
+        let run_agents_executor =
+            ctx.add_model(|_| RunAgentsExecutor::new(start_agent_executor.clone()));
         Self {
             shell_command_executor,
             read_files_executor,
@@ -307,6 +316,8 @@ impl BlocklistAIActionExecutor {
             terminal_model,
             read_skill_executor,
             ask_user_question_executor,
+            start_agent_executor,
+            run_agents_executor,
         }
     }
 
@@ -358,6 +369,15 @@ impl BlocklistAIActionExecutor {
 
     pub fn ask_user_question_executor(&self) -> &ModelHandle<AskUserQuestionExecutor> {
         &self.ask_user_question_executor
+    }
+
+    /// Emits `StartAgentExecutorEvent::CreateAgent` per child of a `run_agents` call.
+    pub fn start_agent_executor(&self) -> &ModelHandle<StartAgentExecutor> {
+        &self.start_agent_executor
+    }
+
+    pub fn run_agents_executor(&self) -> &ModelHandle<RunAgentsExecutor> {
+        &self.run_agents_executor
     }
 
     pub fn set_ambient_agent_task_id(
@@ -435,6 +455,9 @@ impl BlocklistAIActionExecutor {
                 .update(ctx, |executor, ctx| executor.preprocess_action(input, ctx)),
             AIAgentActionType::AskUserQuestion { .. } => self
                 .ask_user_question_executor
+                .update(ctx, |executor, ctx| executor.preprocess_action(input, ctx)),
+            AIAgentActionType::RunAgents(_) => self
+                .run_agents_executor
                 .update(ctx, |executor, ctx| executor.preprocess_action(input, ctx)),
         }
     }
@@ -603,6 +626,10 @@ impl BlocklistAIActionExecutor {
                 .into(),
             AIAgentActionType::AskUserQuestion { .. } => self
                 .ask_user_question_executor
+                .update(ctx, |executor, ctx| executor.execute(input, ctx))
+                .into(),
+            AIAgentActionType::RunAgents(_) => self
+                .run_agents_executor
                 .update(ctx, |executor, ctx| executor.execute(input, ctx))
                 .into(),
         };
@@ -791,6 +818,9 @@ impl BlocklistAIActionExecutor {
                 .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
             AIAgentActionType::AskUserQuestion { .. } => self
                 .ask_user_question_executor
+                .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
+            AIAgentActionType::RunAgents(_) => self
+                .run_agents_executor
                 .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
         }
     }

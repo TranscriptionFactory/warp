@@ -74,6 +74,8 @@ pub enum AIAgentActionResultType {
     TransferShellCommandControlToUser(TransferShellCommandControlToUserResult),
     /// The result of asking the user a question.
     AskUserQuestion(AskUserQuestionResult),
+    /// The result of a fork-local `run_agents` orchestration call.
+    RunAgents(RunAgentsResult),
 }
 
 impl AIAgentActionResultType {
@@ -122,6 +124,7 @@ impl Display for AIAgentActionResultType {
             AIAgentActionResultType::InsertReviewComments(result) => result.fmt(f),
             AIAgentActionResultType::TransferShellCommandControlToUser(result) => result.fmt(f),
             AIAgentActionResultType::AskUserQuestion(result) => result.fmt(f),
+            AIAgentActionResultType::RunAgents(result) => result.fmt(f),
             AIAgentActionResultType::OpenCodeReview | AIAgentActionResultType::InitProject => {
                 Ok(())
             }
@@ -700,6 +703,7 @@ impl AIAgentActionResultType {
             AIAgentActionResultType::AskUserQuestion(_) => {
                 "The user's answers to clarifying questions"
             }
+            AIAgentActionResultType::RunAgents(_) => "The outcome of launching child agents",
         }
     }
 
@@ -730,6 +734,7 @@ impl AIAgentActionResultType {
                 | TransferShellCommandControlToUserResult::CommandFinished { .. },
             ) => true,
             Self::AskUserQuestion(AskUserQuestionResult::Success { .. }) => true,
+            Self::RunAgents(RunAgentsResult::Launched { .. }) => true,
             _ => false,
         }
     }
@@ -749,6 +754,7 @@ impl AIAgentActionResultType {
             | Self::CreateDocuments(CreateDocumentsResult::Error(_))
             | Self::InsertReviewComments(InsertReviewCommentsResult::Error { .. })
             | Self::AskUserQuestion(AskUserQuestionResult::Error(_))
+            | Self::RunAgents(RunAgentsResult::Failure { .. })
             | Self::TransferShellCommandControlToUser(
                 TransferShellCommandControlToUserResult::Error(_),
             ) => true,
@@ -786,7 +792,8 @@ impl AIAgentActionResultType {
             )
             | Self::ReadSkill(ReadSkillResult::Cancelled)
             // SkippedByAutoApprove is intentionally excluded: the agent should continue.
-            | Self::AskUserQuestion(AskUserQuestionResult::Cancelled) => true,
+            | Self::AskUserQuestion(AskUserQuestionResult::Cancelled)
+            | Self::RunAgents(RunAgentsResult::Cancelled) => true,
             _ => false,
         }
     }
@@ -1142,6 +1149,59 @@ impl Display for AskUserQuestionResult {
                     question_ids.len()
                 )
             }
+        }
+    }
+}
+
+/// The terminal outcome of a `run_agents` tool call.
+///
+/// Adapted from upstream's `RunAgentsResult`. This fork launches children
+/// locally only, so `Launched` carries no execution-mode details.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RunAgentsResult {
+    /// Orchestration launched. Carries one `RunAgentsAgentOutcome` per
+    /// `agent_run_configs[]` entry, in input order.
+    Launched {
+        model_id: String,
+        harness_type: String,
+        agents: Vec<RunAgentsAgentOutcome>,
+    },
+    /// Declined for a non-error reason (e.g. disabled by policy).
+    Denied { reason: String },
+    /// The client could not begin the launch sequence at all.
+    Failure { error: String },
+    /// The user rejected the call.
+    Cancelled,
+}
+
+/// Per-agent outcome reported in `RunAgentsResult::Launched.agents`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RunAgentsAgentOutcome {
+    pub name: String,
+    pub kind: RunAgentsAgentOutcomeKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RunAgentsAgentOutcomeKind {
+    Launched { agent_id: String },
+    Failed { error: String },
+}
+
+impl Display for RunAgentsResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunAgentsResult::Launched { agents, .. } => {
+                let launched = agents
+                    .iter()
+                    .filter(|agent| {
+                        matches!(agent.kind, RunAgentsAgentOutcomeKind::Launched { .. })
+                    })
+                    .count();
+                write!(f, "Launched {launched} of {} child agent(s)", agents.len())
+            }
+            RunAgentsResult::Denied { reason } => write!(f, "Run agents denied: {reason}"),
+            RunAgentsResult::Failure { error } => write!(f, "Run agents failed: {error}"),
+            RunAgentsResult::Cancelled => write!(f, "Run agents cancelled"),
         }
     }
 }

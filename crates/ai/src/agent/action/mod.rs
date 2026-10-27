@@ -16,9 +16,9 @@ use crate::{
             CreateDocumentsResult, EditDocumentsResult, FileGlobResult, FileGlobV2Result,
             GrepResult, InsertReviewCommentsResult, ReadDocumentsResult, ReadFilesResult,
             ReadMCPResourceResult, ReadShellCommandOutputResult, ReadSkillResult,
-            RequestCommandOutputResult, RequestFileEditsResult, SuggestNewConversationResult,
-            SuggestPromptResult, TransferShellCommandControlToUserResult,
-            WriteToLongRunningShellCommandResult,
+            RequestCommandOutputResult, RequestFileEditsResult, RunAgentsResult,
+            SuggestNewConversationResult, SuggestPromptResult,
+            TransferShellCommandControlToUserResult, WriteToLongRunningShellCommandResult,
         },
         AIAgentCitation, FileLocations,
     },
@@ -138,6 +138,39 @@ pub enum AIAgentActionType {
     AskUserQuestion {
         questions: Vec<AskUserQuestionItem>,
     },
+
+    /// AI requested batched orchestration of one-or-more local child agents
+    /// (fork-local BYOP `run_agents` tool). The full per-child prompt is
+    /// `base_prompt + "\n\n" + agent_run_configs[i].prompt`.
+    RunAgents(Box<RunAgentsRequest>),
+}
+
+/// Run-wide + per-agent configuration for a `run_agents` tool call.
+///
+/// Adapted from upstream's `RunAgentsRequest`, local execution only: the
+/// remote execution mode, plan id, skills and auth-secret fields are omitted.
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct RunAgentsRequest {
+    pub summary: String,
+    pub base_prompt: String,
+    /// Run-wide model override; empty inherits the parent's model.
+    pub model_id: String,
+    /// Run-wide harness: empty or `"oz"` for a Warp agent child, otherwise a
+    /// local CLI harness name (`claude`, `opencode`, `codex`).
+    pub harness_type: String,
+    pub agent_run_configs: Vec<RunAgentsAgentRunConfig>,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct RunAgentsAgentRunConfig {
+    pub name: String,
+    pub prompt: String,
+    pub title: String,
+    /// Per-agent model override; empty inherits the run-wide `model_id`.
+    pub model_id: String,
+    /// Fork-local per-agent harness override; empty inherits the run-wide
+    /// `harness_type`. Lets one call mix Warp-agent and CLI-harness children.
+    pub harness_type: String,
 }
 
 impl AIAgentActionType {
@@ -217,6 +250,7 @@ impl AIAgentActionType {
             Self::AskUserQuestion { .. } => {
                 AIAgentActionResultType::AskUserQuestion(AskUserQuestionResult::Cancelled)
             }
+            Self::RunAgents(_) => AIAgentActionResultType::RunAgents(RunAgentsResult::Cancelled),
         }
     }
 
@@ -245,6 +279,7 @@ impl AIAgentActionType {
             Self::ReadSkill(_) => "Reading skill",
             Self::TransferShellCommandControlToUser { .. } => "Transferring control",
             Self::AskUserQuestion { .. } => "Asking question",
+            Self::RunAgents(_) => "Starting agents",
         }
     }
 
@@ -281,6 +316,9 @@ impl AIAgentActionType {
             }
             Self::AskUserQuestion { questions } => {
                 format!("Ask user {} question(s)", questions.len())
+            }
+            Self::RunAgents(request) => {
+                format!("Run {} agent(s)", request.agent_run_configs.len())
             }
         }
     }
@@ -418,6 +456,9 @@ impl Display for AIAgentActionType {
             }
             AIAgentActionType::AskUserQuestion { questions } => {
                 write!(f, "AskUserQuestion: {} question(s)", questions.len())
+            }
+            AIAgentActionType::RunAgents(request) => {
+                write!(f, "RunAgents: {} agent(s)", request.agent_run_configs.len())
             }
         }
     }

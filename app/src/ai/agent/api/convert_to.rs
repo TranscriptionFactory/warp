@@ -658,6 +658,9 @@ impl TryFrom<AIAgentActionResult> for api::request::input::user_inputs::user_inp
             AIAgentActionResultType::AskUserQuestion(ask_user_question_result) => {
                 Some(ask_user_question_result.into())
             }
+            // Fork-local BYOP tool with no proto representation; BYOP serializes it
+            // directly in `agent_providers::tools::serialize_action_result`.
+            AIAgentActionResultType::RunAgents(_) => return Err(ConvertToAPITypeError::Ignore),
         };
         Ok(
             api::request::input::user_inputs::user_input::Input::ToolCallResult(

@@ -251,6 +251,7 @@ pub mod text {
                 AIAgentActionResultType::ReadShellCommandOutput { .. } => Ok(()),
                 AIAgentActionResultType::TransferShellCommandControlToUser { .. } => Ok(()),
                 AIAgentActionResultType::AskUserQuestion(_) => Ok(()),
+                AIAgentActionResultType::RunAgents(_) => Ok(()),
             },
         }
     }
@@ -342,6 +343,7 @@ pub mod text {
                         writeln!(w, "Reading skill: {}", request.skill)?;
                     }
                     AIAgentActionType::AskUserQuestion { .. } => (),
+                    AIAgentActionType::RunAgents(_) => (),
                 },
                 AIAgentOutputMessageType::TodoOperation(operation) => match operation {
                     TodoOperation::UpdateTodos { todos } => {
@@ -946,6 +948,7 @@ pub mod json {
                     | AIAgentActionType::ReadSkill(_)
                     | AIAgentActionType::TransferShellCommandControlToUser { .. } => None,
                     AIAgentActionType::AskUserQuestion { .. } => None,
+                    AIAgentActionType::RunAgents(_) => None,
                 },
                 AIAgentOutputMessageType::TodoOperation(operation) => match operation {
                     TodoOperation::UpdateTodos { todos } => Some(JsonMessage::UpdateTodos {
