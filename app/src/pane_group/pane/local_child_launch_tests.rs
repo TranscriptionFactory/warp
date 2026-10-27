@@ -2,17 +2,21 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use settings::Setting;
 use warp_cli::agent::Harness;
 use warpui::platform::WindowStyle;
 use warpui::{App, ModelHandle, SingletonEntity, ViewHandle};
 
 use super::dispatch_start_agent_conversation;
 use crate::ai::agent::conversation::AIConversationId;
+use crate::ai::agent_providers::llm_id;
 use crate::ai::blocklist::{
     BlocklistAIHistoryModel, StartAgentExecutionMode, StartAgentExecutor, StartAgentExecutorEvent,
     StartAgentOutcome, StartAgentRequest,
 };
+use crate::ai::llms::LLMPreferences;
 use crate::pane_group::{NewTerminalOptions, PaneGroup, PaneId, PanesLayout};
+use crate::settings::{AISettings, AgentProvider, AgentProviderApiType, AgentProviderModel};
 use crate::terminal::available_shells::AvailableShells;
 use crate::test_util::terminal::initialize_app_for_terminal_view;
 use crate::{GlobalResourceHandles, GlobalResourceHandlesProvider};
@@ -85,6 +89,15 @@ fn launch(
     fixture: &Fixture,
     harness_type: Option<Harness>,
 ) -> async_channel::Receiver<StartAgentOutcome> {
+    launch_with_model(app, fixture, harness_type, None)
+}
+
+fn launch_with_model(
+    app: &mut App,
+    fixture: &Fixture,
+    harness_type: Option<Harness>,
+    model_id: Option<String>,
+) -> async_channel::Receiver<StartAgentOutcome> {
     let parent_conversation_id = fixture.parent_conversation_id;
     let receiver = fixture.executor.update(app, |executor, ctx| {
         executor.dispatch(
@@ -93,7 +106,7 @@ fn launch(
             "Survey the grid.".to_string(),
             StartAgentExecutionMode::Local {
                 harness_type,
-                model_id: None,
+                model_id,
             },
             parent_conversation_id,
             None,
@@ -185,4 +198,88 @@ fn cli_child_without_detected_shell_fails_without_a_pane() {
             assert!(group.child_agent_panes.is_empty());
         });
     })
+}
+
+#[test]
+fn warp_child_model_override_does_not_change_last_used_model() {
+    App::test((), |mut app| async move {
+        let fixture = fixture(&mut app);
+        let selected = llm_id::encode("child-test", "selected");
+        let last_used = llm_id::encode("child-test", "last-used");
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .agent_providers
+                .set_value(
+                    vec![AgentProvider {
+                        id: "child-test".to_string(),
+                        name: "Child test".to_string(),
+                        kind: Default::default(),
+                        api_type: AgentProviderApiType::Ollama,
+                        base_url: "http://localhost:11434".to_string(),
+                        models: vec![
+                            AgentProviderModel::from_id("selected".to_string()),
+                            AgentProviderModel::from_id("last-used".to_string()),
+                        ],
+                        extra_headers: Vec::new(),
+                    }],
+                    ctx,
+                )
+                .unwrap();
+            settings
+                .byop_last_used_model_id
+                .set_value(last_used.to_string(), ctx)
+                .unwrap();
+        });
+        let parent_view_id = fixture.pane_group.read(&app, |group, ctx| {
+            group
+                .terminal_view_from_pane_id(fixture.parent_pane_id, ctx)
+                .unwrap()
+                .id()
+        });
+        LLMPreferences::handle(&app).update(&mut app, |preferences, ctx| {
+            preferences.set_child_agent_model(selected.clone(), parent_view_id, ctx);
+        });
+        let inherited = launch(&mut app, &fixture, None);
+        assert!(matches!(
+            inherited.try_recv(),
+            Ok(StartAgentOutcome::Started { .. })
+        ));
+        let receiver = launch_with_model(&mut app, &fixture, None, Some(selected.to_string()));
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(StartAgentOutcome::Started { .. })
+        ));
+        fixture.pane_group.read(&app, |group, ctx| {
+            assert_eq!(group.child_agent_panes.len(), 2);
+            for child_pane in group.child_agent_panes.values() {
+                let child_view = group.terminal_view_from_pane_id(*child_pane, ctx).unwrap();
+                assert_eq!(
+                    LLMPreferences::as_ref(ctx)
+                        .get_active_base_model(ctx, Some(child_view.id()))
+                        .id,
+                    selected
+                );
+            }
+            assert_eq!(
+                AISettings::as_ref(ctx).byop_last_used_model_id.to_string(),
+                last_used.to_string()
+            );
+        });
+    });
+}
+
+#[test]
+fn unknown_warp_child_model_fails_before_creating_pane() {
+    App::test((), |mut app| async move {
+        let fixture = fixture(&mut app);
+        let receiver =
+            launch_with_model(&mut app, &fixture, None, Some("missing-model".to_string()));
+        assert!(
+            matches!(receiver.try_recv(), Ok(StartAgentOutcome::Error(message))
+            if message.contains("Unknown child agent model"))
+        );
+        fixture
+            .pane_group
+            .read(&app, |group, _| assert!(group.child_agent_panes.is_empty()));
+    });
 }

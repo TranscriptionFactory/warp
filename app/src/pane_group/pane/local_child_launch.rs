@@ -20,6 +20,7 @@ use crate::ai::blocklist::{
     StartAgentRequest,
 };
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
+use crate::ai::llms::{LLMId, LLMPreferences};
 use crate::pane_group::{PaneGroup, PaneId, TerminalPaneId};
 use crate::terminal::TerminalView;
 
@@ -157,6 +158,32 @@ fn launch_local_warp_child(
         );
         return;
     };
+    let StartAgentExecutionMode::Local { model_id, .. } = &request.execution_mode;
+    let preferences = LLMPreferences::as_ref(ctx);
+    let model = match model_id {
+        Some(model_id) => {
+            let id = LLMId::from(model_id.clone());
+            let Some(model) = preferences.get_llm_info(&id) else {
+                complete(
+                    &executor,
+                    &request,
+                    StartAgentOutcome::Error(format!("Unknown child agent model: {model_id}")),
+                    ctx,
+                );
+                return;
+            };
+            model.id.clone()
+        }
+        None => {
+            let parent_view_id = group
+                .terminal_view_from_pane_id(parent_pane_id, ctx)
+                .map(|view| view.id());
+            preferences
+                .get_active_base_model(ctx, parent_view_id)
+                .id
+                .clone()
+        }
+    };
     let Some((terminal_view, conversation_id)) = create_hidden_child_conversation(
         group,
         parent_pane_id,
@@ -176,6 +203,10 @@ fn launch_local_warp_child(
         );
         return;
     };
+
+    LLMPreferences::handle(ctx).update(ctx, |preferences, ctx| {
+        preferences.set_child_agent_model(model, terminal_view.id(), ctx);
+    });
 
     let prompt = request.prompt.clone();
     terminal_view.update(ctx, |terminal_view, ctx| {

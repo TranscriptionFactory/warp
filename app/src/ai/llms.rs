@@ -899,6 +899,17 @@ impl LLMPreferences {
         self.models_by_feature.agent_mode.info_for_id(id).is_some()
     }
 
+    /// Sets a child pane's model without changing the user's global last-used model.
+    pub(crate) fn set_child_agent_model(
+        &mut self,
+        llm_id: LLMId,
+        terminal_view_id: EntityId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.base_llm_for_terminal_view.insert(terminal_view_id, llm_id);
+        ctx.emit(LLMPreferencesEvent::UpdatedActiveAgentModeLLM);
+    }
+
     /// Creates a pane-level override for the Agent Mode LLM.
     pub fn update_preferred_agent_mode_llm(
         &mut self,
