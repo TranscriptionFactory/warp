@@ -741,6 +741,29 @@ impl BlocklistAIActionModel {
         }
     }
 
+    pub fn set_pending_run_agents_harness(
+        &mut self,
+        action_id: &AIAgentActionId,
+        harness_type: &str,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(action) = self
+            .pending_actions
+            .values_mut()
+            .flat_map(|queue| queue.iter_mut())
+            .find(|action| &action.id == action_id)
+        else {
+            return;
+        };
+        if let AIAgentActionType::RunAgents(request) = &mut action.action {
+            request.harness_type = harness_type.to_string();
+            for agent in &mut request.agent_run_configs {
+                agent.harness_type.clear();
+            }
+            ctx.notify();
+        }
+    }
+
     /// Gets the active conversation ID for this terminal view.
     fn active_conversation_id(&self, app: &AppContext) -> Option<AIConversationId> {
         BlocklistAIHistoryModel::as_ref(app).active_conversation_id(self.terminal_view_id)

@@ -24,6 +24,7 @@ mod comments;
 mod header;
 mod imported_comments;
 mod input;
+mod orchestration;
 pub mod output;
 pub mod query;
 mod todos;
@@ -1087,6 +1088,7 @@ impl View for AIBlock {
                     .is_latest_non_passive_exchange_in_root_task(app)
                     && self.has_imported_comments_in_current_thread(app),
                 ask_user_question_view: self.ask_user_question_view.as_ref(),
+                run_agents_harnesses: &self.run_agents_harnesses,
             },
             app,
         ));

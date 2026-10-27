@@ -29,6 +29,7 @@ use crate::terminal::shared_session::SharedSessionStatus;
 use crate::view_components::compactible_action_button::{
     CompactibleActionButton, RenderCompactibleActionButton, SMALL_SIZE_SWITCH_THRESHOLD,
 };
+use crate::view_components::dropdown::Dropdown;
 use crate::AIAgentTodoList;
 
 #[allow(unused_imports)]
@@ -186,6 +187,8 @@ pub(crate) struct Props<'a> {
     /// Controls how agent thinking/reasoning traces are displayed.
     pub(super) thinking_display_mode: crate::settings::ThinkingDisplayMode,
     pub(super) conversation_has_imported_comments: bool,
+    pub(super) run_agents_harnesses:
+        &'a HashMap<AIAgentActionId, ViewHandle<Dropdown<AIBlockAction>>>,
     pub(super) ask_user_question_view: Option<&'a ViewHandle<AskUserQuestionView>>,
 }
 
@@ -639,6 +642,17 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                             {
                                 output_items.add_child(rendered_mcp_tool);
                             }
+                        }
+                        AIAgentOutputMessageType::Action(AIAgentAction {
+                            action: AIAgentActionType::RunAgents(request),
+                            id,
+                            ..
+                        }) => {
+                            should_render_footer = false;
+                            should_render_suggestions = false;
+                            output_items.add_child(super::orchestration::render_run_agents(
+                                id, request, props, app,
+                            ));
                         }
                         AIAgentOutputMessageType::Action(AIAgentAction {
                             action: AIAgentActionType::AskUserQuestion { .. },

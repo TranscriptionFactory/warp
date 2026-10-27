@@ -53,6 +53,7 @@ use crate::view_components::action_button::{
     ActionButtonTheme, NakedTheme, PrimaryTheme, SecondaryTheme,
 };
 use crate::view_components::compactible_action_button::CompactibleActionButton;
+use crate::view_components::dropdown::{Dropdown, DropdownItem};
 use crate::AIAgentTodoList;
 use crate::FileEdit;
 use pathfinder_color::ColorU;
@@ -852,6 +853,7 @@ pub struct AIBlock {
     manage_rules_button: ViewHandle<ActionButton>,
 
     action_buttons: HashMap<AIAgentActionId, ActionButtons>,
+    run_agents_harnesses: HashMap<AIAgentActionId, ViewHandle<Dropdown<AIBlockAction>>>,
 
     /// A user menu presenting an accept and reject choice.
     ///
@@ -1263,6 +1265,7 @@ impl AIBlock {
             terminal_view_id,
             request_refunded_count: None,
             action_buttons: Default::default(),
+            run_agents_harnesses: Default::default(),
             web_search_views: Default::default(),
             web_fetch_views: Default::default(),
             requested_commands_to_auto_collapse: Default::default(),
@@ -1735,6 +1738,41 @@ impl AIBlock {
                 }
             }
             self.requested_action_ids = new_action_ids;
+
+            if let AIAgentActionType::RunAgents(request) = &action.action {
+                if !self.run_agents_harnesses.contains_key(&action.id) {
+                    let action_id = action.id.clone();
+                    let selected = request.harness_type.clone();
+                    let dropdown = ctx.add_typed_action_view(|ctx| {
+                        let mut dropdown = Dropdown::new(ctx);
+                        let items =
+                            super::inline_action::run_agents_card_view::available_harnesses()
+                                .into_iter()
+                                .map(|(value, label)| {
+                                    DropdownItem::new(
+                                        label,
+                                        AIBlockAction::SetRunAgentsHarness {
+                                            action_id: action_id.clone(),
+                                            harness_type: value.to_string(),
+                                        },
+                                    )
+                                })
+                                .collect();
+                        dropdown.set_items(items, ctx);
+                        let selected_label = match selected.as_str() {
+                            "" | "oz" => "Warp",
+                            "claude" => "Claude Code",
+                            "codex" => "Codex",
+                            "opencode" => "OpenCode",
+                            other => other,
+                        };
+                        dropdown.set_selected_by_name(selected_label, ctx);
+                        dropdown
+                    });
+                    self.run_agents_harnesses
+                        .insert(action.id.clone(), dropdown);
+                }
+            }
 
             if !self.action_buttons.contains_key(&action.id) {
                 let run_button = CompactibleActionButton::new(
@@ -5296,6 +5334,11 @@ pub enum AIBlockAction {
     /// Execute the next pending action, if any.
     ExecuteNextPendingAction,
 
+    SetRunAgentsHarness {
+        action_id: AIAgentActionId,
+        harness_type: String,
+    },
+
     ChangedHoverOnLink {
         link_range: Range<usize>,
         location: TextLocation,
@@ -5500,6 +5543,14 @@ impl TypedActionView for AIBlock {
             AIBlockAction::ExecuteNextPendingAction => {
                 self.action_model.update(ctx, |action_model, ctx| {
                     action_model.execute_next_action_for_user(self.conversation_id(), ctx)
+                });
+            }
+            AIBlockAction::SetRunAgentsHarness {
+                action_id,
+                harness_type,
+            } => {
+                self.action_model.update(ctx, |model, ctx| {
+                    model.set_pending_run_agents_harness(action_id, harness_type, ctx);
                 });
             }
             AIBlockAction::ExecuteRequestedAction { action_id } => {
