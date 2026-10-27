@@ -3,6 +3,15 @@
 本文档记录 OpenWarp 各个发布版本的关键变更。仅收录功能性 commit,省略 dev / stable 等内部滚动 tag。
 
 ## [Unreleased]
+
+## [v2026.10.26.1] — 2026-10-26
+
+- **Local multi-agent orchestration**: BYOP agents can launch local Warp, Claude Code, Codex, and OpenCode children in hidden panes. Added a Run/Cancel confirmation card, installed-harness selection, live child statuses, and pill navigation. Warp children honor their requested model or inherit the parent's pane model without changing global preferences; CLI model overrides remain unsupported.
+- **Terminal lifecycle recovery**: Recover missing command-completion hooks from Precmd metadata, reject duplicate lifecycle transitions, and preserve idle shell-less panes. Added recovery coverage for shared-session viewers and queued tmux commands.
+- **Terminal rendering and search**: Render box-drawing glyphs without seams, search terminal output asynchronously, and rank command history using recency, session, and exit-status signals with space-separated AND matching.
+- **Shell and CLI agent fixes**: Pin `$BASH` to the launched executable, ignore late subtask activation for finished blocks, accept Antigravity event aliases, and handle CLI agent stop failures.
+- **Dependencies**: Update rustls-webpki to 0.103.16 and webpki roots to 1.0.10.
+
 ## [v2026.10.15.1] — 2026-10-15
 
 - **终端 / OSC 8 超链接**:支持 OSC 8 超链接(移植自 warpdotdev #9850,默认开启)。程序输出的超链接文本此前被丢弃,现在会保留链接,悬停显示目标地址,Cmd+点击打开。
