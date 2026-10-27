@@ -1,4 +1,14 @@
 use super::*;
+use crate::search::command_search::history::history_data_source_for_session;
+use crate::terminal::model::session::command_executor::testing::TestCommandExecutor;
+use crate::terminal::model::session::{Session, SessionId, SessionInfo};
+use crate::terminal::History;
+use crate::test_util::assert_eventually;
+use chrono::Local;
+use std::sync::Arc;
+use warp_core::command::ExitCode;
+use warp_core::features::FeatureFlag;
+use warpui::SingletonEntity;
 use crate::auth::AuthManager;
 use crate::auth::AuthStateProvider;
 use crate::search::command_search::searcher::CommandSearchMixer;
@@ -613,6 +623,235 @@ fn test_sync_and_async_data_sources() {
                     .map(|result| result.accessibility_label())
                     .collect_vec(),
                 vec!["Sync Test Result", "Async Test Result"]
+            );
+        });
+    });
+}
+
+#[test]
+fn test_history_data_source_reflects_live_exit_status_update() {
+    let _flag = FeatureFlag::HistorySearchRankingV2.override_enabled(true);
+
+    App::test((), |mut app| async move {
+        crate::test_util::terminal::initialize_app_for_terminal_view(&mut app);
+
+        let session = Arc::new(Session::new(
+            SessionInfo::new_for_test().with_id(0),
+            Arc::new(TestCommandExecutor::default()),
+        ));
+        let session_id = session.id();
+
+        let history_handle = History::handle(&app);
+        history_handle.update(&mut app, |history, ctx| {
+            history.init_session_with(session.clone(), async { vec![] }, ctx);
+        });
+        assert_eventually!(
+            history_handle.read(&app, |history, _ctx| history.is_queryable(&session_id)),
+            "history should become queryable once the (empty) histfile read completes"
+        );
+
+        let start_ts = Local::now();
+        history_handle.update(&mut app, |history, _ctx| {
+            let mut entry = HistoryEntry::command_only("deploy prod".to_owned());
+            entry.session_id = Some(session_id);
+            entry.start_ts = Some(start_ts);
+            history.append_commands(session_id, vec![entry]);
+        });
+
+        let mixer = app.add_model(|_| CommandSearchMixer::new());
+        mixer.update(&mut app, |mixer, ctx| {
+            mixer.add_async_source(
+                history_data_source_for_session(session_id),
+                HashSet::from([QueryFilter::History]),
+                AddAsyncSourceOptions {
+                    debounce_interval: None,
+                    run_in_zero_state: false,
+                    run_when_unfiltered: true,
+                },
+                ctx,
+            );
+            mixer.run_query("deploy prod".into(), ctx);
+        });
+        assert_eventually!(
+            app.read(|app| !mixer.as_ref(app).is_loading()),
+            "the first query should finish loading"
+        );
+        let score_while_running = app.read(|app| mixer.as_ref(app).results()[0].score());
+
+        // Mark the command finished, with a failure, while the data source (standing in for a
+        // still-open Command Search panel) is never rebuilt.
+        history_handle.update(&mut app, |history, _ctx| {
+            history.mark_command_as_finished(session_id, start_ts, Local::now(), ExitCode::from(1));
+        });
+        mixer.update(&mut app, |mixer, ctx| {
+            mixer.run_query("deploy prod".into(), ctx);
+        });
+        assert_eventually!(
+            app.read(|app| !mixer.as_ref(app).is_loading()),
+            "the second query should finish loading"
+        );
+        let score_after_failure = app.read(|app| mixer.as_ref(app).results()[0].score());
+
+        assert!(
+            score_after_failure < score_while_running,
+            "the exit-status prior should reflect the command's completion even though the data \
+             source was never rebuilt, proving it re-reads live History state per query rather \
+             than a snapshot captured once when the source was created"
+        );
+    });
+}
+
+#[test]
+
+#[test]
+fn test_blank_query_preserves_chronological_order_despite_differing_priors() {
+    let _flag = FeatureFlag::HistorySearchRankingV2.override_enabled(true);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        // Both entries share a timestamp so recency can't be what preserves order; only ignoring
+        // the session prior can.
+        let same_ts = Local::now();
+        let mut older_matches_session = HistoryEntry::command_only("git status".to_owned());
+        older_matches_session.start_ts = Some(same_ts);
+        // `history_data_source` fixes the data source's own session at `SessionId::from(0)`, so
+        // this entry would earn a session-prior bonus if priors weren't bypassed.
+        older_matches_session.session_id = Some(SessionId::from(0));
+
+        let mut newer_different_session = HistoryEntry::command_only("git log".to_owned());
+        newer_different_session.start_ts = Some(same_ts);
+        newer_different_session.session_id = Some(SessionId::from(1));
+
+        let mixer = app.add_model(|_| CommandSearchMixer::new());
+        mixer.update(&mut app, |mixer, ctx| {
+            mixer.add_async_source(
+                history_data_source(vec![older_matches_session, newer_different_session]),
+                HashSet::from([QueryFilter::History]),
+                AddAsyncSourceOptions {
+                    debounce_interval: None,
+                    run_in_zero_state: true,
+                    run_when_unfiltered: true,
+                },
+                ctx,
+            );
+            mixer.run_query(
+                Query {
+                    text: "".to_owned(),
+                    filters: HashSet::new(),
+                },
+                ctx,
+            );
+        });
+
+        assert_eventually!(
+            app.read(|app| !mixer.as_ref(app).is_loading()),
+            "the history query should finish loading"
+        );
+
+        app.read(|app| {
+            let results = mixer.as_ref(app).results();
+            assert_eq!(
+                results.len(),
+                2,
+                "history should still populate the zero state for a blank query"
+            );
+
+            assert!(matches!(
+                results.last().map(|result| result.accept_result()),
+                Some(CommandSearchItemAction::AcceptHistory(AcceptedHistoryItem {
+                    command,
+                    ..
+                })) if command == "git log"
+            ));
+        });
+    });
+}
+
+#[test]
+
+#[test]
+fn test_history_search_disabled_flag_skips_whitespace_tokenization() {
+    let _flag = FeatureFlag::HistorySearchRankingV2.override_enabled(false);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let mixer = app.add_model(|_| CommandSearchMixer::new());
+        mixer.update(&mut app, |mixer, ctx| {
+            mixer.add_async_source(
+                history_data_source(vec![HistoryEntry::command_only(
+                    "cd ~/projects/history_orm".to_owned(),
+                )]),
+                HashSet::from([QueryFilter::History]),
+                AddAsyncSourceOptions {
+                    debounce_interval: None,
+                    run_in_zero_state: false,
+                    run_when_unfiltered: true,
+                },
+                ctx,
+            );
+            mixer.run_query("cd hi orm".into(), ctx);
+        });
+
+        assert_eventually!(
+            app.read(|app| !mixer.as_ref(app).is_loading()),
+            "the query should finish loading"
+        );
+
+        app.read(|app| {
+            let results = mixer.as_ref(app).results();
+            assert!(
+                results.is_empty(),
+                "the legacy path shouldn't AND-tokenize \"cd hi orm\" against a single command"
+            );
+        });
+    });
+}
+
+#[test]
+fn test_history_search_disabled_flag_scores_raw_skim_with_no_priors() {
+    let _flag = FeatureFlag::HistorySearchRankingV2.override_enabled(false);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let command = "git status".to_owned();
+        let raw_score = fuzzy_match::match_indices_case_insensitive(&command, "git status")
+            .expect("the command should fuzzy-match itself")
+            .score;
+
+        let mut old_entry = HistoryEntry::command_only(command.clone());
+        old_entry.start_ts = Some(Local::now() - chrono::Duration::days(365));
+        old_entry.exit_code = Some(warp_core::command::ExitCode::from(1));
+
+        let mixer = app.add_model(|_| CommandSearchMixer::new());
+        mixer.update(&mut app, |mixer, ctx| {
+            mixer.add_async_source(
+                history_data_source(vec![old_entry]),
+                HashSet::from([QueryFilter::History]),
+                AddAsyncSourceOptions {
+                    debounce_interval: None,
+                    run_in_zero_state: false,
+                    run_when_unfiltered: true,
+                },
+                ctx,
+            );
+            mixer.run_query("git status".into(), ctx);
+        });
+
+        assert_eventually!(
+            app.read(|app| !mixer.as_ref(app).is_loading()),
+            "the query should finish loading"
+        );
+
+        app.read(|app| {
+            let results = mixer.as_ref(app).results();
+            assert_eq!(results.len(), 1);
+            assert_eq!(
+                results[0].score(),
+                OrderedFloat(raw_score as f64),
+                "the legacy path's score must be exactly the raw Skim score"
             );
         });
     });
