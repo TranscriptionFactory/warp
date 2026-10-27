@@ -141,7 +141,13 @@ impl ConvertAPIMessageToClientOutputMessage for api::Message {
                     ),
                 ))
             }
-            api::message::Message::ToolCall(tool_call) => match tool_call.to_action(params)? {
+            api::message::Message::ToolCall(tool_call) => match run_agents_carrier_action(
+                &tool_call,
+                &self.server_message_data,
+                &params,
+            )
+            .map_or_else(|| tool_call.to_action(params), Ok)?
+            {
                 MaybeAIAgentAction::Action(action) => Ok(MaybeAIAgentOutputMessage::Message(
                     AIAgentOutputMessage::action(MessageId::new(self.id), action)
                         .with_citations(citations),
@@ -522,6 +528,30 @@ impl From<api::message::AgentReasoning> for AIAgentText {
     }
 }
 
+/// Zap BYOP fork-local `run_agents`: a tool=None carrier whose
+/// `server_message_data` is `run_agents\n<args>` becomes a `RunAgents` action.
+/// Returns `None` for every other ToolCall. Unparseable args map to
+/// `NoClientRepresentation` (chat_stream already emitted an error result).
+fn run_agents_carrier_action(
+    tool_call: &api::message::ToolCall,
+    server_message_data: &str,
+    params: &ConversionParams,
+) -> Option<MaybeAIAgentAction> {
+    if tool_call.tool.is_some() {
+        return None;
+    }
+    let request = crate::ai::agent_providers::tools::run_agents::parse_carrier(server_message_data)?;
+    Some(match request {
+        Ok(request) => MaybeAIAgentAction::Action(AIAgentAction {
+            id: tool_call.tool_call_id.clone().into(),
+            task_id: params.task_id.clone(),
+            action: AIAgentActionType::RunAgents(Box::new(request)),
+            requires_result: true,
+        }),
+        Err(_) => MaybeAIAgentAction::NoClientRepresentation,
+    })
+}
+
 /// Trait for converting an [`api::Message`] to an [`AIAgentOutputMessage`].
 trait ConvertAPIToolCallToAIAgentAction {
     fn to_action(
@@ -823,3 +853,7 @@ fn convert_api_question(
         },
     })
 }
+
+#[cfg(test)]
+#[path = "convert_from_tests.rs"]
+mod tests;

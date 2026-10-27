@@ -28,6 +28,7 @@ pub mod files;
 pub mod long_shell;
 pub mod markers;
 pub mod mcp;
+pub mod run_agents;
 pub mod search;
 pub mod shell;
 pub mod skill;
@@ -41,7 +42,7 @@ use anyhow::Result;
 use serde_json::Value;
 use warp_multi_agent_api as api;
 
-use crate::ai::agent::AIAgentActionResult;
+use crate::ai::agent::{AIAgentActionResult, AIAgentActionResultType};
 
 /// 一条 tool 的双向适配描述。
 ///
@@ -100,6 +101,9 @@ pub const REGISTRY: &[&OpenAiTool] = &[
     // gating:profile.web_search_enabled=false 时,build_tools_array 会过滤掉。
     &webfetch::WEBFETCH,
     &websearch::WEBSEARCH,
+    // Fork-local orchestration:chat_stream 拦截为 carrier,convert_from 转成
+    // `AIAgentActionType::RunAgents` 走 executor。gating 见 `run_agents::is_enabled`。
+    &run_agents::RUN_AGENTS,
 ];
 
 /// 按 OpenAI function name 反查注册表。
@@ -153,6 +157,10 @@ pub fn serialize_result(result: &api::message::ToolCallResult) -> String {
 /// 新增 BYOP tool 时,**这里的 enum match 必须同步加 variant**,否则该 tool 的
 /// 当前轮 ActionResult 会 fallback 到 Display,丢失结构化字段。
 pub fn serialize_action_result(action: &AIAgentActionResult) -> Option<String> {
+    // Fork-local result without a proto variant: serialize directly.
+    if let AIAgentActionResultType::RunAgents(result) = &action.result {
+        return Some(run_agents::result_to_json(result).to_string());
+    }
     let msg_side = action_result_to_msg_result(action)?;
     for t in REGISTRY {
         if let Some(json) = (t.result_to_json)(&msg_side) {

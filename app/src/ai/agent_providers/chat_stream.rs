@@ -2658,6 +2658,7 @@ const PLAN_MODE_BLOCKED_TOOLS: &[&str] = &[
     "open_code_review",
     "transfer_shell_command_control_to_user",
     "suggest_prompt",
+    "run_agents",
 ];
 
 /// 列出本轮真正会喂给上游模型的 tool name(内置 REGISTRY + 当前 MCP 工具),
@@ -2680,6 +2681,9 @@ pub fn available_tool_names(params: &RequestParams) -> Vec<String> {
                 return false;
             }
             if t.name == "suggest_new_conversation" {
+                return false;
+            }
+            if t.name == tools::run_agents::TOOL_NAME && !tools::run_agents::is_enabled() {
                 return false;
             }
             if plan_mode && PLAN_MODE_BLOCKED_TOOLS.contains(&t.name) {
@@ -2742,6 +2746,9 @@ fn build_tools_array(params: &RequestParams) -> Vec<GenaiTool> {
             // fast-fail Cancelled。这里 filter 掉避免模型调用产生无意义的
             // tool_call→cancelled 往返(纯 token 浪费)。
             if t.name == "suggest_new_conversation" {
+                return false;
+            }
+            if t.name == tools::run_agents::TOOL_NAME && !tools::run_agents::is_enabled() {
                 return false;
             }
             // Plan Mode:`/plan` 触发的只读模式硬护栏,移除写/执行类工具。
@@ -3957,6 +3964,7 @@ pub async fn generate_byop_output(
                     if call.fn_name != tools::webfetch::TOOL_NAME
                         && call.fn_name != tools::websearch::TOOL_NAME
                         && call.fn_name != tools::todowrite::TOOL_NAME
+                        && call.fn_name != tools::run_agents::TOOL_NAME
                     {
                         if let Some(msg_id) = tool_msg_ids.get(&call.call_id).cloned() {
                             // 已 emit 占位 → 节流增量刷新。
@@ -4436,6 +4444,40 @@ pub async fn generate_byop_output(
                     call.call_id.clone(),
                     result_content,
                 ));
+                continue;
+            }
+
+            // Fork-local run_agents:没有 proto variant,只 emit carrier ToolCall
+            // (`run_agents\n<args>`),由 convert_from 转成 `AIAgentActionType::RunAgents`
+            // 走 executor;result 由 action 流程回写,这里不合成 ToolCallResult。
+            // args 非法时跟 from_args 失败一样补一条 error tool_result。
+            if call.fn_name == tools::run_agents::TOOL_NAME {
+                let args_str = if call.fn_arguments.is_string() {
+                    call.fn_arguments.as_str().unwrap_or("").to_owned()
+                } else {
+                    call.fn_arguments.to_string()
+                };
+                final_messages.push(make_tool_call_carrier_message(
+                    &current_task_id,
+                    &request_id,
+                    &call.call_id,
+                    &call.fn_name,
+                    &args_str,
+                ));
+                if let Err(e) = tools::run_agents::parse_args(&args_str) {
+                    log::warn!(
+                        "[byop] run_agents args parse failed: call_id={} err={e:#}",
+                        call.call_id
+                    );
+                    let error_payload =
+                        tools::run_agents::invalid_arguments_result_to_json(e.to_string(), &args_str);
+                    final_messages.push(make_tool_call_result_message(
+                        &current_task_id,
+                        &request_id,
+                        call.call_id.clone(),
+                        error_payload.to_string(),
+                    ));
+                }
                 continue;
             }
 
