@@ -951,6 +951,16 @@ fn handle_terminal_view_event(
                     log::warn!("No hidden pane found for child conversation {conversation_id:?}");
                 }
             }
+            Event::StartAgentConversation { request, executor } => {
+                super::local_child_launch::dispatch_start_agent_conversation(
+                    group,
+                    pane_id,
+                    terminal_pane_id,
+                    request.clone(),
+                    executor.clone(),
+                    ctx,
+                );
+            }
             _ => {}
         }
     } else {

@@ -20,6 +20,7 @@ pub(super) mod file_pane;
 pub(super) mod get_started_pane;
 pub(super) mod get_started_view;
 pub(super) mod image_pane;
+pub(super) mod local_child_launch;
 #[cfg(not(target_family = "wasm"))]
 pub(super) mod local_harness_launch;
 pub(super) mod notebook_pane;

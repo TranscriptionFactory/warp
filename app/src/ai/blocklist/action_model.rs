@@ -62,7 +62,11 @@ use crate::{
 use self::execute::{
     ask_user_question::AskUserQuestionExecutor, BlocklistAIActionExecutor,
     BlocklistAIActionExecutorEvent, NotExecutedReason, RunAgentsExecutor, RunningActionPhase,
-    StartAgentExecutor, TryExecuteResult,
+    TryExecuteResult,
+};
+pub(crate) use self::execute::{
+    StartAgentExecutionMode, StartAgentExecutor, StartAgentExecutorEvent, StartAgentOutcome,
+    StartAgentRequest,
 };
 
 use super::BlocklistAIHistoryModel;

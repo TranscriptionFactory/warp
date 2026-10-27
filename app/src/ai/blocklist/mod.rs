@@ -40,6 +40,8 @@ pub(crate) use action_model::{
     apply_edits, read_local_file_context, BlocklistAIActionEvent, BlocklistAIActionModel,
     FileReadResult, PromptSuggestionExecutor, PromptSuggestionExecutorEvent, ReadFileContextResult,
     RequestFileEditsFormatKind, ShellCommandExecutor, ShellCommandExecutorEvent,
+    StartAgentExecutionMode, StartAgentExecutor, StartAgentExecutorEvent, StartAgentOutcome,
+    StartAgentRequest,
 };
 
 #[cfg(any(test, feature = "integration_tests"))]

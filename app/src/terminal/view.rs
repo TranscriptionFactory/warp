@@ -203,8 +203,8 @@ use crate::ai::{
         LegacyPassiveSuggestionsEvent, LegacyPassiveSuggestionsModel, MaaPassiveSuggestionsEvent,
         MaaPassiveSuggestionsModel, PassiveSuggestionsModels, PendingQueryState,
         PromptSuggestionExecutor, PromptSuggestionExecutorEvent, RequestFileEditsFormatKind,
-        ShellCommandExecutor, ShellCommandExecutorEvent, ATTACH_AS_AGENT_MODE_CONTEXT_TEXT,
-        PRE_REWIND_PREFIX,
+        ShellCommandExecutor, ShellCommandExecutorEvent, StartAgentExecutor, StartAgentExecutorEvent,
+        StartAgentRequest, ATTACH_AS_AGENT_MODE_CONTEXT_TEXT, PRE_REWIND_PREFIX,
     },
     execution_profiles::profiles::{AIExecutionProfilesModel, ClientProfileId},
 };
@@ -1894,6 +1894,12 @@ pub enum Event {
     /// its hidden pane.
     RevealChildAgent {
         conversation_id: AIConversationId,
+    },
+    /// A `run_agents` child to launch locally in a hidden child pane. The pane
+    /// group reports the launch outcome through `executor`.
+    StartAgentConversation {
+        request: StartAgentRequest,
+        executor: ModelHandle<StartAgentExecutor>,
     },
 }
 
@@ -3602,6 +3608,10 @@ impl TerminalView {
         ctx.subscribe_to_model(
             &ai_action_model.as_ref(ctx).shell_command_executor(ctx),
             Self::handle_shell_command_executor_event,
+        );
+        ctx.subscribe_to_model(
+            &ai_action_model.as_ref(ctx).start_agent_executor(ctx),
+            Self::handle_start_agent_executor_event,
         );
         // Zap BYOP:订阅 suggest_prompt 工具的 chip event,把模型主动建议的 prompt
         // 渲染成 input 上方的 chip。原版 emit 被 PromptSuggestionsViaMAA cargo feature
@@ -6199,6 +6209,22 @@ impl TerminalView {
                 DiffMode::from_branch(branch, main_branch.as_deref())
             }
             None => DiffMode::MainBranch,
+        }
+    }
+
+    fn handle_start_agent_executor_event(
+        &mut self,
+        executor: ModelHandle<StartAgentExecutor>,
+        event: &StartAgentExecutorEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        match event {
+            StartAgentExecutorEvent::CreateAgent(request) => {
+                ctx.emit(Event::StartAgentConversation {
+                    request: request.as_ref().clone(),
+                    executor,
+                });
+            }
         }
     }
 
