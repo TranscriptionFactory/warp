@@ -32,12 +32,16 @@ fn normalize_local_child_harness_accepts_supported_aliases() {
         normalize_local_child_harness("open_code"),
         Some(Harness::OpenCode)
     );
+    assert_eq!(
+        normalize_local_child_harness("codex"),
+        Some(Harness::Codex)
+    );
 }
 
 #[test]
 fn normalize_local_child_harness_rejects_unsupported_values() {
     assert_eq!(normalize_local_child_harness("oz"), None);
-    assert_eq!(normalize_local_child_harness("codex"), None);
+    assert_eq!(normalize_local_child_harness("gemini"), None);
     assert_eq!(normalize_local_child_harness(""), None);
 }
 

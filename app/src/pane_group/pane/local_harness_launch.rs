@@ -56,9 +56,16 @@ pub(super) fn build_local_opencode_child_command(prompt: &str) -> String {
     format!("opencode --prompt {quoted_prompt}")
 }
 
+pub(super) fn build_local_codex_child_command(prompt: &str) -> String {
+    let quoted_prompt = shell_quote(prompt);
+    format!("codex {quoted_prompt}")
+}
+
 fn local_child_task_config(harness: Harness) -> Option<AgentConfigSnapshot> {
     match harness {
-        Harness::Oz | Harness::OpenCode | Harness::Gemini | Harness::Unknown => None,
+        Harness::Oz | Harness::OpenCode | Harness::Gemini | Harness::Codex | Harness::Unknown => {
+            None
+        }
         Harness::Claude => Some(AgentConfigSnapshot {
             harness: Some(HarnessConfig::from_harness_type(harness)),
             ..Default::default()
@@ -115,6 +122,11 @@ pub(super) async fn prepare_local_harness_child_launch(
             validate_cli_installed("opencode", Some("https://opencode.ai/docs"))
                 .map_err(|error: AgentDriverError| error.to_string())?;
             build_local_opencode_child_command(&prompt)
+        }
+        Harness::Codex => {
+            validate_cli_installed("codex", Some("https://github.com/openai/codex"))
+                .map_err(|error: AgentDriverError| error.to_string())?;
+            build_local_codex_child_command(&prompt)
         }
         Harness::Gemini => unreachable!("normalize_local_child_harness filters out Gemini"),
     };

@@ -120,6 +120,7 @@ pub(crate) fn harness_kind(harness: Harness) -> Result<HarnessKind, AgentDriverE
         Harness::Claude => Ok(HarnessKind::ThirdParty(Box::new(ClaudeHarness))),
         Harness::OpenCode => Ok(HarnessKind::Unsupported(Harness::OpenCode)),
         Harness::Gemini => Ok(HarnessKind::ThirdParty(Box::new(GeminiHarness))),
+        Harness::Codex => Ok(HarnessKind::Unsupported(Harness::Codex)),
         Harness::Unknown => Err(AgentDriverError::InvalidRuntimeState),
     }
 }
