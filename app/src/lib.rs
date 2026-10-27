@@ -2670,6 +2670,14 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::WaitForEventsParentRegistration,
         #[cfg(feature = "osc_hyperlinks")]
         FeatureFlag::OscHyperlinks,
+        #[cfg(feature = "box_drawing_glyphs")]
+        FeatureFlag::BoxDrawingGlyphs,
+        #[cfg(feature = "history_search_ranking_v2")]
+        FeatureFlag::HistorySearchRankingV2,
+        #[cfg(feature = "async_find")]
+        FeatureFlag::AsyncFind,
+        #[cfg(feature = "terminal_lifecycle_recovery")]
+        FeatureFlag::TerminalLifecycleRecovery,
     ];
     flags.extend(extra_flags.iter().copied());
 

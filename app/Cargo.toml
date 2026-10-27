@@ -580,6 +580,10 @@ default = [
     "directory_tab_colors",
     "configurable_context_window",
     "osc_hyperlinks",
+    "box_drawing_glyphs",
+    "history_search_ranking_v2",
+    "async_find",
+    "terminal_lifecycle_recovery",
 ]
 # Enable this feature to automatically perform heap profiling.  NOTE: This will
 # substantially slow down program execution.
@@ -846,6 +850,10 @@ orchestration_launch_modal = []
 local_claude_codex_child_harnesses = []
 wait_for_events_parent_registration = []
 osc_hyperlinks = []
+box_drawing_glyphs = []
+history_search_ranking_v2 = []
+async_find = []
+terminal_lifecycle_recovery = []
 
 [package.metadata.bundle.bin.openwarp-oss]
 category = "public.app-category.developer-tools"

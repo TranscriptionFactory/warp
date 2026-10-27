@@ -729,6 +729,22 @@ pub enum FeatureFlag {
     /// one `include_self` ancestor SSE per parent family, and a single
     /// `is_remote_child` placeholder flavor for both owner and viewer.
     OrchestrationUnifiedStack,
+
+    /// Renders supported solid box-drawing characters (`U+2500..=U+257F`)
+    /// procedurally as cell-filling rectangles instead of from the font,
+    /// eliminating seams between adjacent box-drawing cells in the terminal.
+    BoxDrawingGlyphs,
+
+    /// Ranks command history search results by recency, frequency, and context (directory,
+    /// session, exit status) plus whitespace space-AND tokenization, instead of Skim's raw
+    /// fuzzy-match score against the whole query as a single pattern.
+    HistorySearchRankingV2,
+
+    /// Enables asynchronous find in terminal, running search on a background thread.
+    AsyncFind,
+
+    /// Enables state-mutating recovery for abnormal terminal lifecycle sequences.
+    TerminalLifecycleRecovery,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
@@ -795,6 +811,10 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::WaitForEventsParentRegistration,
     FeatureFlag::MultiLevelOrchestration,
     FeatureFlag::OrchestrationUnifiedStack,
+    FeatureFlag::BoxDrawingGlyphs,
+    FeatureFlag::HistorySearchRankingV2,
+    FeatureFlag::AsyncFind,
+    FeatureFlag::TerminalLifecycleRecovery,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Zap).
