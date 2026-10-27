@@ -52,6 +52,7 @@ use super::grid::grid_handler::{FragmentBoundary, GridHandler, PossiblePath};
 use super::grid::RespectDisplayedOutput;
 use super::image_map::StoredImageMetadata;
 use super::kitty::{KittyAction, KittyResponse};
+use super::lifecycle::NextBlockIdDisposition;
 use super::rich_content::RichContentType;
 use super::secrets::RespectObfuscatedSecrets;
 use super::{ansi::InputBufferValue, block::SerializedAIMetadata};
@@ -241,12 +242,6 @@ pub struct CachedPromptData {
     pub rprompt_grid: BlockGrid,
     /// The time at which the block containing these prompts was created.
     pub block_creation_time: DateTime<Local>,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum NextBlockIdDisposition {
-    Novel,
-    ActiveDuplicate,
-    ExistingCollision,
 }
 
 /// Data about a particular scroll position relative to a block.

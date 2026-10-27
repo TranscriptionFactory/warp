@@ -34,6 +34,7 @@ pub mod kitty;
 #[cfg(test)]
 #[path = "kitty_test.rs"]
 mod kitty_test;
+pub(in crate::terminal) mod lifecycle;
 pub mod secrets;
 pub mod selection;
 pub mod session;
@@ -41,6 +42,7 @@ pub mod terminal_model;
 #[cfg(test)]
 pub mod test_utils;
 
+pub use lifecycle::{LifecycleRecoveryRecord, StartCommandOutcome};
 pub use secrets::{
     set_user_and_enterprise_secret_regexes, ObfuscateSecrets, RespectObfuscatedSecrets, Secret,
     SecretHandle,
