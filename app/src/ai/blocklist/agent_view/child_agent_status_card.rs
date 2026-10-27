@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use warpui::elements::{Element, Empty, Flex, MouseStateHandle, ParentElement};
+use warpui::elements::{
+    ClippedScrollStateHandle, Element, Empty, Flex, MouseStateHandle, ParentElement,
+};
 use warpui::platform::Cursor;
 use warpui::prelude::Container;
 use warpui::ui_components::components::UiComponent;
@@ -8,15 +10,19 @@ use warpui::{
     AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
 };
 
-use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
+use super::orchestration_pill_bar;
+use crate::BlocklistAIHistoryModel;
 use crate::ai::agent::AIAgentOutputMessageType;
+use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
+use crate::ai::blocklist::BlocklistAIHistoryEvent;
 use crate::ai::blocklist::agent_view::conversation_navigation_links::conversation_navigation_card_with_icon;
 use crate::ai::blocklist::agent_view::{AgentViewController, AgentViewControllerEvent};
-use crate::ai::blocklist::BlocklistAIHistoryEvent;
+use crate::ai::blocklist::orchestration_event_streamer::{
+    OrchestrationEventStreamer, OrchestrationEventStreamerEvent,
+};
 use crate::appearance::Appearance;
 use crate::terminal::view::TerminalAction;
 use crate::ui_components::buttons::close_button;
-use crate::BlocklistAIHistoryModel;
 
 #[derive(Debug, Clone)]
 pub enum ChildAgentStatusCardAction {
@@ -35,6 +41,7 @@ pub struct ChildAgentStatusCard {
     dismiss_mouse_states: HashMap<AIConversationId, MouseStateHandle>,
     dismissed: HashSet<AIConversationId>,
     previous_statuses: HashMap<AIConversationId, ConversationStatus>,
+    pill_scroll_state: ClippedScrollStateHandle,
 }
 
 impl Entity for ChildAgentStatusCard {
@@ -57,7 +64,8 @@ impl ChildAgentStatusCard {
                 this.ensure_mouse_states(ctx);
                 ctx.notify();
             }
-            BlocklistAIHistoryEvent::AppendedExchange { .. }
+            BlocklistAIHistoryEvent::StartedNewConversation { .. }
+            | BlocklistAIHistoryEvent::AppendedExchange { .. }
             | BlocklistAIHistoryEvent::SetActiveConversation { .. } => {
                 this.ensure_mouse_states(ctx);
                 ctx.notify();
@@ -73,6 +81,37 @@ impl ChildAgentStatusCard {
             }
             _ => {}
         });
+        if orchestration_pill_bar::enabled() {
+            let streamer = OrchestrationEventStreamer::handle(ctx);
+            ctx.subscribe_to_model(&streamer, |this, streamer, event, ctx| {
+                let parent_task_id = match event {
+                    OrchestrationEventStreamerEvent::ChildSpawned { parent_task_id, .. }
+                    | OrchestrationEventStreamerEvent::ChildStatusChanged {
+                        parent_task_id, ..
+                    } => parent_task_id,
+                    _ => return,
+                };
+                let Some(active) = this
+                    .agent_view_controller
+                    .as_ref(ctx)
+                    .agent_view_state()
+                    .active_conversation_id()
+                else {
+                    return;
+                };
+                let ids = orchestration_pill_bar::conversation_ids(
+                    active,
+                    BlocklistAIHistoryModel::as_ref(ctx),
+                );
+                if ids.into_iter().any(|id| {
+                    streamer.as_ref(ctx).local_child_parent_task_id(id).as_ref()
+                        == Some(parent_task_id)
+                }) {
+                    this.ensure_mouse_states(ctx);
+                    ctx.notify();
+                }
+            });
+        }
         ctx.subscribe_to_model(&agent_view_controller, |this, _, event, ctx| {
             // Reset all per-child state when entering a conversation so stale
             // entries from a previous conversation's children don't accumulate.
@@ -92,6 +131,7 @@ impl ChildAgentStatusCard {
             dismiss_mouse_states: HashMap::new(),
             dismissed: HashSet::new(),
             previous_statuses: HashMap::new(),
+            pill_scroll_state: ClippedScrollStateHandle::default(),
         }
     }
 
@@ -104,6 +144,13 @@ impl ChildAgentStatusCard {
             return;
         };
         let history_model = BlocklistAIHistoryModel::as_ref(ctx);
+        if orchestration_pill_bar::enabled() {
+            for id in
+                orchestration_pill_bar::conversation_ids(active_conversation_id, history_model)
+            {
+                self.mouse_states.entry(id).or_default();
+            }
+        }
         for child in history_model.child_conversations_of(active_conversation_id) {
             let child_id = child.id();
             self.mouse_states.entry(child_id).or_default();
@@ -176,8 +223,15 @@ impl View for ChildAgentStatusCard {
         };
 
         let history_model = BlocklistAIHistoryModel::as_ref(app);
+        let show_pills = orchestration_pill_bar::enabled()
+            && orchestration_pill_bar::conversation_ids(active_conversation_id, history_model)
+                .len()
+                > 1;
         let mut children = history_model.child_conversations_of(active_conversation_id);
-        if children.is_empty() {
+        if show_pills {
+            children.retain(|child| child.is_remote_child() || child.is_viewing_shared_session());
+        }
+        if children.is_empty() && !show_pills {
             return Empty::new().finish();
         }
 
@@ -186,6 +240,14 @@ impl View for ChildAgentStatusCard {
 
         let appearance = Appearance::as_ref(app);
         let mut column = Flex::column();
+        if show_pills {
+            column.add_child(orchestration_pill_bar::render(
+                active_conversation_id,
+                &self.mouse_states,
+                self.pill_scroll_state.clone(),
+                app,
+            ));
+        }
 
         for child in &children {
             let conversation_id = child.id();
