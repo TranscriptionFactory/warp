@@ -16,6 +16,8 @@ pub(crate) mod orchestration_event_streamer;
 pub(crate) mod orchestration_events;
 #[allow(dead_code)]
 pub(crate) mod orchestration_topology;
+// Local (M2) child-status feed into `OrchestrationChildTracker`.
+pub(crate) mod orchestration_local_feed;
 mod passive_suggestions;
 pub(super) use controller::RequestInput;
 pub mod history_model;
