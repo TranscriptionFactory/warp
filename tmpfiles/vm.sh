@@ -7,6 +7,10 @@
 #
 # The Mac checkout is the source of truth; the VM copy is a build mirror
 # (`--delete`, excluding build outputs), so never edit files on the VM.
+#
+# Set WARP_VM_TARGET=<name> to build in a private ~/warp-targets/<name> on the VM
+# (seeded from the shared target/ on first use), so parallel workers don't queue
+# on one cargo lock.
 set -euo pipefail
 
 INSTANCE=${WARP_VM_INSTANCE:-warp-dev}
@@ -28,13 +32,21 @@ vm_ssh() { ssh "${ssh_opts[@]}" "$user@$ip" "$@"; }
 vm_sync() {
   vm_ssh "mkdir -p $REMOTE_DIR"
   rsync -az --delete -e "ssh ${ssh_opts[*]}" \
-    --exclude /target/ --exclude node_modules/ --exclude /.tmpfiles/ \
+    --exclude /.git/ --exclude /target/ --exclude node_modules/ --exclude /.tmpfiles/ \
+    --exclude /.agent-handoff/ \
     "$repo/" "$user@$ip:$REMOTE_DIR/"
 }
 
 case "${1:-}" in
   sync) vm_sync ;;
-  run) shift; vm_sync; vm_ssh -t "cd $REMOTE_DIR && source ~/.cargo/env 2>/dev/null; $*" ;;
+  run)
+    shift; vm_sync
+    target_env=""
+    if [[ -n "${WARP_VM_TARGET:-}" ]]; then
+      t="warp-targets/$WARP_VM_TARGET"
+      target_env="mkdir -p warp-targets; [ -d $t ] || cp -a $REMOTE_DIR/target $t; export CARGO_TARGET_DIR=\$HOME/$t;"
+    fi
+    vm_ssh -t "$target_env cd $REMOTE_DIR && source ~/.cargo/env 2>/dev/null; $*" ;;
   ssh) shift; if (($#)); then vm_ssh "source ~/.cargo/env 2>/dev/null; $*"; else vm_ssh -t; fi ;;
   *) sed -n '2,9p' "$0"; exit 1 ;;
 esac
