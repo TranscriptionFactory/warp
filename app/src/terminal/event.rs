@@ -148,6 +148,10 @@ pub enum Event {
         image_id: u32,
         frames: Vec<(Vec<u8>, u32)>,
     },
+    /// The model forgot these images' data, so their decoded assets can go.
+    ImagesFreed {
+        image_ids: Vec<u32>,
+    },
     BootstrapPrecmdDone,
     /// A pluggable notification triggered via OSC 9 or OSC 777 escape sequences.
     /// External programs can use this to trigger notifications in Zap.
@@ -497,6 +501,9 @@ impl Debug for Event {
                     "AnimatedImageReceived(image_id: {image_id}, frames: {})",
                     frames.len()
                 )
+            }
+            Event::ImagesFreed { image_ids } => {
+                write!(f, "ImagesFreed({} images)", image_ids.len())
             }
             Event::BootstrapPrecmdDone => write!(f, "BootstrapPrecmdDone"),
             Event::PluggableNotification { title, body } => {

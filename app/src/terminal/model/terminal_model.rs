@@ -1722,6 +1722,20 @@ impl TerminalModel {
         self.image_id_to_metadata.remove(&image_id);
     }
 
+    /// Forgets the stored data of the given images and tells the view to drop
+    /// their decoded assets, which would otherwise outlive the images. Clients
+    /// such as zellij transmit and free thousands of images per redraw.
+    fn free_image_data(&mut self, image_ids: impl IntoIterator<Item = u32>) {
+        let image_ids: Vec<u32> = image_ids
+            .into_iter()
+            .filter(|image_id| self.image_id_to_metadata.remove(image_id).is_some())
+            .collect();
+
+        if !image_ids.is_empty() {
+            self.event_proxy.send_terminal_event(Event::ImagesFreed { image_ids });
+        }
+    }
+
     /// Runs `evict` against every grid that can hold images: the alternate screen
     /// while it is active, otherwise every block's grid.
     fn for_each_image_grid(&mut self, mut evict: impl FnMut(&mut GridHandler)) {
@@ -1745,7 +1759,7 @@ impl TerminalModel {
         if delete_image_data {
             // Freeing the image data frees every placement of the image: one
             // left in a grid would draw nothing once the metadata is gone.
-            self.image_id_to_metadata.remove(&image_id);
+            self.free_image_data([image_id]);
             self.for_each_image_grid(|grid| grid.evict_image(image_id));
             return;
         }
@@ -4010,7 +4024,9 @@ impl ansi::Handler for TerminalModel {
                         match deletion_type {
                             DeletionType::All => {
                                 if delete_image_data {
-                                    self.image_id_to_metadata.clear();
+                                    let image_ids: Vec<u32> =
+                                        self.image_id_to_metadata.keys().copied().collect();
+                                    self.free_image_data(image_ids);
                                 } else {
                                     // `d=a` removes placements only, and virtual
                                     // (`U=1`) placements live in the metadata
@@ -4055,8 +4071,13 @@ impl ansi::Handler for TerminalModel {
                                 let range = *start..=*end;
 
                                 if delete_image_data {
-                                    self.image_id_to_metadata
-                                        .retain(|image_id, _| !range.contains(image_id));
+                                    let image_ids: Vec<u32> = self
+                                        .image_id_to_metadata
+                                        .keys()
+                                        .copied()
+                                        .filter(|image_id| range.contains(image_id))
+                                        .collect();
+                                    self.free_image_data(image_ids);
                                 }
 
                                 self.for_each_image_grid(|grid| {
@@ -4086,12 +4107,12 @@ impl ansi::Handler for TerminalModel {
                                 }
 
                                 if delete_image_data {
-                                    for image_id in affected {
+                                    for &image_id in &affected {
                                         // Freeing an image frees every placement
                                         // of it, not just the matched ones.
-                                        self.image_id_to_metadata.remove(&image_id);
                                         self.for_each_image_grid(|grid| grid.evict_image(image_id));
                                     }
+                                    self.free_image_data(affected);
                                 }
                             }
                             // The positional specifiers need a cursor and cell

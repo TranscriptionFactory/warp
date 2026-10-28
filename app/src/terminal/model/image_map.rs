@@ -56,6 +56,18 @@ impl ImageMap {
         image_type: ImageType,
         num_lines_truncated: u64,
     ) {
+        // Kitty replaces a placement that is placed again under the same ids,
+        // which moves it. Leaving it indexed at its old anchor would draw a
+        // stale copy there that no delete can reach.
+        if let Some(old_point) = self.point_by_image_id.get(&(image_id, placement_id)) {
+            if let Some(image_ids) = self.image_ids_by_point.get_mut(old_point) {
+                image_ids.remove(&(image_id, placement_id));
+                if image_ids.is_empty() {
+                    self.image_ids_by_point.remove(old_point);
+                }
+            }
+        }
+
         self.image_ids_by_point
             .entry(primary_point)
             .or_default()
@@ -283,6 +295,20 @@ impl ImageMap {
             .collect();
 
         self.evict_placements(&orphaned);
+    }
+
+    /// Removes every kitty placement that overlaps the given rows.
+    pub fn evict_kitty_placements_in_rows(&mut self, rows: AbsoluteRectangle) {
+        let placements: Vec<(u32, u32)> = self
+            .get_image_ids_by_rectangle(rows)
+            .into_iter()
+            .map(|placement| (placement.image_id, placement.placement_id))
+            .filter(|(image_id, _)| {
+                self.image_type_by_image_id.get(image_id) == Some(&ImageType::Kitty)
+            })
+            .collect();
+
+        self.evict_placements(&placements);
     }
 
     /// Every placement in the map, paired with its anchor cell and its geometry.

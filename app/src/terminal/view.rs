@@ -11111,6 +11111,13 @@ impl TerminalView {
                 });
                 ctx.notify();
             }
+            ModelEvent::ImagesFreed { image_ids } => {
+                AssetCache::handle(ctx).update(ctx, |asset_cache, ctx| {
+                    for image_id in image_ids {
+                        asset_cache.remove_raw_asset::<ImageType>(image_id.to_string(), ctx);
+                    }
+                });
+            }
             ModelEvent::BootstrapPrecmdDone => {
                 self.execute_pending_command((), ctx);
             }

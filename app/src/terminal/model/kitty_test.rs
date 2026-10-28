@@ -831,3 +831,35 @@ fn image_sized_to_reported_cells_fills_fractional_cells() {
     assert_eq!(placement.width_cells, 1);
     assert_eq!(placement.image_size, vec2f(8., 17.25));
 }
+
+#[test]
+fn placing_same_ids_again_moves_the_placement() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+
+    let mut terminal = kitty_terminal();
+    place_image(&mut terminal, "i=1,p=1");
+    terminal.process_bytes("\r\n  ");
+    let new_anchor = cursor_point(&terminal);
+    // TUIs such as omp re-place an image under the same ids as it scrolls.
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1", &[]).as_str());
+
+    let placements = terminal
+        .block_list()
+        .active_block()
+        .grid_handler()
+        .get_image_ids_in_range(0, 9);
+    assert_eq!(placements.len(), 1);
+    assert_eq!(placements[0].top_left, new_anchor);
+}
+
+#[test]
+fn erasing_the_screen_removes_kitty_placements() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+
+    // zellij erases the screen instead of deleting a frame's images.
+    let mut terminal = terminal_with_two_placements();
+    terminal.process_bytes("\x1b[2J");
+
+    assert!(!has_placement(&terminal, 1, 1));
+    assert!(!has_placement(&terminal, 2, 2));
+}

@@ -45,7 +45,7 @@ use crate::terminal::model::selection::ScrollDelta;
 use crate::terminal::model::ObfuscateSecrets;
 use crate::terminal::{ClipboardType, SizeInfo};
 
-use super::{AbsolutePoint, GridHandler, PerformResetGridChecks, TermMode};
+use super::{AbsolutePoint, AbsoluteRectangle, GridHandler, PerformResetGridChecks, TermMode};
 
 use tab_stops::TabStops;
 
@@ -855,6 +855,9 @@ impl ansi::Handler for GridHandler {
                 }
             }
             ansi::ClearMode::All => {
+                // Kitty erases the image placements on screen along with the
+                // text; zellij relies on this to drop a frame's images.
+                self.evict_kitty_placements_on_screen();
                 if self.ansi_handler_state.is_alt_screen {
                     self.grid.region_mut(..).each(|cell| *cell = bg.into());
                 } else {
@@ -862,12 +865,15 @@ impl ansi::Handler for GridHandler {
                     self.active_hyperlink_id = None;
                 }
             }
-            ansi::ClearMode::Saved if self.history_size() > 0 => {
-                self.flat_storage.clear();
-                self.grid.clear_history();
+            ansi::ClearMode::Saved => {
+                // Kitty erases every image placement, on screen or in
+                // scrollback, along with the scrollback.
+                self.images.evict_images_absent_from(&HashSet::new());
+                if self.history_size() > 0 {
+                    self.flat_storage.clear();
+                    self.grid.clear_history();
+                }
             }
-            // We have no history to clear.
-            ansi::ClearMode::Saved => (),
             ansi::ClearMode::ResetAndClear | ansi::ClearMode::ActiveBlock => {
                 self.flat_storage.clear();
                 self.grid.clear_and_reset_saving_cursor_line();
@@ -1813,6 +1819,16 @@ impl GridHandler {
     /// Removes every placement of an image that is not in `live`.
     pub fn evict_images_absent_from(&mut self, live: &HashSet<u32>) {
         self.images.evict_images_absent_from(live);
+    }
+
+    /// Removes the kitty placements that show on the visible screen.
+    fn evict_kitty_placements_on_screen(&mut self) {
+        let first_row = self.history_size();
+        let last_row = first_row + self.visible_rows().saturating_sub(1);
+        self.images.evict_kitty_placements_in_rows(AbsoluteRectangle {
+            start_row: AbsolutePoint::from_point(Point::new(first_row, 0), self).row,
+            end_row: AbsolutePoint::from_point(Point::new(last_row, 0), self).row,
+        });
     }
 
     fn handle_completed_kitty_action_internal(
