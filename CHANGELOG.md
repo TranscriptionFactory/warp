@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [v2026.10.28.1] — 2026-10-28
+
+- **Kitty images under zellij and redrawing TUIs**: Erasing the screen now removes kitty image placements, as kitty does, so yazi previews in zellij no longer leave stale, shrunken copies after a resize or pane change. Re-placing an image under the same ids moves it instead of leaving a copy behind, which fixes duplicated images when scrolling omp output. Freed images now leave the image cache, which stops zellij's per-cell images from slowing Warp until it freezes.
+
 ## [v2026.10.26.1] — 2026-10-26
 
 - **Local multi-agent orchestration**: BYOP agents can launch local Warp, Claude Code, Codex, and OpenCode children in hidden panes. Added a Run/Cancel confirmation card, installed-harness selection, live child statuses, and pill navigation. Warp children honor their requested model or inherit the parent's pane model without changing global preferences; CLI model overrides remain unsupported.
