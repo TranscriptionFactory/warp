@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v2026.10.30.1] — 2026-10-30
+
+- **OpenWarp branding everywhere**: Banners, menus, onboarding, settings descriptions, error messages and AI prompts that still said "Zap" now say OpenWarp, matching the translated strings. The settings page also accepts the "OpenWarp Drive" and "OpenWarp Agent" section names it displays.
+- **macOS Dock tile plugin now loads**: Its `Info.plist` named a class that didn't exist, so macOS never loaded the plugin. The plugin is now `OpenWarpDockTilePlugin` and names its class correctly.
+- **Windows installer**: The CLI helper is now `openwarp-oss.cmd` (the old `zap-oss.cmd` is removed on upgrade). Uninstall removes the `Software\OpenWarp` registry key and the `openwarp\OpenWarp` data directories. The high-performance GPU exports now target the `openwarp-oss` binary.
+
 ## [v2026.10.28.1] — 2026-10-28
 
 - **Kitty images under zellij and redrawing TUIs**: Erasing the screen now removes kitty image placements, as kitty does, so yazi previews in zellij no longer leave stale, shrunken copies after a resize or pane change. Re-placing an image under the same ids moves it instead of leaving a copy behind, which fixes duplicated images when scrolling omp output. Freed images now leave the image cache, which stops zellij's per-cell images from slowing Warp until it freezes.
