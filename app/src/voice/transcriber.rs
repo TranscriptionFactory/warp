@@ -18,7 +18,7 @@ pub enum TranscribeError {
     Deserialization,
 
     /// Zap 已禁用语音转写(BYOP genai 协议无法承载音频)。
-    #[error("Voice transcription is unavailable in Zap.")]
+    #[error("Voice transcription is unavailable in OpenWarp.")]
     Disabled,
 
     #[error(transparent)]

@@ -312,7 +312,7 @@ async fn cross_compile_remote_server(backend: &DevBuildBackend) -> Result<PathBu
     // 容易误以为卡死)。
     log::info!(
         "dev remote-server: 正在交叉编译,首次通常需数分钟 —— cargo 进度会打印到\
-         运行 Zap 的终端"
+         运行 OpenWarp 的终端"
     );
 
     let status = async {
@@ -370,7 +370,7 @@ async fn cross_compile_remote_server(backend: &DevBuildBackend) -> Result<PathBu
     if !status.success() {
         let code = status.code().unwrap_or(-1);
         return Err(anyhow!(
-            "cargo 交叉编译失败(exit {code}),详见运行 Zap 的终端的 cargo 输出"
+            "cargo 交叉编译失败(exit {code}),详见运行 OpenWarp 的终端的 cargo 输出"
         ));
     }
 

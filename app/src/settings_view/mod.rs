@@ -317,9 +317,9 @@ impl FromStr for SettingsSection {
             "Features" => Ok(Self::Features),
             "Keyboard shortcuts" => Ok(Self::Keybindings),
             "Warpify" => Ok(Self::Warpify),
-            "ZapDrive" | "Zap Drive" => Ok(Self::ZapDrive),
+            "OpenWarp Drive" | "ZapDrive" | "Zap Drive" => Ok(Self::ZapDrive),
             // This page was called "Oz" at one point, keep for backward compatibility.
-            "Oz" | "Zap Agent" => Ok(Self::WarpAgent),
+            "OpenWarp Agent" | "Oz" | "Zap Agent" => Ok(Self::WarpAgent),
             "Profiles" | "AgentProfiles" => Ok(Self::AgentProfiles),
             "MCP servers" | "AgentMCPServers" => Ok(Self::AgentMCPServers),
             "Providers" | "AgentProviders" => Ok(Self::AgentProviders),

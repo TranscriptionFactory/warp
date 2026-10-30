@@ -684,7 +684,7 @@ impl Display for RenderableAIError {
             Self::ServerOverloaded => {
                 write!(f, "OpenWarp is currently overloaded. Please try again later.")
             }
-            Self::InternalWarpError => write!(f, "Internal Zap error."),
+            Self::InternalWarpError => write!(f, "Internal OpenWarp error."),
             Self::ContextWindowExceeded(message) => {
                 write!(f, "Context window exceeded: {message}")
             }

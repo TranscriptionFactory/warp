@@ -103,8 +103,8 @@ impl UriHost {
         match self {
             UriHost::Auth => {
                 safe_info!(
-                    safe: ("Ignored auth url because Zap has no cloud login flow"),
-                    full: ("Ignored auth url {url} because Zap has no cloud login flow")
+                    safe: ("Ignored auth url because OpenWarp has no cloud login flow"),
+                    full: ("Ignored auth url {url} because OpenWarp has no cloud login flow")
                 );
             }
             UriHost::Action => {
@@ -282,7 +282,7 @@ impl UriHost {
                         // 随 UI 一同物理删。保留 arm 以记录原意图,物理处理为 no-op。
                         "platform" => {
                             log::warn!(
-                                "warp://settings/platform 路由在 Zap 中已下线,忽略该请求"
+                                "warp://settings/platform 路由在 OpenWarp 中已下线,忽略该请求"
                             );
                         }
                         "appearance" => {

@@ -300,7 +300,7 @@ pub async fn make_authenticated_client(
             log::warn!(
                 "File-based MCP server {uuid} requires OAuth authentication; \
                  skipping in headless mode. To use this server, authenticate it \
-                 in the Zap desktop app first."
+                 in the OpenWarp desktop app first."
             );
         }
         return Err(AuthError::AuthorizationFailed(

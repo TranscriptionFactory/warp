@@ -459,7 +459,7 @@ pub(super) fn init_db() -> Result<SqliteConnection> {
     if warp_core::channel::ChannelState::channel() == warp_core::channel::Channel::Oss {
         if let Some(legacy_dir) = zap_legacy_app_group_sqlite_dir() {
             if let Err(err) = migrate_zap_app_group_sqlite_if_needed(&db_path, &legacy_dir)
-                .context("Failed to migrate Zap SQLite database out of legacy App Group")
+                .context("Failed to migrate OpenWarp SQLite database out of legacy App Group")
             {
                 report_error!(err);
                 log::warn!("Skipping legacy App Group SQLite migration and continuing startup");
@@ -556,8 +556,8 @@ fn migrate_zap_app_group_sqlite_if_needed(target_db: &Path, legacy_dir: &Path) -
     write_zap_app_group_sqlite_migration_marker(&marker)?;
 
     safe_info!(
-        safe: ("Migrated Zap SQLite database out of legacy App Group"),
-        full: ("Migrated Zap SQLite database from `{}` to `{}`", legacy_db.display(), target_db.display())
+        safe: ("Migrated OpenWarp SQLite database out of legacy App Group"),
+        full: ("Migrated OpenWarp SQLite database from `{}` to `{}`", legacy_db.display(), target_db.display())
     );
 
     Ok(())

@@ -354,7 +354,7 @@ impl TerminalView {
                 match &self.inline_banners_state.open_in_warp_banner {
                     Some(banner_state) => {
                         ActionAccessibilityContent::Custom(AccessibilityContent::new_without_help(
-                            format!("Open {} in Zap", banner_state.target.path.display()),
+                            format!("Open {} in OpenWarp", banner_state.target.path.display()),
                             WarpA11yRole::UserAction,
                         ))
                     }
@@ -363,14 +363,14 @@ impl TerminalView {
             }
             OpenInWarpBannerAction::Close => {
                 ActionAccessibilityContent::Custom(AccessibilityContent::new_without_help(
-                    "Close View in Zap banner",
+                    "Close View in OpenWarp banner",
                     WarpA11yRole::UserAction,
                 ))
             }
             OpenInWarpBannerAction::LearnMore => {
                 ActionAccessibilityContent::Custom(AccessibilityContent::new(
                     crate::t!("common-learn-more"),
-                    "Learn more about opening Markdown files in Zap",
+                    "Learn more about opening Markdown files in OpenWarp",
                     WarpA11yRole::UserAction,
                 ))
             }
