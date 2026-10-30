@@ -40,7 +40,7 @@
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-; bundle.ps1 会为 OSS 传入 `InnoAppId=zap-oss`,其他 channel 走默认的 `warp-terminal-{ReleaseChannel}`。
+; bundle.ps1 会为 OSS 传入 `InnoAppId=openwarp-oss`,其他 channel 走默认的 `warp-terminal-{ReleaseChannel}`。
 #ifndef InnoAppId
   #define InnoAppId "warp-terminal-" + ReleaseChannel
 #endif
@@ -118,7 +118,7 @@ Source: "{#AssetsDir}\{#Arch}\dxil.dll"; DestDir: "{app}"
 Source: "{#TargetProfileDir}\resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs
 
 [Registry]
-Root: HKCU; Subkey: "SOFTWARE\Zap.dev\{#MyAppName}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "SOFTWARE\OpenWarp\{#MyAppName}"; Flags: uninsdeletekey
 ; cleanup "Open OpenWarp Here" registry entries
 Root: HKA; Subkey: "Software\Classes\Directory\shell\{#MyAppName}"; Flags: deletekey
 Root: HKA; Subkey: "Software\Classes\Directory\Background\shell\{#MyAppName}"; Flags: deletekey
@@ -141,6 +141,10 @@ Root: HKA; Subkey: "Software\Classes\Directory\Background\shell\{#MyAppName}Wind
 
 [Tasks]
 Name: addToPath; Description: "Add OpenWarp to PATH"
+
+[InstallDelete]
+; Helper script from builds that used the old `zap-oss` CLI command name.
+Type: files; Name: "{app}\bin\zap-oss.cmd"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{userappdata}\warp\{#MyAppName}"
@@ -242,7 +246,7 @@ begin
 #if ReleaseChannel == "stable"
     CmdScriptName := 'oz.cmd'
 #elif ReleaseChannel == "oss"
-    CmdScriptName := 'zap-oss.cmd';
+    CmdScriptName := 'openwarp-oss.cmd';
 #else
     CmdScriptName := 'oz-{#ReleaseChannel}.cmd';
 #endif
