@@ -149,6 +149,8 @@ Type: files; Name: "{app}\bin\zap-oss.cmd"
 [UninstallDelete]
 Type: filesandordirs; Name: "{userappdata}\warp\{#MyAppName}"
 Type: filesandordirs; Name: "{localappdata}\warp\{#MyAppName}"
+Type: filesandordirs; Name: "{userappdata}\openwarp\{#MyAppName}"
+Type: filesandordirs; Name: "{localappdata}\openwarp\{#MyAppName}"
 Type: filesandordirs; Name: "{app}\bin"
 
 [Icons]
