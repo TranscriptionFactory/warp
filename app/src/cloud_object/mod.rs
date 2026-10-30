@@ -1,6 +1,6 @@
 //! # OpenWarp 本地化说明(Phase 2d-4b,2026-05-11 修订)
 //!
-//! 本模块在上游 OpenWarp 中承担 "云对象" 抽象,统一描述 Notebook / Workflow / EnvVar /
+//! 本模块在上游 Warp 中承担 "云对象" 抽象,统一描述 Notebook / Workflow / EnvVar /
 //! Fact / MCP / ExecutionProfile / AIDocument 等需要在多设备间同步的对象类型。
 //!
 //! 在 OpenWarp 中云端同步链路(RTC / UpdateManager / SyncQueue / ServerApiProvider)

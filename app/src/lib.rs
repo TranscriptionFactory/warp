@@ -1,6 +1,6 @@
 // Suppress warnings about rustdoc style.
 #![allow(clippy::doc_lazy_continuation)]
-// 上游 OpenWarp 裁剪后遗留的孤儿代码暂时保留,统一抑制 dead_code 告警。
+// 上游 Warp 裁剪后遗留的孤儿代码暂时保留,统一抑制 dead_code 告警。
 #![allow(dead_code)]
 
 mod ai;

@@ -281,7 +281,7 @@ fn collect_prompt_context(model_id: &str, ctx: &[AIAgentContext]) -> PromptConte
             }
             AIAgentContext::CurrentTime { current_time } => {
                 // P0-1:与默认值保持一致,只保留自然日粒度。
-                // 上游 OpenWarp 有可能传入精确到秒的 timestamp,这里统一压到“当前日期”。
+                // 上游 Warp 有可能传入精确到秒的 timestamp,这里统一压到“当前日期”。
                 out.current_time = current_time.format("%Y-%m-%d").to_string();
             }
             // 代码索引功能未实现,Codebase 上下文不进 system prompt。
