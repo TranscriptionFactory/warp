@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为 Zap 终端添加原生 SFTP 文件管理器，使用 ssh2 crate 实现协议层，WarpUI 实现浏览器 Pane 面板。
+**Goal:** 为 OpenWarp 终端添加原生 SFTP 文件管理器，使用 ssh2 crate 实现协议层，WarpUI 实现浏览器 Pane 面板。
 
 **Architecture:** 新增 `warp_sftp` crate 封装 ssh2 协议操作（连接、文件读写、目录管理），在 `app/src/sftp_manager/` 中实现 WarpUI 浏览器视图，通过 `SftpPane` 集成到 Pane 系统。复用现有 `warp_ssh_manager` 获取主机信息和凭据。
 

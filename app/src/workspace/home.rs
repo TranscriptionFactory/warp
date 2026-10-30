@@ -1,4 +1,4 @@
-//! Zap Home
+//! OpenWarp Home
 //!
 //! This is the landing page for new tabs if session creation isn't supported (e.g. on the web).
 //! It's intentionally small and local-only.

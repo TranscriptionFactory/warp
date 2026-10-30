@@ -65,7 +65,7 @@ use warpui::{
 pub enum ReviewDestination {
     /// No terminal is available to receive comments.
     None,
-    /// A Zap agent terminal is available (input box visible, not executing).
+    /// An OpenWarp agent terminal is available (input box visible, not executing).
     Zap,
     /// A CLI agent (e.g. Claude Code, Gemini) is running in a terminal.
     Cli(CLIAgent),
@@ -1550,7 +1550,7 @@ impl RightPanelView {
     /// (CLI agents are long-running commands that accept review input).
     ///
     /// When `ai_enabled` is `false`, only terminals with an active CLI agent are
-    /// considered available (non-CLI Zap terminals require AI to be on).
+    /// considered available (non-CLI OpenWarp terminals require AI to be on).
     fn is_terminal_available_for_review(
         tv: &ViewHandle<TerminalView>,
         repo_path: &Path,

@@ -44,12 +44,12 @@ impl LocalWorkflows {
         }
     }
 
-    /// Returns an iterator over hardcoded "application" workflows included in the Zap binary.
+    /// Returns an iterator over hardcoded "application" workflows included in the OpenWarp binary.
     pub fn app_workflows(&self) -> impl Iterator<Item = &Workflow> {
         self.app_workflows.iter()
     }
 
-    /// Returns an iterator over the static set of workflows for 3rd party tools loaded from Zap's
+    /// Returns an iterator over the static set of workflows for 3rd party tools loaded from OpenWarp's
     /// workflows GitHub repo.
     pub fn global_workflows(
         &self,

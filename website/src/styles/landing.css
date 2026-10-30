@@ -1,5 +1,5 @@
 /* ============================================================
- * Zap landing — Cursor 风格双主题重构
+ * OpenWarp landing — Cursor 风格双主题重构
  * 深色 token 参考 cursor.com 实测:body bg #14120b、文本 #ededed
  * 浅色 token 参考 Cursor 浅色主题:body warm-off-white、文本 #14120b
  * H1 26px/400、卡片稍亮一档、sans 字体 + JetBrains Mono code。
@@ -1534,7 +1534,7 @@ pre.code .acc {
     }
 }
 
-/* ---------- App 窗口外壳(仿真 Zap 客户端) ---------- */
+/* ---------- App 窗口外壳(仿真 OpenWarp 客户端) ---------- */
 .app-window {
     position: relative;
     width: 100%;

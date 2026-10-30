@@ -16,9 +16,9 @@ Param (
     [String]$RELEASE_TAG = '',
     [String]$FEATURES = 'release_bundle,crash_reporting,gui',
 
-    # Builds only the Zap binary, skips the installer.
+    # Builds only the OpenWarp binary, skips the installer.
     [Switch]$SKIP_BUILD_INSTALLER = $False,
-    # Builds only the installer, skips the Zap binary. Use this if the Zap
+    # Builds only the installer, skips the OpenWarp binary. Use this if the OpenWarp
     # binary has already been built.
     [Switch]$SKIP_BUILD_BINARY = $False,
 
@@ -148,19 +148,19 @@ if ($DEBUG_BUILD) {
 if ($CHECK_ONLY) {
     cargo check -p warp --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --features "$FEATURES" --target $PLATFORM_TARGET
     if (-Not $?) {
-        Write-Error "Failed to verify Zap $WARP_BIN compilation with profile $CARGO_PROFILE"
+        Write-Error "Failed to verify OpenWarp $WARP_BIN compilation with profile $CARGO_PROFILE"
         exit 1
     }
     exit 0
 }
 
 if (-Not $SKIP_BUILD_BINARY) {
-    Write-Output "Building Zap for channel $CHANNEL and bundle id $BUNDLE_ID"
+    Write-Output "Building OpenWarp for channel $CHANNEL and bundle id $BUNDLE_ID"
     $env:CARGO_BIN_NAME = $CHANNEL
     $env:WARP_APP_NAME = $APP_NAME
     cargo build -p warp --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --features "$FEATURES" --target $PLATFORM_TARGET
     if (-Not $?) {
-        Write-Error "Failed to build Zap $WARP_BIN binary with profile $CARGO_PROFILE"
+        Write-Error "Failed to build OpenWarp $WARP_BIN binary with profile $CARGO_PROFILE"
         exit 1
     }
 
@@ -211,7 +211,7 @@ if (-Not $?) {
     exit 1
 }
 
-Write-Output 'Building Zap installer'
+Write-Output 'Building OpenWarp installer'
 # Inno Setup `AppId` 决定注册表 Uninstall 条目与升级跟踪键。OSS 下固定为 `openwarp-oss`,
 # 避免留在默认的 `warp-terminal-oss` 上。其他 channel 走 .iss 里的默认
 # `warp-terminal-{ReleaseChannel}`。

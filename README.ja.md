@@ -305,9 +305,9 @@ OpenWarp 内でネイティブ Block として動作します。
 CLI Agent やターミナル周辺ツールをメンテナンスしていて、同様のファーストクラス
 統合を望む場合は issue を開いてください —— 喜んでパートナーを増やします。
 
-## Zap や Warp からの移行
+## OpenWarp や Warp からの移行
 
-このプロジェクトを以前の **Zap** ブランディングで使っていた方、または上流 **Warp**
+このプロジェクトを以前の **OpenWarp** ブランディングで使っていた方、または上流 **Warp**
 から移行する方は、
 [docs/migrate-from-warp.md](docs/migrate-from-warp.md) を参照して設定を
 移行してください。

@@ -73,7 +73,7 @@ fn maybe_warn_team_api_key(ctx: &AppContext) {
     );
 }
 
-/// Run a Zap CLI command.
+/// Run an OpenWarp CLI command.
 pub fn run(
     ctx: &mut AppContext,
     command: CliCommand,
@@ -308,7 +308,7 @@ impl AgentDriverRunner {
         // Ensure we've synced team state before starting the driver.
         Self::refresh_team_metadata(&foreground).await?;
 
-        // Wait for Zap Drive to sync before building the task config, since
+        // Wait for OpenWarp Drive to sync before building the task config, since
         // prompt resolution (SavedPrompt -> workflow lookup) depends on it.
         if foreground
             .spawn(|_, ctx| common::refresh_warp_drive(ctx))
@@ -500,7 +500,7 @@ impl AgentDriverRunner {
 
     /// Creates local driver task state for a new agent run.
     ///
-    /// Zap 本地运行不会创建远端 ambient-agent task 记录。
+    /// OpenWarp 本地运行不会创建远端 ambient-agent task 记录。
     /// driver 保持 `task_id` 为 `None`,下游会自然跳过远端任务分支。
     async fn initialize_new_task(
         driver_options: &mut AgentDriverOptions,
@@ -586,8 +586,8 @@ fn launch_command(
     dispatch_command(ctx, command, global_options)
 }
 
-/// Check if we're running within Zap (for example, if this is an invocation of the Zap CLI
-/// within a Zap terminal session).
+/// Check if we're running within OpenWarp (for example, if this is an invocation of the OpenWarp CLI
+/// within an OpenWarp terminal session).
 pub fn is_running_in_warp() -> bool {
     std::env::var("TERM_PROGRAM")
         .map(|v| v == "WarpTerminal")

@@ -24,7 +24,7 @@ lazy_static! {
     static ref INSTALLER_PATH: Arc<Mutex<Option<TempPath>>> = Default::default();
 }
 
-/// Download the Inno Setup install wizard, the same one users run on the first Zap install, and
+/// Download the Inno Setup install wizard, the same one users run on the first OpenWarp install, and
 /// place it into the "data dir".
 pub(super) async fn download_update_and_cleanup(
     version_info: &VersionInfo,
@@ -283,7 +283,7 @@ pub(super) fn relaunch() -> Result<()> {
     // 标准安装界面,可以亲眼确认要安装的版本号、目标目录,并通过常规 UI 取消。
     // 仍然保留 /SP- 跳过"准备完成"确认弹窗;/NORESTART 避免要求重启 Windows;
     // /update=1 给 Inno 脚本里检测升级模式用。
-    // /NOCLOSEAPPLICATIONS 让 Inno 等当前 Zap 进程自然退出(mutex poll),
+    // /NOCLOSEAPPLICATIONS 让 Inno 等当前 OpenWarp 进程自然退出(mutex poll),
     // 不强制 RestartManager 杀进程。
     let mut cmd = Command::new(&installer_path);
     if matches!(channel, Channel::Oss) {
@@ -297,7 +297,7 @@ pub(super) fn relaunch() -> Result<()> {
         ]);
     } else {
         // 官方 channel:维持原"silent + 进度条"行为,自动安装并重启。
-        // The Inno Setup install wizard will run without user input. It will re-launch Zap after
+        // The Inno Setup install wizard will run without user input. It will re-launch OpenWarp after
         // installing the update files.
         // https://jrsoftware.org/ishelp/index.php?topic=setupcmdline
         cmd.args([
@@ -313,8 +313,8 @@ pub(super) fn relaunch() -> Result<()> {
             "/NORESTART",
             &log_arg,
             "/update=1",
-            // Do not forcibly kill Zap via RestartManager. The installer will wait for
-            // Zap to exit naturally by polling the single-instance mutex instead.
+            // Do not forcibly kill OpenWarp via RestartManager. The installer will wait for
+            // OpenWarp to exit naturally by polling the single-instance mutex instead.
             "/NOCLOSEAPPLICATIONS",
             &format!("/DIR={}", install_dir.display()),
         ]);

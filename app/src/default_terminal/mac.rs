@@ -94,7 +94,7 @@ fn set_default_terminal(bundle_id: &str) -> Result<(), String> {
     }
 }
 
-/// Gets Zap's bundle identifier. This may be `None` if not running as a bundle, i.e. through
+/// Gets OpenWarp's bundle identifier. This may be `None` if not running as a bundle, i.e. through
 /// `cargo run` without `cargo bundle`.
 fn get_warp_bundle_id() -> Option<String> {
     unsafe {

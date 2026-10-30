@@ -7,7 +7,7 @@
 //! ## 与 opencode 对齐
 //!
 //! - `webfetch` 镜像 `packages/opencode/src/tool/webfetch.ts`:
-//!   * UA 默认 Chrome,403 + `cf-mitigated: challenge` → 切回 `Zap` UA 重试一次
+//!   * UA 默认 Chrome,403 + `cf-mitigated: challenge` → 切回 `OpenWarp` UA 重试一次
 //!   * `Accept` 头按 format 参数 q 优先级协商
 //!   * Content-Length 预检 + 实读字节双检,5 MB 上限
 //!   * timeout 默认 30s,上限 120s

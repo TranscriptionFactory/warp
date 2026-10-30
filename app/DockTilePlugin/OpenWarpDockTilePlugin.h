@@ -1,7 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <Foundation/Foundation.h>
 
-@interface ZapDockTilePlugIn : NSObject <NSDockTilePlugIn>
+@interface OpenWarpDockTilePlugIn : NSObject <NSDockTilePlugIn>
 {
     id iconChangedObserver;
     id defaultsObserver;

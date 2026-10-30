@@ -1,7 +1,7 @@
 use super::hoa_onboarding;
 use crate::auth::{AuthManager, AuthManagerEvent};
 use crate::channel::{Channel, ChannelState};
-// Zap(本地化,Phase 5):`PreferencesSyncer` 已物理删除。
+// OpenWarp(本地化,Phase 5):`PreferencesSyncer` 已物理删除。
 use crate::settings::CodeSettings;
 use crate::terminal::general_settings::GeneralSettings;
 use settings::Setting as _;
@@ -15,7 +15,7 @@ use warpui::{Entity, ModelContext, SingletonEntity, WindowId};
 /// a modal is currently being shown and automatically triggers the modal when appropriate
 /// conditions are met (e.g., user becomes onboarded).
 pub struct OneTimeModalModel {
-    /// Whether the Zap launch modal is currently being shown.
+    /// Whether the OpenWarp launch modal is currently being shown.
     is_zap_launch_modal_open: bool,
     /// Whether the HOA onboarding flow is currently being shown.
     is_hoa_onboarding_open: bool,
@@ -59,7 +59,7 @@ impl OneTimeModalModel {
         self.target_window_id
     }
 
-    /// Returns whether the Zap launch modal is currently open.
+    /// Returns whether the OpenWarp launch modal is currently open.
     pub fn is_zap_launch_modal_open(&self) -> bool {
         self.is_zap_launch_modal_open && self.target_window_id.is_some()
     }

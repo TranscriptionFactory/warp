@@ -439,7 +439,7 @@ impl BackingView for TerminalView {
                     .into_item(),
             );
         }
-        // Zap:删除 Pane 头部 "Share session" 入口(云端 shared session)
+        // OpenWarp:删除 Pane 头部 "Share session" 入口(云端 shared session)
 
         // Split-pane related items.
         if self.split_pane_state(ctx).is_in_split_pane() {
@@ -453,7 +453,7 @@ impl BackingView for TerminalView {
                     .with_on_select_action(TerminalAction::ToggleMaximizePane)
                     .into_item(),
             );
-            // Zap:合并进同一 tab 的 pane 可在此一键拆回独立 tab,
+            // OpenWarp:合并进同一 tab 的 pane 可在此一键拆回独立 tab,
             // 与拖拽 pane 头部落到标签之间的行为等价。
             items.push(
                 MenuItemFields::new(crate::t!("menu-pane-move-to-own-tab"))

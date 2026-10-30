@@ -88,7 +88,7 @@ impl fmt::Display for DriveObjectType {
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub struct ZapDriveObjectSettings {
-    /// The folder that should be focused in the Zap Drive when the object is opened.
+    /// The folder that should be focused in the OpenWarp Drive when the object is opened.
     pub focused_folder_id: Option<ServerId>,
     /// The email of the user to invite to the object, if the object is being opened via the request access flow.
     pub invitee_email: Option<String>,
@@ -249,7 +249,7 @@ pub fn write_has_auto_opened_welcome_folder_to_user_defaults(app: &mut AppContex
         .write_value(settings::HAS_AUTO_OPENED_WELCOME_FOLDER, true.to_string());
 }
 
-/// Enum used for sorting elements in the Zap Drive Index (and potentially other places).
+/// Enum used for sorting elements in the OpenWarp Drive Index (and potentially other places).
 /// In the future it can be used to add other options (like, by name or by author), and exposed to
 /// users in the index.
 #[derive(

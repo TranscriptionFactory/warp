@@ -24,13 +24,13 @@ use crate::{
     AppId,
 };
 
-/// The name of the directory in which to put non-global Zap-specific files.
+/// The name of the directory in which to put non-global OpenWarp-specific files.
 ///
 /// This should be used, for example, as the base directory under which
 /// repository workflows would be stored (in "./.warp/workflows").
 pub const WARP_CONFIG_DIR: &str = ".warp";
 
-/// The name of the folder that stores Zap execution logs and network logs.
+/// The name of the folder that stores OpenWarp execution logs and network logs.
 /// This is currently only used on Windows to maintain backwards compatibility.
 pub const WARP_LOGS_DIR: &str = "logs";
 
@@ -59,10 +59,10 @@ pub fn warp_home_config_dir_name() -> String {
     }
 }
 
-/// Returns the home-relative Zap config directory for the current channel and data profile.
+/// Returns the home-relative OpenWarp config directory for the current channel and data profile.
 ///
 /// Unlike [`data_dir`] and [`config_local_dir`] on non-macOS platforms, this intentionally keeps
-/// Zap-authored, user-facing config under a `.warp*` directory in the home directory instead of
+/// OpenWarp-authored, user-facing config under a `.warp*` directory in the home directory instead of
 /// using the platform XDG/AppData project directories.
 pub fn warp_home_config_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home_dir| home_dir.join(warp_home_config_dir_name()))
@@ -140,7 +140,7 @@ pub fn base_config_dir() -> PathBuf {
 ///
 /// This is the appropriate home for files like our sqlite database, which
 /// contains durable but non-critical and non-portable data like what windows
-/// the user had open and cached state of known Zap Drive objects.
+/// the user had open and cached state of known OpenWarp Drive objects.
 pub fn state_dir() -> PathBuf {
     let Some(project_dirs) = project_dirs() else {
         return PathBuf::new();
@@ -166,7 +166,7 @@ pub fn secure_state_dir() -> Option<PathBuf> {
 
     #[cfg(target_os = "macos")]
     if let Some(app_group_root) = app_group_container_path() {
-        // The macOS project_path is the bundle ID (i.e. `dev.warp.Zap-Stable`).
+        // The macOS project_path is the bundle ID (i.e. `dev.openwarp.OpenWarp`).
         let project_dirs = project_dirs()?;
         return Some(
             app_group_root
@@ -293,13 +293,13 @@ pub fn app_group_container_path() -> Option<PathBuf> {
     LazyLock::force(&CONTAINER_PATH).clone()
 }
 
-/// Returns the path to resources included in the Zap distribution.
+/// Returns the path to resources included in the OpenWarp distribution.
 ///
 /// Unlike [`warpui::AssetProvider`] assets, which are generally embedded in the binary, these are
-/// stored on the filesystem alongside the rest of Zap.
+/// stored on the filesystem alongside the rest of OpenWarp.
 ///
 /// ## macOS
-/// The resources directory is `$APP_DIR/Contents/Resources` (e.g. `/Applications/Zap.app/Contents/Resources`).
+/// The resources directory is `$APP_DIR/Contents/Resources` (e.g. `/Applications/OpenWarp.app/Contents/Resources`).
 ///
 /// ## Linux
 /// The resources directory is `$INSTALL_DIR/resources`, where `$INSTALL_DIR` depends on the
@@ -307,7 +307,7 @@ pub fn app_group_container_path() -> Option<PathBuf> {
 ///
 /// ## Windows
 /// The resources directory is `$INSTALL_DIR/resources`, where `$INSTALL_DIR` is the directory
-/// containing the Zap executable (e.g. `C:\Program Files\WarpDev\resources`).
+/// containing the OpenWarp executable (e.g. `C:\Program Files\WarpDev\resources`).
 pub fn bundled_resources_dir() -> Option<PathBuf> {
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {

@@ -38,8 +38,8 @@ pub const AI_FEATURES: &[&str] = &[
     "Agents over SSH",
 ];
 
-/// User-facing names of the Zap Drive features enabled when the terminal
-/// intention is selected with Zap Drive turned on. Shared by the login slide's
+/// User-facing names of the OpenWarp Drive features enabled when the terminal
+/// intention is selected with OpenWarp Drive turned on. Shared by the login slide's
 /// skip-login confirmation dialog so the list stays in sync with any future
 /// surfaces that need it.
 pub const WARP_DRIVE_FEATURES: &[&str] = &["OpenWarp Drive", "Session Sharing"];

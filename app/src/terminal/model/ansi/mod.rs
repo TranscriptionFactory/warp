@@ -7,7 +7,7 @@
 //! Internally, [`Performer`] delegates to finer-grained methods for handling
 //! PTY output implemented by the [`Handler`] trait -- this could be printing to
 //! the terminal, executing actions as a result of CSI or OSC sequences,
-//! executing one of Zap's DCS hooks, etc. [`Handler`] should be implemented by
+//! executing one of OpenWarp's DCS hooks, etc. [`Handler`] should be implemented by
 //! an app-level model that updates the terminal's state accordingly.
 mod ansi_c_decoder;
 mod dcs_hooks;
@@ -54,7 +54,7 @@ use warpui::color::ColorU;
 use super::kitty::parse_kitty_chunk;
 use super::terminal_model::TmuxInstallationState;
 
-/// Marks an OSC as one that is sent by Zap logic registered in the shell.
+/// Marks an OSC as one that is sent by OpenWarp logic registered in the shell.
 ///
 /// 9277 spells out "WARP" on a dialpad :).
 const WARP_IN_BAND_GENERATOR_OSC_MARKER: &[u8] = b"9277";
@@ -64,7 +64,7 @@ const WARP_IN_BAND_GENERATOR_END_BYTE: &[u8] = b"B";
 /// Marks an OSC that is used for messages containing shell hooks.
 const WARP_OSC_MARKER: &[u8] = b"9278";
 /// Marks an OSC that is used for resetting ConPTY's grid. This is useful for performing a series
-/// of checks ensuring that Zap's grids and ConPTY's grid are in sync.
+/// of checks ensuring that OpenWarp's grids and ConPTY's grid are in sync.
 const WARP_RESET_GRID_OSC_MARKER: &[u8] = b"9279";
 
 /// The amount of time a single synchronized update can take from the time the corresponding
@@ -224,7 +224,7 @@ struct TmuxControlModeState {
 /// to issue multiple updates to the state of the PTY without causing a redraw
 /// between each update.
 ///
-/// There are two mechanisms to prevent Zap from falling too behind:
+/// There are two mechanisms to prevent OpenWarp from falling too behind:
 /// 1. a timeout. After [`SYNC_OUTPUT_MAX_TIMEOUT`] has elapsed, a redraw will be forced.
 /// 2. a max buffer limit. After [`SYNC_OUTPUT_MAX_BUFFER_SIZE`] bytes have been buffered,
 ///    a redraw will be forced.
@@ -1102,7 +1102,7 @@ where
                 }
             }
 
-            // Received a Zap OSC used for in-band generators.
+            // Received an OpenWarp OSC used for in-band generators.
             WARP_IN_BAND_GENERATOR_OSC_MARKER => match params.get(1) {
                 Some(&WARP_IN_BAND_GENERATOR_START_BYTE) => {
                     log::info!("Received an OpenWarp OSC marker for starting in-band command output.");
@@ -1116,7 +1116,7 @@ where
                 }
             },
 
-            // Received a Zap OSC used for shell hooks.
+            // Received an OpenWarp OSC used for shell hooks.
             WARP_OSC_MARKER => {
                 let Some(json_marker_char) = params
                     .get(1)
@@ -1172,7 +1172,7 @@ where
                 self.handler.on_reset_grid();
             }
 
-            // Received a Zap OSC used for completions.
+            // Received an OpenWarp OSC used for completions.
             WARP_COMPLETIONS_OSC_MARKER => match params.get(1) {
                 Some(&WARP_COMPLETIONS_START_BYTE) => {
                     let Some(format) = params

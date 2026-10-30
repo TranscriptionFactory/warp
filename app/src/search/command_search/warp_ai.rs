@@ -50,7 +50,7 @@ impl SearchItem for WarpAISearchItem {
         highlight_state: ItemHighlightState,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
-        // Since the Zap AI logo color is hardcoded, let's find the best
+        // Since the OpenWarp AI logo color is hardcoded, let's find the best
         // contrasting color depending on the user's theme and the item's selected state.
         let command_search_background = appearance.theme().surface_1();
         let item_background_color = match highlight_state.container_background_fill(appearance) {
@@ -129,7 +129,7 @@ impl SearchItem for WarpAISearchItem {
     }
 }
 
-/// Zap 只保留同步入口:打开 BYOP Agent 或把自然语言写回输入框。
+/// OpenWarp 只保留同步入口:打开 BYOP Agent 或把自然语言写回输入框。
 /// 云端“自然语言生成命令”异步源已删除。
 pub struct WarpAIDataSource;
 

@@ -531,7 +531,7 @@ impl super::TerminalView {
 // where we can spawn a local tty.
 #[cfg(feature = "local_fs")]
 impl super::TerminalView {
-    /// Zap:判断给定会话是否是 remote-server(SSH)会话。
+    /// OpenWarp:判断给定会话是否是 remote-server(SSH)会话。
     ///
     /// 当 `local_tty` 未启用 / 在 wasm 上 / `SshRemoteServer` feature flag 关闭时,
     /// 一律返回 `false`,即保持本地行为完全不变。
@@ -601,7 +601,7 @@ impl super::TerminalView {
         )
     }
 
-    /// Zap:取得远端会话某个 cwd 的目录列表。
+    /// OpenWarp:取得远端会话某个 cwd 的目录列表。
     ///
     /// 命中缓存则直接返回 `Some(..)`;未命中则异步发起 daemon
     /// `ListDirectory` RPC 拉取该目录列表,本轮返回 `None`(不高亮),
@@ -703,7 +703,7 @@ impl super::TerminalView {
         None
     }
 
-    /// Zap:组装远端会话的链接校验快照(cwd 列表 + `ResolvePath` 结果)。
+    /// OpenWarp:组装远端会话的链接校验快照(cwd 列表 + `ResolvePath` 结果)。
     #[cfg(all(
         feature = "local_tty",
         feature = "local_fs",
@@ -728,7 +728,7 @@ impl super::TerminalView {
         }
     }
 
-    /// Zap:对链接扫描中两个缓存都答不上来的候选路径发起 daemon `ResolvePath`。
+    /// OpenWarp:对链接扫描中两个缓存都答不上来的候选路径发起 daemon `ResolvePath`。
     ///
     /// 结果写入 `remote_resolved_paths`。如果鼠标仍停在同一个词上,重新扫描,
     /// 把刚确认存在的路径点亮。每个候选只查一次(不存在的结果过期后再查),
@@ -774,7 +774,7 @@ impl super::TerminalView {
         });
     }
 
-    /// Zap:对 `to_resolve` 中的远端绝对路径发起 daemon `ResolvePath`,结果写入
+    /// OpenWarp:对 `to_resolve` 中的远端绝对路径发起 daemon `ResolvePath`,结果写入
     /// `remote_resolved_paths`,全部到达后调用 `on_resolved`。
     ///
     /// 返回 `false` 表示没有发起查询(列表为空或会话没有 daemon 客户端),
@@ -861,7 +861,7 @@ impl super::TerminalView {
     ) {
         use crate::util::file::LinkValidationContext;
 
-        // Zap:判断被悬停 block 所属会话是否是 remote-server 会话。
+        // OpenWarp:判断被悬停 block 所属会话是否是 remote-server 会话。
         // 远端会话的文件不在本地磁盘上,需要用 `LinkValidationContext::Remote`
         // 携带 daemon 拉取来的真实目录列表做精确校验。
         let block_session_id = self.link_session_id(&position);
@@ -870,7 +870,7 @@ impl super::TerminalView {
         // For AltScreen we scan for relative path with the current working directory.
         // For BlockList we scan for relative path with the pwd of the hovered block.
         //
-        // Zap:远端会话的 block `pwd()` 是 shell-integration 上报的远端 cwd,
+        // OpenWarp:远端会话的 block `pwd()` 是 shell-integration 上报的远端 cwd,
         // 拼接后即得到正确的远端绝对路径,因此远端 block 也参与扫描(不再跳过)。
         // A remote session without a daemon has no way to validate its paths, so it
         // gets no file-path links.
@@ -890,7 +890,7 @@ impl super::TerminalView {
                 .and_then(|block| block.pwd().map(String::from)),
         };
 
-        // Zap:远端会话用缓存的远端文件信息精确校验;本地会话保持 `Local`。
+        // OpenWarp:远端会话用缓存的远端文件信息精确校验;本地会话保持 `Local`。
         let validation_ctx = match (&location, &pwd_to_scan_for, block_session_id) {
             #[cfg(all(feature = "local_tty", not(target_family = "wasm")))]
             (LinkSessionLocation::Remote(_), Some(cwd), Some(session_id)) => {

@@ -1,6 +1,6 @@
-#include "ZapDockTilePlugin.h"
+#include "OpenWarpDockTilePlugin.h"
 
-@implementation ZapDockTilePlugIn {
+@implementation OpenWarpDockTilePlugIn {
     NSFileHandle *_logFileHandle;
 }
 
@@ -29,7 +29,7 @@
             NSError *error = nil;
             [[NSFileManager defaultManager] createFileAtPath:logPath contents:nil attributes:nil];
             _logFileHandle = [NSFileHandle fileHandleForWritingAtPath:logPath];
-            [self logMessage:@"ZapDockTilePlugin initialized"];
+            [self logMessage:@"OpenWarpDockTilePlugin initialized"];
         } @catch (NSException *exception) {
             NSLog(@"Exception during initialization: %@\nStack trace: %@", 
                   exception.reason, 
@@ -137,14 +137,14 @@
     return [[NSImage alloc] initWithContentsOfFile:imagePath];
 }
 
-// Protocol method that is invoked by the system when the dock for Zap is updated.
+// Protocol method that is invoked by the system when the dock for OpenWarp is updated.
 // Note that we listen for direct changes to the AppIcon key in the user defaults.
 - (void)setDockTile:(NSDockTile *)dockTile {
     @try {
         [self logMessage:[NSString stringWithFormat:@"setDockTile called with tile: %@", dockTile ? @"valid" : @"nil"]];
         if (dockTile) {
             // Get the bundle ID for setting up user defaults observation
-            NSBundle *pluginBundle = [NSBundle bundleForClass:[ZapDockTilePlugIn class]];    
+            NSBundle *pluginBundle = [NSBundle bundleForClass:[OpenWarpDockTilePlugIn class]];    
             NSString *path = [[pluginBundle bundlePath] stringByAppendingPathComponent:@"Contents/Info.plist"];
             NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:path];    
             NSString *bundleId = dict[@"MainAppBundleIdentifier"];
@@ -182,7 +182,7 @@
 
 - (void)dealloc {
     @try {
-        [self logMessage:@"ZapDockTilePlugin deallocating"];
+        [self logMessage:@"OpenWarpDockTilePlugin deallocating"];
         if (self.iconChangedObserver) {
             [[NSDistributedNotificationCenter defaultCenter] removeObserver:self.iconChangedObserver];
             self.iconChangedObserver = nil;

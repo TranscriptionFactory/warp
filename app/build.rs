@@ -1,5 +1,5 @@
 // We can use `std::process:Command` here because this is invoked within a build script,
-// _not_ within the Zap binary (where it could cause a terminal to temporarily flash on
+// _not_ within the OpenWarp binary (where it could cause a terminal to temporarily flash on
 // Windows).
 #![allow(clippy::disallowed_types)]
 
@@ -47,8 +47,8 @@ fn main() -> Result<()> {
             .compile("warp_objc");
 
         // Build the dock tile plugin
-        println!("cargo:rerun-if-changed=DockTilePlugin/ZapDockTilePlugin.m");
-        println!("cargo:rerun-if-changed=DockTilePlugin/ZapDockTilePlugin.h");
+        println!("cargo:rerun-if-changed=DockTilePlugin/OpenWarpDockTilePlugin.m");
+        println!("cargo:rerun-if-changed=DockTilePlugin/OpenWarpDockTilePlugin.h");
         println!("cargo:rerun-if-changed=DockTilePlugin/Info.plist");
         println!("cargo:rerun-if-changed=DockTilePlugin/Makefile");
 
@@ -66,8 +66,8 @@ fn main() -> Result<()> {
         // Copy the dock tile plugin to the output directory
         let profile = get_build_profile_name();
         let target_dir = app_target_dir(&profile).expect("Failed to get app target directory");
-        let plugin_src = Path::new("DockTilePlugin/ZapDockTilePlugin.docktileplugin");
-        let plugin_dst = target_dir.join("ZapDockTilePlugin.docktileplugin");
+        let plugin_src = Path::new("DockTilePlugin/OpenWarpDockTilePlugin.docktileplugin");
+        let plugin_dst = target_dir.join("OpenWarpDockTilePlugin.docktileplugin");
 
         if !status.success() {
             fs::remove_dir_all(plugin_src).expect("Failed to clean up plugin directory");
@@ -168,7 +168,7 @@ fn generate_channel_config_if_needed(target_family: &str, target_os: &str) {
     let config_bin = "warp-channel-config";
 
     // Check if the config binary is available on PATH. If not, we can't generate embedded
-    // configs. This is expected for external contributors building Zap OSS.
+    // configs. This is expected for external contributors building OpenWarp OSS.
     if Command::new(config_bin)
         .arg("--help")
         .stdout(std::process::Stdio::null())
@@ -282,7 +282,7 @@ fn copy_async_assets() {
     }
 }
 
-/// Copies the DLLs needed to run Zap on Windows.
+/// Copies the DLLs needed to run OpenWarp on Windows.
 ///
 /// They are organized as follows:
 /// - `conpty.dll`

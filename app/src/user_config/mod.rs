@@ -193,13 +193,13 @@ pub fn tab_configs_dir() -> PathBuf {
 }
 
 /// Returns the path to the directory containing the built-in default tab configs.
-/// These are shipped with Zap and user-editable (Zap does not overwrite modifications).
+/// These are shipped with OpenWarp and user-editable (OpenWarp does not overwrite modifications).
 #[cfg_attr(target_family = "wasm", expect(dead_code))]
 pub fn default_tab_configs_dir() -> PathBuf {
     base_dir().join("default_tab_configs")
 }
 
-/// Returns whether the path points to a tab config TOML file under one of Zap's
+/// Returns whether the path points to a tab config TOML file under one of OpenWarp's
 /// tab config directories.
 #[cfg(feature = "local_fs")]
 pub fn is_tab_config_toml(path: &Path) -> bool {

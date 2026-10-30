@@ -140,7 +140,7 @@ impl LifecycleTelemetryLimiter {
 
 /// Defines feature-specific telemetry events emitted by the lifecycle coordinator.
 ///
-/// Zap has no telemetry backend, so this is not a `TelemetryEvent`; `send_telemetry_from_ctx!`
+/// OpenWarp has no telemetry backend, so this is not a `TelemetryEvent`; `send_telemetry_from_ctx!`
 /// only type-checks it. The payload stays so the non-UGC allowlist remains tested.
 #[derive(Debug)]
 pub(in crate::terminal) enum LifecycleTelemetryEvent {
@@ -148,7 +148,7 @@ pub(in crate::terminal) enum LifecycleTelemetryEvent {
     Recovery(LifecycleRecoveryRecord),
 }
 
-// Only tests read the payload while Zap has no telemetry backend.
+// Only tests read the payload while OpenWarp has no telemetry backend.
 #[cfg_attr(not(test), allow(dead_code))]
 impl LifecycleTelemetryEvent {
     pub(in crate::terminal) fn payload(&self) -> Option<Value> {

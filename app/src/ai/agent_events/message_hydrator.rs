@@ -6,7 +6,7 @@ use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::server::server_api::ai::AIClient;
 use crate::server::server_api::ServerApi;
 
-/// Zap 本地构建不再从云端 mailbox 拉取消息正文或发送 delivered 回执。
+/// OpenWarp 本地构建不再从云端 mailbox 拉取消息正文或发送 delivered 回执。
 /// 该类型保留本地 harness 桥接调用面的无副作用兼容语义。
 ///
 /// The constructor surface mirrors upstream (warpdotdev 8ba89e110) so the

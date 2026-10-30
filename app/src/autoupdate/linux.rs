@@ -186,7 +186,7 @@ mod appimage {
             .as_file_mut()
             .set_permissions(appimage_path.metadata()?.permissions())?;
 
-        // Move new AppImage over the one that launched the current Zap instance.
+        // Move new AppImage over the one that launched the current OpenWarp instance.
         let new_appimage_path = new_appimage.into_temp_path();
         let mv_status = command::r#async::Command::new("mv")
             .arg(new_appimage_path.as_os_str())
@@ -257,14 +257,14 @@ mod package_manager {
     }
 }
 
-/// Returns which method should be used to update Zap.
+/// Returns which method should be used to update OpenWarp.
 #[derive(Debug)]
 pub(crate) enum UpdateMethod {
-    /// We don't know how to update Zap.
+    /// We don't know how to update OpenWarp.
     Unknown,
-    /// Zap is running as an AppImage and should be updated in-place.
+    /// OpenWarp is running as an AppImage and should be updated in-place.
     AppImage(PathBuf),
-    /// Zap can be updated using the given package manager.
+    /// OpenWarp can be updated using the given package manager.
     PackageManager(PackageManager),
 }
 

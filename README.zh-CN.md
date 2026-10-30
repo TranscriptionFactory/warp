@@ -279,9 +279,9 @@ OpenWarp 的通知中心路由。
 如果你维护某个 CLI Agent 或终端周边工具,希望获得同样的一等公民集成,欢迎开
 issue —— 我们乐于接入更多伙伴。
 
-## 从 Zap 或 Warp 迁移
+## 从 OpenWarp 或 Warp 迁移
 
-如果你此前使用的是本项目的 **Zap** 品牌版本,或从上游 **Warp** 迁移而来,请参阅
+如果你此前使用的是本项目的 **OpenWarp** 品牌版本,或从上游 **Warp** 迁移而来,请参阅
 [docs/migrate-from-warp.md](docs/migrate-from-warp.md) 迁移你的设置。
 
 ## 路线图

@@ -212,7 +212,7 @@ pub enum TerminalAction {
     ClearSelectionsWhenShellMode,
     Close,
     ToggleMaximizePane,
-    /// Zap:把当前 pane 拆出为独立 tab(pane 头部三点菜单)。
+    /// OpenWarp:把当前 pane 拆出为独立 tab(pane 头部三点菜单)。
     MovePaneToOwnTab,
     SplitRight(Option<AvailableShell>),
     SplitLeft(Option<AvailableShell>),

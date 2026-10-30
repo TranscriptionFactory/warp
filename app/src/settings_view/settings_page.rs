@@ -100,11 +100,11 @@ pub enum SettingsPageViewHandle {
     Keybindings(ViewHandle<KeybindingsView>),
     About(ViewHandle<AboutPageView>),
     Code(ViewHandle<CodeSettingsPageView>),
-    // Zap Wave 3-1:`OzCloudAPIKeys` variant 随 `platform_page` 一同物理删。
-    // 云端 API key 管理 UI 完全代表 Zap Inc 云端账号,与 BYOP 无关。
-    // Zap Wave 6-8:`SharedBlocks` / `Referrals` variant 随 `ShowBlocksView` /
+    // OpenWarp Wave 3-1:`OzCloudAPIKeys` variant 随 `platform_page` 一同物理删。
+    // 云端 API key 管理 UI 完全代表 Warp Inc 云端账号,与 BYOP 无关。
+    // OpenWarp Wave 6-8:`SharedBlocks` / `Referrals` variant 随 `ShowBlocksView` /
     // `ReferralsPageView` 与对应 ServerApi client trait 物理删。
-    // Zap Wave 7-3:`CloudEnvironments` variant 随 ambient-agent UI 子系统物理删。
+    // OpenWarp Wave 7-3:`CloudEnvironments` variant 随 ambient-agent UI 子系统物理删。
     Warpify(ViewHandle<WarpifyPageView>),
     AI(ViewHandle<AISettingsPageView>),
     MCPServers(ViewHandle<MCPServersSettingsPageView>),
@@ -124,9 +124,9 @@ impl SettingsPageViewHandle {
             Keybindings(view_handle) => ChildView::new(view_handle).finish(),
             About(view_handle) => ChildView::new(view_handle).finish(),
             Code(view_handle) => ChildView::new(view_handle).finish(),
-            // Zap Wave 3-1:`OzCloudAPIKeys` arm 随 `platform_page` 一同物理删。
-            // Zap Wave 6-8:`SharedBlocks` / `Referrals` arm 随 variant 物理删。
-            // Zap Wave 7-3:`CloudEnvironments` arm 随 ambient-agent UI 一同物理删。
+            // OpenWarp Wave 3-1:`OzCloudAPIKeys` arm 随 `platform_page` 一同物理删。
+            // OpenWarp Wave 6-8:`SharedBlocks` / `Referrals` arm 随 variant 物理删。
+            // OpenWarp Wave 7-3:`CloudEnvironments` arm 随 ambient-agent UI 一同物理删。
             Warpify(view_handle) => ChildView::new(view_handle).finish(),
             AI(view_handle) => ChildView::new(view_handle).finish(),
             MCPServers(view_handle) => ChildView::new(view_handle).finish(),
@@ -193,7 +193,7 @@ impl SettingsPage {
 pub enum SettingsPageEvent {
     FocusModal,
     Pane(PaneEventWrapper),
-    // Zap Wave 7-3:`EnvironmentSetupModeSelectorToggled` /
+    // OpenWarp Wave 7-3:`EnvironmentSetupModeSelectorToggled` /
     // `AgentAssistedEnvironmentModalToggled` 随 ambient-agent UI 子系统物理删。
 }
 

@@ -1,4 +1,4 @@
-//! AI Assistant has since been renamed to "Zap AI" in the product.
+//! AI Assistant has since been renamed to "OpenWarp AI" in the product.
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{server::telemetry::OpenedWarpAISource, terminal::model::terminal_model::BlockIndex};

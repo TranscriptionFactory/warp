@@ -512,7 +512,7 @@ language-restart-required-body = OpenWarp の UI 言語が更新されました�
 
 # Sidebar / SettingsSection labels (Display impl)
 settings-section-about = 概要
-# Zap: settings-section-account は Account 設定ページとともに削除。
+# OpenWarp: settings-section-account は Account 設定ページとともに削除。
 settings-section-mcp-servers = MCP サーバー
 settings-section-billing-and-usage = 請求と使用状況
 settings-section-appearance = 外観
@@ -563,7 +563,7 @@ settings-about-export-logs-description = 最近のアプリログ（および存
 settings-about-export-logs-success = ログを { $path } にエクスポートしました
 settings-about-export-logs-failure = ログのエクスポートに失敗しました：{ $error }
 
-# Zap: main_page.rs 関連の文字列は Account 設定ページとともに削除された。
+# OpenWarp: main_page.rs 関連の文字列は Account 設定ページとともに削除された。
 
 
 # --- ANCHOR-SUB-MCP (agent-settings-mcp) ---
@@ -1744,7 +1744,7 @@ keybinding-desc-workspace-toggle-notification-mailbox = 通知メールボック
 # Settings pages
 keybinding-desc-workspace-show-settings = 設定を開く
 keybinding-desc-workspace-show-settings-menu = 設定
-# Zap: keybinding-desc-workspace-show-settings-account は Account 設定ページとともに削除。
+# OpenWarp: keybinding-desc-workspace-show-settings-account は Account 設定ページとともに削除。
 keybinding-desc-workspace-show-settings-appearance = 設定を開く: 外観
 keybinding-desc-workspace-show-settings-appearance-menu = 外観...
 keybinding-desc-workspace-show-settings-features = 設定を開く: 機能

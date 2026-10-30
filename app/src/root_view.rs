@@ -102,10 +102,10 @@ use crate::auth::{WebHandoffEvent, WebHandoffView};
 
 /// 返回当前 channel 的产品名,作为窗口标题初始值与 quake/transferred 窗口标题。
 ///
-/// 取 `ChannelState::app_id().application_name()` 是为了让 OSS 构建显示 `Zap`、
-/// 而 Stable/Preview/Dev 等上游 channel 仍显示各自的 `Zap` / `WarpPreview` / `WarpDev`,
+/// 取 `ChannelState::app_id().application_name()` 是为了让 OSS 构建显示 `OpenWarp`、
+/// 而 Stable/Preview/Dev 等上游 channel 仍显示各自的 `Warp` / `WarpPreview` / `WarpDev`,
 /// 避免在 fork 中跨多处硬编码字符串(Windows 任务管理器按窗口标题做进程分组,
-/// 硬编码 `"Zap"` 会让 Zap 在任务管理器里显示成 `Zap(N)`)。
+/// 硬编码 `"OpenWarp"` 会让 OpenWarp 在任务管理器里显示成 `OpenWarp(N)`)。
 ///
 /// 注意:窗口创建后,`Workspace::update_window_title()` 会在每次 tab 切换/重命名时
 /// 用 tab 标题覆盖此值,所以此函数仅决定窗口刚打开、还未挂上 tab 时的初始标题。
@@ -747,7 +747,7 @@ fn path_if_directory(path: &Path) -> Option<&Path> {
 /// Opens a new window with the workspace configured according to `source`. Returns the
 /// newly-opened window ID and a handle to the root view in that window.
 ///
-/// This is the canonical way to open a new Zap window - all other entrypoints should delegate to
+/// This is the canonical way to open a new OpenWarp window - all other entrypoints should delegate to
 /// it if possible.
 pub(crate) fn open_new_with_workspace_source(
     source: NewWorkspaceSource,
@@ -1250,11 +1250,11 @@ fn toggle_quake_mode_window(global_resource_handles: &GlobalResourceHandles, ctx
     };
 }
 
-/// This action will show or hide all of Zap's windows except the quake window
+/// This action will show or hide all of OpenWarp's windows except the quake window
 ///
-/// - If Zap is active and has any windows, hide those windows.
-/// - If Zap is hidden, show all windows.
-/// - If Zap is active but has 0 normal windows, create a new window with a new session.
+/// - If OpenWarp is active and has any windows, hide those windows.
+/// - If OpenWarp is hidden, show all windows.
+/// - If OpenWarp is active but has 0 normal windows, create a new window with a new session.
 fn show_or_hide_non_quake_mode_windows(_: &(), ctx: &mut AppContext) {
     let quake_window_id = get_quake_mode_state(ctx).map(|state| state.window_id);
     let non_quake_mode_window_ids = ctx
@@ -1265,7 +1265,7 @@ fn show_or_hide_non_quake_mode_windows(_: &(), ctx: &mut AppContext) {
         open_new(&(), ctx);
     }
     let windowing_model = ctx.windows();
-    // Now there is at least one window. If a Zap window is active, hide the app.
+    // Now there is at least one window. If an OpenWarp window is active, hide the app.
     // Otherwise, show activate the app to show it in front.
     let active_window_id = windowing_model.active_window();
     match active_window_id {
@@ -1447,7 +1447,7 @@ impl RootView {
             me.handle_auth_manager_event(event, ctx);
         });
 
-        // Zap(本地化,Phase 5):`PreferencesSyncer` 已物理删除。
+        // OpenWarp(本地化,Phase 5):`PreferencesSyncer` 已物理删除。
         // 原 `InitialLoadCompleted` 事件用于在云端 preferences 同步完成后调用
         // `apply_onboarding_settings`,本地化场景下 onboarding 设置直接本地应用。
 
@@ -2233,7 +2233,7 @@ impl RootView {
                 } else if let AuthOnboardingState::NeedsSsoLink { .. } = &self.auth_onboarding_state
                 {
                     // We should be able to access their SSO state; if not, default to true,
-                    // since we should err on the side of them _not_ being able to use Zap.
+                    // since we should err on the side of them _not_ being able to use OpenWarp.
                     if auth_state.needs_sso_link() == Some(false) {
                         self.auth_onboarding_state.complete_sso_link(ctx);
                     }
@@ -2269,7 +2269,7 @@ impl RootView {
                             // application, which ought to be valid.
                             self.web_handoff(ctx);
                         } else {
-                            // Zap 已移除 log_out UI 入口,native 不再强制登出。
+                            // OpenWarp 已移除 log_out UI 入口,native 不再强制登出。
                             log::warn!("User account disabled; ignoring (OpenWarp 已移除 log_out)");
                         }
                     }
@@ -2301,7 +2301,7 @@ impl RootView {
     ) {
         match event {
             AuthOverrideWarningModalEvent::Close => {
-                // Zap 已移除 log_out 入口,关闭时不再触发登出。
+                // OpenWarp 已移除 log_out 入口,关闭时不再触发登出。
             }
             AuthOverrideWarningModalEvent::BulkExport => {
                 self.export_all_warp_drive_objects(ctx);
@@ -2422,7 +2422,7 @@ impl RootView {
         true
     }
 
-    /// Zap(本地化,Phase 5):原 `handle_preferences_syncer_event` 在云端
+    /// OpenWarp(本地化,Phase 5):原 `handle_preferences_syncer_event` 在云端
     /// preferences 同步初始加载完成后应用 onboarding settings,随同步器物理删除。
     /// onboarding settings 现在在 onboarding 完成时直接应用,不需要延迟到 cloud sync 后。
     /// If onboarding stored a pending tutorial (because login was required first),

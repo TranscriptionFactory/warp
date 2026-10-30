@@ -6,7 +6,7 @@
 //!   3. `Display` + `to_locale_str` 加 case
 //!
 //! 切换在重启后完全生效(已渲染 UI 文本不会自动重排,需要 view 重建)。
-//! 设置页 dropdown 应附"重启 Zap 后完全生效"提示。
+//! 设置页 dropdown 应附"重启 OpenWarp 后完全生效"提示。
 
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};

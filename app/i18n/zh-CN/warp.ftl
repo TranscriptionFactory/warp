@@ -552,7 +552,7 @@ language-restart-required-body = OpenWarp 的界面语言已更新。部分文�
 
 # 侧边栏 / SettingsSection 标签（Display impl）
 settings-section-about = 关于
-# Zap: settings-section-account 随 Account 设置页一同删除。
+# OpenWarp: settings-section-account 随 Account 设置页一同删除。
 settings-section-mcp-servers = MCP 服务器
 settings-section-billing-and-usage = 账单与用量
 settings-section-appearance = 外观
@@ -613,7 +613,7 @@ settings-about-export-logs-description = 将最近的应用日志(以及存在�
 settings-about-export-logs-success = 日志已导出到 { $path }
 settings-about-export-logs-failure = 导出日志失败：{ $error }
 
-# Zap：main_page.rs 相关文案随 Account 设置页一同删除。
+# OpenWarp：main_page.rs 相关文案随 Account 设置页一同删除。
 
 
 # --- ANCHOR-SUB-MCP (agent-settings-mcp) ---
@@ -1748,7 +1748,7 @@ keybinding-desc-workspace-toggle-notification-mailbox = 切换通知邮箱
 # 设置页面
 keybinding-desc-workspace-show-settings = 打开设置
 keybinding-desc-workspace-show-settings-menu = 设置
-# Zap：keybinding-desc-workspace-show-settings-account 随 Account 设置页一同删除。
+# OpenWarp：keybinding-desc-workspace-show-settings-account 随 Account 设置页一同删除。
 keybinding-desc-workspace-show-settings-appearance = 打开设置：外观
 keybinding-desc-workspace-show-settings-appearance-menu = 外观...
 keybinding-desc-workspace-show-settings-features = 打开设置：功能
@@ -2101,7 +2101,7 @@ rules-init-project-button = 初始化项目
 
 # --- Agent 视图零状态 + 消息栏 ---
 agent-zero-state-title = 新建 Agent 对话
-# Zap 已移除远端 Agent 入口，此 key 实际不会被渲染;保留以匹配 en 兜底链。
+# OpenWarp 已移除远端 Agent 入口，此 key 实际不会被渲染;保留以匹配 en 兜底链。
 agent-zero-state-title-cloud = 新建 Agent 对话
 agent-zero-state-description = 在下方输入提示开始新的对话
 agent-zero-state-description-with-location = 在下方输入提示，于 `{ $location }` 开始新的对话

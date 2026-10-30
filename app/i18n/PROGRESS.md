@@ -1,4 +1,4 @@
-# Zap Desktop i18n 翻译进度看板
+# OpenWarp Desktop i18n 翻译进度看板
 
 > **本文档是多 agent 并行翻译的协调中心。** 每个 agent 启动前先读这里认领 surface,完成后更新对应行。
 > Source-of-truth locale 是 `en`(必须 100% 完整);其它 locale 缺 key 自动 fallback 到英文,可以分批补译。

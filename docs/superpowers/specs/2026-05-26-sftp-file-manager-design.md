@@ -5,7 +5,7 @@
 
 ## 概述
 
-为 Zap 终端添加原生 SFTP 文件管理器功能，使用 `ssh2` crate（libssh2 绑定）实现 SFTP 协议，提供完整的远程文件浏览、传输和管理能力。作为独立 Pane 面板实现，与现有 Server File Browser 并存，无需安装远程 daemon。
+为 OpenWarp 终端添加原生 SFTP 文件管理器功能，使用 `ssh2` crate（libssh2 绑定）实现 SFTP 协议，提供完整的远程文件浏览、传输和管理能力。作为独立 Pane 面板实现，与现有 Server File Browser 并存，无需安装远程 daemon。
 
 ## 技术方案
 

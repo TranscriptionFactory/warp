@@ -26,7 +26,7 @@ pub mod proxy;
 pub use proxy::{ProxyConfig, ProxyMode, current_proxy_config, set_global_proxy_config};
 
 pub mod headers {
-    /// Custom OpenWarp header indicating the version of the Zap app.
+    /// Custom OpenWarp header indicating the version of the OpenWarp app.
     pub const CLIENT_RELEASE_VERSION_HEADER_KEY: &str = "X-OpenWarp-Client-Version";
 
     /// Custom OpenWarp header indicating the OS category the request was sent from.
@@ -234,7 +234,7 @@ impl Client {
         )
     }
 
-    /// 判断 request 是否应携带 Zap-specific headers。只有 same-origin 请求才携带自定义 header。
+    /// 判断 request 是否应携带 OpenWarp-specific headers。只有 same-origin 请求才携带自定义 header。
     #[cfg(target_family = "wasm")]
     fn include_warp_http_headers<U: IntoUrl + Clone>(url: U) -> bool {
         url.into_url().is_ok_and(|url| {

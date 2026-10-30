@@ -562,7 +562,7 @@ language-restart-required-body = OpenWarp's UI language has been updated. Some t
 
 # Sidebar / SettingsSection labels (Display impl)
 settings-section-about = About
-# Zap: settings-section-account removed alongside the Account settings page.
+# OpenWarp: settings-section-account removed alongside the Account settings page.
 settings-section-mcp-servers = MCP Servers
 settings-section-billing-and-usage = Billing and usage
 settings-section-appearance = Appearance
@@ -625,7 +625,7 @@ settings-about-export-logs-description = Bundles recent app logs (and MCP / upda
 settings-about-export-logs-success = Logs exported to { $path }
 settings-about-export-logs-failure = Failed to export logs: { $error }
 
-# Zap: main_page.rs (Account / version / autoupdate) strings removed alongside
+# OpenWarp: main_page.rs (Account / version / autoupdate) strings removed alongside
 # the Account settings page. The About page now owns version / update CTAs.
 
 
@@ -1824,7 +1824,7 @@ keybinding-desc-workspace-toggle-notification-mailbox = Toggle notification mail
 # Settings pages
 keybinding-desc-workspace-show-settings = Open Settings
 keybinding-desc-workspace-show-settings-menu = Settings
-# Zap: keybinding-desc-workspace-show-settings-account removed alongside the
+# OpenWarp: keybinding-desc-workspace-show-settings-account removed alongside the
 # Account settings page.
 keybinding-desc-workspace-show-settings-appearance = Open Settings: Appearance
 keybinding-desc-workspace-show-settings-appearance-menu = Appearance...
@@ -3008,7 +3008,7 @@ wasm-nux-yes = Yes
 # Auth override warning (app/src/auth/auth_override_warning_body.rs)
 auth-override-warning-title = New login detected
 auth-override-warning-confirm-title = Delete personal OpenWarp Drive objects and preferences?
-auth-override-warning-description = It looks like you logged into a OpenWarp account through a web browser. If you continue, any personal OpenWarp Drive objects and preferences from this anonymous session will be permanently deleted.
+auth-override-warning-description = It looks like you logged into an OpenWarp account through a web browser. If you continue, any personal OpenWarp Drive objects and preferences from this anonymous session will be permanently deleted.
 auth-override-warning-cannot-undo = This cannot be undone.
 auth-override-warning-export = Export your data
 auth-override-warning-export-description =  to import later.
@@ -3324,7 +3324,7 @@ auth-skip-login-confirm-title = Are you sure you want to skip login?
 auth-skip-login-confirm-line-1 = You can sign up later, but some features, such as AI,
 auth-skip-login-confirm-line-2-prefix = are only available to logged-in users.{" "}
 auth-yes-skip-login = Yes, skip login
-auth-require-login-ai-collaboration = Local AI features do not require a OpenWarp account.
+auth-require-login-ai-collaboration = Local AI features do not require an OpenWarp account.
 auth-require-login-drive-limit = OpenWarp Drive objects are stored locally in OpenWarp.
 auth-require-login-share = Sharing is unavailable in local OpenWarp builds.
 auth-welcome-title = Welcome to OpenWarp!

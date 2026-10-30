@@ -299,9 +299,9 @@ first-class Block with notification routing through OpenWarp's notification cent
 If you maintain a CLI agent or a terminal-adjacent tool and want similar
 first-class integration, open an issue — we are happy to wire more partners in.
 
-## Migrating from Zap or Warp
+## Migrating from OpenWarp or Warp
 
-If you used this project under its earlier **Zap** branding, or are coming
+If you used this project under its earlier **OpenWarp** branding, or are coming
 from upstream **Warp**, see
 [docs/migrate-from-warp.md](docs/migrate-from-warp.md) to bring your settings
 across.

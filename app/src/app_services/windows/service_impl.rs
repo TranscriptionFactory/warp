@@ -8,7 +8,7 @@ use warpui::r#async::executor::Background;
 
 use super::single_instance_manager::uri_named_pipe_name;
 
-/// IPC Service to respond to URIs sent to the active Zap instance.
+/// IPC Service to respond to URIs sent to the active OpenWarp instance.
 pub(super) struct UriService {}
 
 impl ipc::Service for UriService {
@@ -38,7 +38,7 @@ impl ipc::ServiceImpl for UriServiceImpl {
     }
 }
 
-/// Forwards the given URLs to the main running instance of Zap.
+/// Forwards the given URLs to the main running instance of OpenWarp.
 pub(super) async fn forward_uri_to_sole_running_instance(
     urls: Vec<Url>,
 ) -> Result<(), ipc::ClientError> {

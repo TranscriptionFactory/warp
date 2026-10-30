@@ -45,7 +45,7 @@ const LEARN_MORE_MARKDOWN_URL: &str =
     "https://docs.warp.dev/terminal/more-features/markdown-viewer";
 const LEARN_MORE_CODE_URL: &str = "https://docs.warp.dev/code/overview#built-in-code-editor";
 
-/// A path to a file that can be opened in Zap, along with its type.
+/// A path to a file that can be opened in OpenWarp, along with its type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenablePath {
     pub path: PathBuf,
@@ -198,7 +198,7 @@ impl TerminalView {
             .is_some_and(|entry| entry.is_dir == Some(false))
     }
 
-    /// Whether or not the "Open in Zap" banner is open.
+    /// Whether or not the "Open in OpenWarp" banner is open.
     #[cfg(feature = "integration_tests")]
     pub fn is_open_in_warp_banner_open(&self) -> bool {
         self.inline_banners_state.open_in_warp_banner.is_some()
@@ -228,7 +228,7 @@ impl TerminalView {
     }
 
     /// Insert a suggestion banner for opening the file `openable_path`, originating from
-    /// `session`, in a Zap pane.
+    /// `session`, in an OpenWarp pane.
     fn suggest_open_in_warp(
         &mut self,
         openable_path: OpenablePath,
@@ -383,7 +383,7 @@ lazy_static! {
         HashSet::from(["bat", "cat", "glow", "less", "open"]);
 }
 
-/// Examines `command` for a file openable in Zap, returning the resolved path and type if found.
+/// Examines `command` for a file openable in OpenWarp, returning the resolved path and type if found.
 async fn check_openable_in_warp(
     command: String,
     working_directory: Option<String>,
@@ -398,14 +398,14 @@ async fn check_openable_in_warp(
         escape_char,
     ) {
         if async_fs::metadata(&candidate.path).await.is_ok() {
-            // We've found a file that exists and can be opened in Zap.
+            // We've found a file that exists and can be opened in OpenWarp.
             return Some(candidate);
         }
     }
     None
 }
 
-/// The file arguments of the file-viewer commands in `command` that Zap can open, joined to
+/// The file arguments of the file-viewer commands in `command` that OpenWarp can open, joined to
 /// `working_directory`, in command order. Existence is not checked. Remote sessions pass the
 /// block's remote cwd, so the joined paths are host paths.
 fn openable_candidates(

@@ -442,8 +442,8 @@ pub enum ModelEvent {
     InitSsh(InitSshEvent),
     /// Emitted when the active block's prompt has been updated.
     PromptUpdated,
-    /// Emitted when the honor_ps1 state of the shell is out-of-sync with Zap's settings.
-    /// This can happen in cases such as when the user changes between PS1 and Zap prompt inside
+    /// Emitted when the honor_ps1 state of the shell is out-of-sync with OpenWarp's settings.
+    /// This can happen in cases such as when the user changes between PS1 and OpenWarp prompt inside
     /// of an SSH session (the bindkeys are sent to the SSH session but not the local session, so
     /// they are out-of-sync when the user exits SSH).
     HonorPS1OutOfSync,

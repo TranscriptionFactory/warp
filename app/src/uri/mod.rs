@@ -49,7 +49,7 @@ pub struct OpenMCPSettingsArgs {
 }
 
 /// Source query parameter value indicating auth was initiated from agent setup.
-/// Zap Wave 7-3:URI handler / Settings UI 已删,仅供 `update_environment_form` 在 agent UI
+/// OpenWarp Wave 7-3:URI handler / Settings UI 已删,仅供 `update_environment_form` 在 agent UI
 /// 大手术 commit 完成前充当起起过渡 (后者不拼发出的 URL 用到)。
 pub const CLOUD_SETUP_SOURCE: &str = "cloud_setup";
 
@@ -255,7 +255,7 @@ impl UriHost {
                 if let Some(settings_sub_page) = settings_sub_page {
                     match settings_sub_page.as_str() {
                         "environments" => {
-                            // Zap Wave 7-3:warp://settings/environments URI handler 随
+                            // OpenWarp Wave 7-3:warp://settings/environments URI handler 随
                             // ambient-agent UI 子系统物理删。还保留 GitHub auth completion
                             // 通知 —— 其他独立的组件可能需要听。
                             GitHubAuthNotifier::handle(ctx).update(ctx, |notifier, ctx| {
@@ -277,7 +277,7 @@ impl UriHost {
                                 ctx,
                             );
                         }
-                        // Zap Wave 3-1:"platform" URI 路由原指向
+                        // OpenWarp Wave 3-1:"platform" URI 路由原指向
                         // `SettingsSection::OzCloudAPIKeys`(云端 API key 管理页),
                         // 随 UI 一同物理删。保留 arm 以记录原意图,物理处理为 no-op。
                         "platform" => {
@@ -740,7 +740,7 @@ fn get_primary_window(
 enum OpenFileAction {
     /// Open in the markdown notebook pane.
     Notebook,
-    /// Open in Zap's code/text editor pane.
+    /// Open in OpenWarp's code/text editor pane.
     Editor,
     /// Open a session at the parent directory and queue the file as the pending command,
     /// or just open a session at the directory path if `path` is a directory.
@@ -802,7 +802,7 @@ fn open_file(window_id: Option<WindowId>, path: PathBuf, ctx: &mut AppContext) {
                 openable_file_type::resolve_file_target_to_open_in_warp,
             };
 
-            // Open text/code files in Zap's code editor, respecting the user's layout preference.
+            // Open text/code files in OpenWarp's code editor, respecting the user's layout preference.
             let editor_settings = EditorSettings::as_ref(ctx);
             let target = resolve_file_target_to_open_in_warp(&path, editor_settings, None);
 
