@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- **SFTP browser in English**: The SFTP file browser's menus, column headers, transfer statuses, dialogs and error messages were hardcoded in Chinese. They now follow the app language (English, Simplified Chinese, Japanese), and low-level SFTP errors are in English.
+
 ## [v2026.10.30.1] — 2026-10-30
 
 - **OpenWarp branding everywhere**: Banners, menus, onboarding, settings descriptions, error messages and AI prompts that still said "Zap" now say OpenWarp, matching the translated strings. The settings page also accepts the "OpenWarp Drive" and "OpenWarp Agent" section names it displays.
