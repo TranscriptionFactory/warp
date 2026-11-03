@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- **SFTP verifies host keys**: The SFTP browser now checks the server's host key against `~/.ssh/known_hosts` before sending credentials, as `ssh` does. It refuses unknown hosts (connect once with `ssh` to save the key) and changed or `@revoked` keys. Hashed entries, `[host]:port` entries and wildcard patterns are supported, and the key type already on file is requested first.
 - **SFTP browser in English**: The SFTP file browser's menus, column headers, transfer statuses, dialogs and error messages were hardcoded in Chinese. They now follow the app language (English, Simplified Chinese, Japanese), and low-level SFTP errors are in English.
 
 ## [v2026.10.30.1] — 2026-10-30

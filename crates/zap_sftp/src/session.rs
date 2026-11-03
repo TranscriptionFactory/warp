@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::SftpError;
+use crate::known_hosts;
 use crate::sftp::Sftp;
 
 /// 默认连接超时时间（10 秒）
@@ -76,6 +77,11 @@ impl SftpSession {
         // 设置 SSH 会话超时（毫秒），影响 handshake 和后续所有阻塞操作
         session.set_timeout(effective_timeout.as_millis() as u32);
 
+        // 主机密钥类型偏好按 known_hosts 中已有的类型排序
+        let known = known_hosts::lookup(&known_hosts::default_files(), host, port);
+        session.method_pref(ssh2::MethodType::HostKey, &known_hosts::host_key_prefs(&known))
+            .map_err(|e| SftpError::ConnectionFailed(format!("Failed to set host key preferences: {e}")))?;
+
         session.handshake()
             .map_err(|e| {
                 if is_timeout_error(&e) {
@@ -84,6 +90,11 @@ impl SftpSession {
                     SftpError::ConnectionFailed(format!("SSH handshake failed: {e}"))
                 }
             })?;
+
+        // 认证前校验主机密钥,避免把凭据交给冒充的服务器
+        let (host_key, _) = session.host_key()
+            .ok_or_else(|| SftpError::HostKey("the server sent no host key".into()))?;
+        known_hosts::verify(&known, host, port, host_key).map_err(SftpError::HostKey)?;
 
         match &auth {
             AuthMethod::Password { password } => {
