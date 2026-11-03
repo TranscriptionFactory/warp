@@ -64,6 +64,19 @@ These are net-new capabilities OpenWarp adds on top of the fork:
   the terminal. Works on both local and remote files via SFTP.
 - **Per-window themes** — set a different theme per window; theme preview applies
   only to the active window.
+- **Kitty graphics protocol** — inline images on macOS and Linux, including
+  Unicode placeholders (images survive tmux and zellij) and animation.
+- **SSH-aware splits** — splitting a pane in an SSH session opens the new pane on
+  the same host, in the same remote directory, the way a tmux split does.
+- **Remote file links and search** — paths printed by Claude Code, Codex and other
+  tools in an SSH session are clickable and open in the remote editor; the command
+  palette searches files on the remote host.
+- **Local multi-agent orchestration** — BYOP agents can launch Warp, Claude Code,
+  Codex and OpenCode child agents in hidden local panes, with a Run/Cancel
+  confirmation and live child status. No cloud runner involved.
+- **Security hardening** — SSRF guards on webfetch and MCP OAuth discovery, shell
+  escaping fixes, and an MCP client that does not send credentials to redirect
+  targets.
 - **Third-party CLI agents** — bring any CLI agent into the Warp Block model.
   First-class adapters for:
   - **DeepSeek-TUI** (completion notifications, text-notification mapping,
@@ -146,6 +159,12 @@ one click — the experience is identical to Warp, but every layer is yours.
 - **Built-in themes** — VS Code 2026 Dark and other themes included
 - **Vue SFC support** — injection highlighting (JS/CSS/TS) and block-level comments
 - **Onkey** — keyboard remapping for custom keybindings
+- **Prompt caching** — Anthropic cache breakpoints and a stable OpenAI cache key
+  on every request
+- **OSC 8 hyperlinks** — link text from programs keeps its target; Cmd+click opens it
+- **Async terminal find and ranked history** — search scrollback without blocking;
+  history search ranks by recency, session and exit status
+- **In-app update check** — checks GitHub Releases for new builds
 
 ## What we are aiming for
 

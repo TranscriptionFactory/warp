@@ -58,6 +58,16 @@ code review,并修复了一系列上游渲染问题 —— 所有凭证、会话
 - **应用内图片查看器** —— 在终端中直接打开图片(PNG、JPEG、GIF、SVG、WebP),
   本地文件与 SFTP 远程文件均可。
 - **按窗口主题** —— 每个窗口设置不同主题;主题预览只作用于当前窗口。
+- **Kitty 图形协议** —— macOS 与 Linux 上的内联图片,支持 Unicode 占位符
+  (图片可穿过 tmux 与 zellij 显示)与动画。
+- **感知 SSH 的分屏** —— 在 SSH 会话中拆分窗格时,新窗格连到同一主机、同一远端
+  目录,与 tmux 分屏一致。
+- **远端文件链接与搜索** —— SSH 会话中 Claude Code、Codex 等工具输出的路径可点击,
+  在远端编辑器中打开;命令面板可搜索远端主机上的文件。
+- **本地多 Agent 编排** —— BYOP Agent 可在隐藏的本地窗格中启动 Warp、Claude Code、
+  Codex、OpenCode 子 Agent,带运行/取消确认卡片与实时子任务状态,不依赖云端。
+- **安全加固** —— webfetch 与 MCP OAuth 发现的 SSRF 防护、shell 转义修复;
+  MCP 客户端不再把凭据发给重定向目标。
 - **第三方 CLI Agent** —— 把任意 CLI Agent 纳入 Warp Block 模型。一等公民适配:
   - **DeepSeek-TUI**(完成通知、文本通知映射、输入恢复全部打通)
   - **Google Antigravity**(`agy`)—— 原生支持
@@ -128,6 +138,11 @@ minijinja 驱动的模板引擎根据当前工作目录、语言与角色实时�
 - **内置主题** —— 内含 VS Code 2026 Dark 等主题
 - **Vue SFC 支持** —— 注入高亮(JS/CSS/TS)与块级注释
 - **Onkey** —— 自定义键位的键盘重映射
+- **Prompt 缓存** —— Anthropic 请求带缓存断点,OpenAI 请求带稳定的缓存键
+- **OSC 8 超链接** —— 程序输出的链接文本保留目标地址,Cmd+点击打开
+- **异步终端查找与历史排序** —— 搜索滚动缓冲区不阻塞界面;历史搜索按时间、
+  会话与退出状态排序
+- **应用内检查更新** —— 从 GitHub Release 检查新版本
 
 ## 我们的目标
 

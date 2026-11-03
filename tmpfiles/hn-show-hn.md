@@ -32,14 +32,19 @@ New since that earlier post:
   Billing, referral, cloud sync, and the cloud-agent subsystems are gone.
 
 - Kitty graphics protocol on macOS and Linux, including Unicode
-  placeholders (so images work through tmux) and animation.
+  placeholders (so images work through tmux and zellij) and animation.
 
 - Remote work over SSH: splitting a pane in an SSH session opens the new
   pane on the same host, in the same directory, the way a tmux split
-  does. The code-review panel diffs, commits, pushes, and opens PRs
-  against a repo on the remote host. Images and Markdown files on the
-  remote open in-app. The SSH host manager and SFTP browser are
-  zerx-lab's work.
+  does. File paths that Claude Code or Codex print on the remote are
+  clickable and open in-app, and the command palette searches remote
+  files. The code-review panel diffs, commits, pushes, and opens PRs
+  against a repo on the remote host. The SSH host manager and SFTP
+  browser are zerx-lab's work.
+
+- Local multi-agent runs: a BYOP agent can launch Warp, Claude Code,
+  Codex, or OpenCode child agents in hidden local panes, after you
+  confirm.
 
 - Security hardening: SSRF guards on webfetch and MCP OAuth discovery, and
   shell-escaping fixes. The MCP client no longer sends your credentials to
@@ -48,7 +53,9 @@ New since that earlier post:
 - Third-party CLI agents (Claude Code, Codex, and others) run inside Warp's
   block model.
 
-- We port fixes from Warp's repo: 53 across the last two syncs.
+- We port fixes from Warp's repo. The latest sync brought OSC 8
+  hyperlinks, async scrollback search, ranked history search, and
+  shell-lifecycle recovery.
 
 On the naming question from the last thread: we are not affiliated with
 Warp, Inc. Warp did open-source their client. This fork exists because
@@ -73,8 +80,8 @@ still requires an account (and a paid plan) to use your own LLM providers.
 OpenWarp is a community fork that removes that: no login, no cloud calls, an
 open provider layer. It builds on the zerx-lab community fork, which has
 since taken its own branding; this repo continues under the OpenWarp name,
-and we trade patches with them. We also port fixes from Warp's repo: 53
-across the last two syncs.
+and we trade patches with them. We also port fixes from Warp's repo on a
+regular cadence.
 
 In practice:
 
@@ -139,7 +146,8 @@ and cloud dependency stripped out. It keeps Warp's terminal fundamentals
 - Per-window themes; Warp's blocks, workflows, and keybindings preserved
 - Security fixes: SSRF guards on webfetch and MCP OAuth discovery, shell
   escaping, and no MCP credentials sent to redirect targets
-- Fixes ported from Warp's repo: 53 across the last two syncs
+- OSC 8 hyperlinks, async scrollback search, ranked history search
+- Fixes ported from Warp's repo on a regular cadence
 - Binaries for macOS/Linux/Windows: https://github.com/TranscriptionFactory/warp/releases
 
 AGPL-3.0/MIT, unchanged from upstream. Not affiliated with Warp, Inc.
