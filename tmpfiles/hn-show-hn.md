@@ -8,12 +8,12 @@ Show HN: OpenWarp – a Warp terminal fork with no account and bring-your-own LL
 
 **Text:**
 
-OpenWarp is a community fork of Warp's open-source code that drops the
-account requirement and cloud dependency. Paste a base URL and an API key,
-or point it at Ollama or LM Studio, and the AI features work. Credentials,
-conversations, and agent history stay on your machine. It speaks six
+OpenWarp is a community fork of Warp's open-source client with the account
+requirement and cloud dependency removed. Paste a base URL and an API key,
+or point it at Ollama or LM Studio, and the AI features work. It speaks six
 native protocols (OpenAI Chat and Responses, Anthropic, Gemini, DeepSeek,
-Ollama) and works with any OpenAI-compatible proxy.
+Ollama) plus any OpenAI-compatible proxy. Your keys go in the OS keychain,
+and conversations and agent history stay on your machine.
 
 Lineage: Warp, Inc. open-sourced their client. zerx-lab forked it to open
 up the provider layer; you may remember that fork from
@@ -22,47 +22,55 @@ fork, which has since taken its own branding and direction, and continues
 under the OpenWarp name. We trade patches with them; several of the fixes
 below landed there too.
 
-New since that earlier post:
+What we added since that post:
 
-- Binary releases: macOS (arm64 and Intel dmg), Linux (AppImage, deb, rpm,
-  static CLI tarballs including aarch64), and a Windows installer. You can
-  try it without building from source.
+- Binary releases for macOS (arm64 and Intel), Linux (AppImage, deb, rpm,
+  static CLI tarballs including aarch64), and Windows. The app checks
+  GitHub Releases for updates.
 
-- We delete cloud code paths from the tree instead of switching them off.
-  Billing, referral, cloud sync, and the cloud-agent subsystems are gone.
+- We delete cloud code paths instead of switching them off. Billing,
+  referral, cloud sync, and the cloud-agent subsystems are gone.
 
-- Kitty graphics protocol on macOS and Linux, including Unicode
-  placeholders (so images work through tmux and zellij) and animation.
+- You can edit the system prompt, a minijinja template. Upstream assembles
+  its prompt server-side. Anthropic requests carry cache breakpoints and
+  OpenAI requests carry a stable cache key, so repeated context costs you
+  less.
 
-- Remote work over SSH: splitting a pane in an SSH session opens the new
-  pane on the same host, in the same directory, the way a tmux split
-  does. File paths that Claude Code or Codex print on the remote are
-  clickable and open in-app, and the command palette searches remote
-  files. The code-review panel diffs, commits, pushes, and opens PRs
-  against a repo on the remote host. The SSH host manager and SFTP
-  browser are zerx-lab's work.
+- Kitty graphics protocol on macOS and Linux, with Unicode placeholders
+  (images survive tmux and zellij) and animation.
 
-- Local multi-agent runs: a BYOP agent can launch Warp, Claude Code,
-  Codex, or OpenCode child agents in hidden local panes, after you
-  confirm.
+- SSH: splitting a pane in an SSH session opens the new pane on the same
+  host and directory, like a tmux split. Click a path that Claude Code or
+  Codex printed on the remote and it opens in-app; the command palette
+  searches remote files. The code-review panel diffs, commits, pushes, and
+  opens PRs against a remote repo. zerx-lab built the SSH host manager
+  and SFTP browser.
 
-- Security hardening: SSRF guards on webfetch and MCP OAuth discovery, and
-  shell-escaping fixes. The MCP client no longer sends your credentials to
+- Security: SSRF guards on webfetch and MCP OAuth discovery, shell-escaping
+  fixes, and an MCP client that refuses to forward your credentials to
   redirect targets.
 
-- Third-party CLI agents (Claude Code, Codex, and others) run inside Warp's
-  block model.
+What we keep from upstream:
 
-- We port fixes from Warp's repo. The latest sync brought OSC 8
-  hyperlinks, async scrollback search, ranked history search, and
-  shell-lifecycle recovery.
+- Warp's terminal: blocks, the editor-style input, workflows, the command
+  palette, keybindings. Claude Code, Codex, and other CLI agents run inside
+  the block model.
+
+- We cherry-pick from Warp's repo. The latest round brought OSC 8
+  hyperlinks, async scrollback search, history search ranked by recency
+  and exit status, box-drawing glyphs without seams, and recovery when a
+  shell drops its command-completion hook.
+
+- We adapted upstream's run_agents orchestration to run locally. A BYOP
+  agent can launch Warp, Claude Code, Codex, or OpenCode children in
+  hidden local panes once you confirm.
 
 On the naming question from the last thread: we are not affiliated with
 Warp, Inc. Warp did open-source their client. This fork exists because
 upstream requires an account, on a paid tier, to use your own model keys.
 We kept upstream's dual AGPL-3.0/MIT license.
 
-Still early; expect rough edges. Feedback and issues welcome.
+Still early, with rough edges. Feedback and issues welcome.
 
 ---
 
@@ -90,8 +98,8 @@ In practice:
 - **Any OpenAI-compatible endpoint works**, with native protocol support
   for OpenAI, Anthropic, Gemini, and DeepSeek. We verified OpenRouter,
   Groq, and Together.
-- **Keys stay on your machine** in a local config file, along with
-  conversations and agent history. We delete the cloud code paths from the
+- **Keys stay on your machine** in the OS keychain, and conversations and
+  agent history stay local too. We delete the cloud code paths from the
   codebase instead of toggling them off.
 - **You edit the system prompt yourself.** It is a minijinja template;
   upstream assembles theirs server-side.
