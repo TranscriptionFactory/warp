@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [v2026.11.04.1] — 2026-11-04
+
 - **File icons in TUIs**: Icons in yazi, superfile and other Nerd Font tools now render out of the box. OpenWarp bundles Hack Nerd Font Mono and loads it the first time a Nerd Font icon appears, so no font install is needed.
 - **Icon fonts as fallback fonts**: On macOS, icon-only monospace fonts such as Symbols Nerd Font Mono can now be chosen as the terminal fallback font. They are not offered as primary fonts.
 - **SFTP verifies host keys**: The SFTP browser now checks the server's host key against `~/.ssh/known_hosts` before sending credentials, as `ssh` does. It refuses unknown hosts (connect once with `ssh` to save the key) and changed or `@revoked` keys. Hashed entries, `[host]:port` entries and wildcard patterns are supported, and the key type already on file is requested first.
