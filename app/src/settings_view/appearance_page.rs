@@ -74,7 +74,7 @@ use ::settings::{Setting, SettingSection, ToggleableSetting};
 use enum_iterator::all;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use warp_core::ui::theme::color::internal_colors;
@@ -540,6 +540,9 @@ pub struct AppearanceSettingsPageView {
     zoom_level_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     zoom_reset_button_mouse_state: MouseStateHandle,
     available_families: HashMap<String, (Option<FamilyId>, FontType)>,
+    /// Families that are only offered as fallback fonts, kept out of `available_families` so that
+    /// the primary font dropdowns can't select them.
+    fallback_only_families: HashSet<String>,
     view_font_type: FontType,
     alt_screen_padding_editor: ViewHandle<EditorView>,
     color_picker_dot_states: Vec<Vec<MouseStateHandle>>,
@@ -1404,6 +1407,7 @@ impl AppearanceSettingsPageView {
             zoom_level_dropdown: Self::build_zoom_level_dropdown(ctx),
             zoom_reset_button_mouse_state: MouseStateHandle::default(),
             available_families: Default::default(),
+            fallback_only_families: Default::default(),
             view_font_type: Default::default(),
             color_picker_dot_states: (0..directory_tab_colors(ctx).len())
                 .map(|_| {
@@ -2338,10 +2342,12 @@ impl AppearanceSettingsPageView {
                         .font_cache()
                         .load_family_name_from_id(fallback_font_family)
                     {
-                        self.available_families
-                            .entry(loaded_font_name)
-                            .and_modify(|entry| entry.0 = Some(fallback_font_family))
-                            .or_insert((Some(fallback_font_family), FontType::Monospace));
+                        if !self.fallback_only_families.contains(&loaded_font_name) {
+                            self.available_families
+                                .entry(loaded_font_name)
+                                .and_modify(|entry| entry.0 = Some(fallback_font_family))
+                                .or_insert((Some(fallback_font_family), FontType::Monospace));
+                        }
                     }
                 }
 
@@ -2374,6 +2380,14 @@ impl AppearanceSettingsPageView {
                         }
                     })
                     .collect::<Vec<_>>();
+
+                // No font override here: an icon-only font can't draw its own name.
+                items.extend(self.fallback_only_families.iter().map(|name| {
+                    DropdownItem::new(
+                        name,
+                        AppearancePageAction::SetFallbackFontFamily(name.clone()),
+                    )
+                }));
 
                 items.sort_by(|a, b| a.display_text.cmp(&b.display_text));
                 items.insert(0, Self::default_fallback_font_item());
@@ -2503,6 +2517,13 @@ impl AppearanceSettingsPageView {
         available_families: Vec<(Option<FamilyId>, FontInfo)>,
         ctx: &mut ViewContext<Self>,
     ) {
+        let (fallback_only, available_families): (Vec<_>, Vec<_>) = available_families
+            .into_iter()
+            .partition(|(_, font_info)| font_info.is_fallback_only);
+        self.fallback_only_families = fallback_only
+            .into_iter()
+            .map(|(_, font_info)| font_info.family_name)
+            .collect();
         self.available_families = available_families
             .into_iter()
             .map(|(family_id, font_info)| {

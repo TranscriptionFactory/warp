@@ -1,7 +1,6 @@
 // The per-script family table below is only registered on web.
 #![cfg_attr(not(target_family = "wasm"), allow(dead_code))]
 
-use crate::ChannelState;
 use warpui::assets::asset_cache::AssetSource;
 use warpui::fonts::ExternalFontFamily;
 
@@ -10,7 +9,7 @@ use std::sync::Arc;
 use lazy_static::lazy_static;
 
 /// Single-cell-wide so TUI file-type icons stay aligned to the terminal grid. A symbols-only font
-/// will not work here: font loading requires a glyph for `m`.
+/// will not work here: loading a font from bytes requires a glyph for `m`.
 const HACK_NERD_FONT_MONO_ASSET: &str = "bundled/fonts/hack-nerd-font/HackNerdFontMono-Regular.ttf";
 
 #[cfg(not(target_family = "wasm"))]
@@ -41,10 +40,24 @@ pub fn fallback_font_source(location: &str) -> AssetSource {
     }
 }
 
+/// The origin the web client is served from. `script/wasm/bundle` places the fallback fonts there
+/// because their public host doesn't allow cross-origin fetches.
+#[cfg(target_family = "wasm")]
+fn web_origin() -> String {
+    web_sys::window()
+        .and_then(|window| window.location().origin().ok())
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn web_origin() -> String {
+    String::new()
+}
+
 fn url_for_font(family_name: &str, font_file: &str) -> String {
     format!(
-        "{}://assets/fallback-fonts/{}/{}",
-        ChannelState::url_scheme(),
+        "{}/assets/client/static/fallback-fonts/{}/{}",
+        web_origin(),
         family_name,
         font_file
     )

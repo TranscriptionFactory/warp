@@ -205,6 +205,9 @@ pub struct FontInfo {
     #[cfg(target_os = "macos")]
     pub font_names: Vec<String>,
     pub is_monospace: bool,
+    /// Whether this font can only be a fallback font, because it has no `m` glyph or English
+    /// support. Primary fonts need an `m` glyph to compute cell metrics.
+    pub is_fallback_only: bool,
 }
 
 type RasterBoundsKey = (GlyphKey, (OrderedFloat<f32>, OrderedFloat<f32>));

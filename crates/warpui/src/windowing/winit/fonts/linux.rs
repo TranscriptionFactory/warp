@@ -303,6 +303,7 @@ impl FamilyHandle {
                 FontInfo {
                     family_name: name.clone(),
                     is_monospace,
+                    is_fallback_only: false,
                 },
                 FontFamily { fonts, name },
             ))

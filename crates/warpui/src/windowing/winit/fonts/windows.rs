@@ -86,6 +86,7 @@ pub(crate) mod loader {
                             FontInfo {
                                 family_name: family_name.clone(),
                                 is_monospace,
+                                is_fallback_only: false,
                             },
                             FontFamily {
                                 name: family_name,

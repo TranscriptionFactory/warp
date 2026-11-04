@@ -146,6 +146,16 @@ fi
 echo "Building and bundling OpenWarp for channel $RELEASE_CHANNEL"
 ASSET_TARGET_DIR="$ASSET_TARGET_DIR" cargo build --target wasm32-unknown-unknown --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --features "$FEATURES"
 
+# Serve the fallback fonts from the web client's own origin, as their public host doesn't allow
+# cross-origin fetches. Keep this path in sync with url_for_font in app/src/font_fallback.rs.
+echo "Fetching fallback fonts"
+FALLBACK_FONT_HOST="https://storage.googleapis.com/warp-static-assets/fallback-fonts"
+perl -0ne 'print "$1/$2\n" while /url_for_font\(\s*"([^"]+)",\s*"([^"]+)"\s*\)/g' app/src/font_fallback.rs |
+  while read -r font; do
+    mkdir -p "$ASSET_TARGET_DIR/fallback-fonts/$(dirname "$font")"
+    curl -fsSL -o "$ASSET_TARGET_DIR/fallback-fonts/$font" "$FALLBACK_FONT_HOST/$font"
+  done
+
 # Generate linked JS and wasm files that can be run in the browser.
 echo "Running wasm-bindgen on $CARGO_TARGET_OUTPUT_DIR/$WARP_BIN.wasm"
 wasm-bindgen --target web --out-dir "$OUT_DIR" --out-name "warp" --keep-debug --no-typescript "$CARGO_TARGET_OUTPUT_DIR/$WARP_BIN.wasm"

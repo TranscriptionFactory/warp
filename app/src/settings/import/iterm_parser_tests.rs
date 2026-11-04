@@ -21,6 +21,7 @@ fn courier_new() -> Vec<FontInfo> {
             "CourierNew".to_string(),
         ],
         is_monospace: false,
+        is_fallback_only: false,
     }]
 }
 
@@ -340,6 +341,7 @@ fn test_parse_font_with_default_font() {
         family_name: "Hack".to_string(),
         font_names: vec!["Hack".to_string()],
         is_monospace: false,
+        is_fallback_only: false,
     }];
     assert_eq!(
         *warp_default_profile
@@ -362,6 +364,7 @@ fn test_parse_font_with_default_font() {
         family_name: "Monaco".to_string(),
         font_names: vec!["Monaco".to_string()],
         is_monospace: false,
+        is_fallback_only: false,
     }];
     assert_eq!(
         *iterm_default_profile

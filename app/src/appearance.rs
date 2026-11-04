@@ -454,12 +454,24 @@ fn get_or_load_font_family(font_name: &str, ctx: &mut AppContext) -> Option<Fami
     })
 }
 
+#[cfg(target_family = "wasm")]
+fn get_or_load_optional_font_family(_font_name: &str, _ctx: &mut AppContext) -> Option<FamilyId> {
+    None
+}
+
+/// Loads the user's fallback font, if any. Unlike primary fonts, fallback fonts don't need an `m`
+/// glyph, so icon-only fonts like Symbols Nerd Font Mono are allowed.
+#[cfg(not(target_family = "wasm"))]
 fn get_or_load_optional_font_family(font_name: &str, ctx: &mut AppContext) -> Option<FamilyId> {
     if font_name.is_empty() {
-        None
-    } else {
-        get_or_load_font_family(font_name, ctx)
+        return None;
     }
+    warpui::fonts::Cache::handle(ctx).update(ctx, |font_cache, _| {
+        font_cache
+            .get_or_load_system_font(font_name)
+            .map_err(|err| log::warn!("Failed to load font: {font_name} due to error {err:?}"))
+            .ok()
+    })
 }
 
 fn build_appearance(ctx: &mut AppContext) -> Appearance {

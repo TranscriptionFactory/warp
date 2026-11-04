@@ -65,12 +65,6 @@ mod loader {
             // so we just need a place-holder here for getting the CTFont object. Use
             // 16.0 here as it is consistent with https://docs.rs/core-text/19.2.0/src/core_text/font.rs.html#130
             let font = Font::from_ct_font(font::new_from_descriptor(&fontdesc, DEFAULT_FONT_SIZE));
-
-            let glyph_id = font.glyph_for_char('m');
-            if glyph_id.is_none() {
-                return Err(anyhow!("font must contain a glyph for the 'm' character"));
-            }
-
             fonts.push(font);
         }
         Ok(FontFamily {
@@ -103,8 +97,11 @@ mod loader {
                 }
             };
 
-            // We should only load languages that support english
-            if !FontDB::supports_english(&descriptor) {
+            // Only fonts that support English can be primary fonts, but monospace fonts without
+            // it, like Symbols Nerd Font Mono, still work as terminal fallback fonts.
+            let supports_english = FontDB::supports_english(&descriptor);
+            let is_monospace = descriptor.traits().symbolic_traits().is_monospace();
+            if !supports_english && !is_monospace {
                 continue;
             }
 
@@ -129,12 +126,20 @@ mod loader {
                         continue;
                     }
                 };
+                let has_m_glyph = font_family
+                    .fonts
+                    .iter()
+                    .all(|font| font.glyph_for_char('m').is_some());
+                if !has_m_glyph && !is_monospace {
+                    continue;
+                }
 
                 fonts.push((
                     FontInfo {
                         family_name: name,
                         font_names: vec![internal_name],
-                        is_monospace: descriptor.traits().symbolic_traits().is_monospace(),
+                        is_monospace,
+                        is_fallback_only: !supports_english || !has_m_glyph,
                     },
                     font_family,
                 ));
@@ -652,5 +657,31 @@ impl crate::platform::TextLayoutSystem for FontDB {
             alignment,
             first_line_head_indent,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fonts_offered_as_primary_have_an_m_glyph() {
+        let LoadedSystemFonts(fonts) = loader::load_all_system_fonts();
+        for (info, family) in fonts.iter().filter(|(info, _)| !info.is_fallback_only) {
+            assert!(
+                family
+                    .fonts
+                    .iter()
+                    .all(|font| font.glyph_for_char('m').is_some()),
+                "{} has no 'm' glyph",
+                info.family_name
+            );
+        }
+        let fallback_only: Vec<_> = fonts
+            .iter()
+            .filter(|(info, _)| info.is_fallback_only)
+            .map(|(info, _)| &info.family_name)
+            .collect();
+        println!("fallback-only fonts: {fallback_only:?}");
     }
 }
