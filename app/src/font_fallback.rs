@@ -1,9 +1,45 @@
+// The per-script family table below is only registered on web.
+#![cfg_attr(not(target_family = "wasm"), allow(dead_code))]
+
 use crate::ChannelState;
+use warpui::assets::asset_cache::AssetSource;
 use warpui::fonts::ExternalFontFamily;
 
 use std::sync::Arc;
 
 use lazy_static::lazy_static;
+
+/// Single-cell-wide so TUI file-type icons stay aligned to the terminal grid. A symbols-only font
+/// will not work here: font loading requires a glyph for `m`.
+const HACK_NERD_FONT_MONO_ASSET: &str = "bundled/fonts/hack-nerd-font/HackNerdFontMono-Regular.ttf";
+
+#[cfg(not(target_family = "wasm"))]
+lazy_static! {
+    static ref HACK_NERD_FONT_MONO: ExternalFontFamily = ExternalFontFamily {
+        name: "Hack Nerd Font Mono",
+        font_urls: Arc::new(vec![HACK_NERD_FONT_MONO_ASSET.to_string()]),
+    };
+}
+
+/// Native counterpart of [`fallback_font_fn`]. System font cascades have no glyphs for Nerd Font
+/// icons, which live in the Private Use Areas, so tools like yazi would otherwise render blanks.
+/// Every other character is left to the system cascade.
+#[cfg(not(target_family = "wasm"))]
+pub fn native_fallback_font_fn(ch: char) -> Option<ExternalFontFamily> {
+    matches!(ch, '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}')
+        .then(|| HACK_NERD_FONT_MONO.clone())
+}
+
+/// Resolves a fallback font location to the asset that provides its bytes.
+pub fn fallback_font_source(location: &str) -> AssetSource {
+    if location == HACK_NERD_FONT_MONO_ASSET {
+        AssetSource::Bundled {
+            path: HACK_NERD_FONT_MONO_ASSET,
+        }
+    } else {
+        ::asset_cache::url_source(location)
+    }
+}
 
 fn url_for_font(family_name: &str, font_file: &str) -> String {
     format!(
@@ -1465,3 +1501,7 @@ fn fallback_font_fn_raw(ch: char) -> Option<ExternalFontFamily> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "font_fallback_tests.rs"]
+mod tests;

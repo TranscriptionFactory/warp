@@ -96,6 +96,34 @@ pub(crate) fn init_fonts() -> (FontDB, FamilyId) {
     (font_db, roboto)
 }
 
+#[test]
+fn bundled_nerd_font_loads_and_covers_file_icons() {
+    let path = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "app",
+        "assets",
+        "bundled",
+        "fonts",
+        "hack-nerd-font",
+        "HackNerdFontMono-Regular.ttf",
+    ]
+    .iter()
+    .collect::<std::path::PathBuf>();
+    let bytes = std::fs::read(path).expect("should be able to read the bundled nerd font");
+
+    let mut font_db = FontDB::new();
+    let family = font_db
+        .load_from_bytes("Hack Nerd Font Mono", vec![bytes])
+        .expect("the platform loader should accept the bundled nerd font");
+    let font = font_db.select_font(family, Properties::default());
+
+    for icon in ['\u{E5FF}', '\u{F07B}', '\u{F0219}'] {
+        assert!(font_db.glyph_for_char(font, icon).is_some(), "{icon:?}");
+    }
+}
+
 pub(crate) fn collect_glyph_indices(frame: &TextFrame) -> Vec<Vec<usize>> {
     frame
         .lines()
