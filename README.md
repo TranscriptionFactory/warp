@@ -191,7 +191,6 @@ Pre-built binaries for every release are on the
 | Platform | Asset |
 | --- | --- |
 | macOS (Apple Silicon) | `OpenWarp-arm64.dmg` |
-| macOS (Intel) | `OpenWarp-intel.dmg` |
 | Linux (any distro) | `OpenWarp-x86_64.AppImage` |
 | Debian / Ubuntu | `openwarp_<version>_amd64.deb` |
 | Fedora / RHEL 8+ | `openwarp-<version>.x86_64.rpm` |

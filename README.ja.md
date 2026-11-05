@@ -192,7 +192,6 @@ OpenWarp は次のようなターミナルを目指します:
 | プラットフォーム | アセット |
 | --- | --- |
 | macOS(Apple Silicon) | `OpenWarp-arm64.dmg` |
-| macOS(Intel) | `OpenWarp-intel.dmg` |
 | Linux(任意のディストリビューション) | `OpenWarp-x86_64.AppImage` |
 | Debian / Ubuntu | `openwarp_<version>_amd64.deb` |
 | Fedora / RHEL 8+ | `openwarp-<version>.x86_64.rpm` |

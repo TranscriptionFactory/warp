@@ -169,7 +169,6 @@ OpenWarp 想成为这样一款终端:
 | 平台 | 资源 |
 | --- | --- |
 | macOS(Apple Silicon) | `OpenWarp-arm64.dmg` |
-| macOS(Intel) | `OpenWarp-intel.dmg` |
 | Linux(任意发行版) | `OpenWarp-x86_64.AppImage` |
 | Debian / Ubuntu | `openwarp_<version>_amd64.deb` |
 | Fedora / RHEL 8+ | `openwarp-<version>.x86_64.rpm` |
