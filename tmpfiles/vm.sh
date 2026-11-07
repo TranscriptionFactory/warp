@@ -10,12 +10,13 @@
 #
 # Set WARP_VM_TARGET=<name> to build in a private ~/warp-targets/<name> on the VM
 # (seeded from the shared target/ on first use), so parallel workers don't queue
-# on one cargo lock.
+# on one cargo lock. Set WARP_VM_DIR=<path> to mirror a second checkout (a worktree)
+# somewhere other than ~/src/warp, because `sync` deletes whatever it does not have.
 set -euo pipefail
 
 INSTANCE=${WARP_VM_INSTANCE:-warp-dev}
 ZONE=${WARP_VM_ZONE:-us-central1-a}
-REMOTE_DIR=src/warp
+REMOTE_DIR=${WARP_VM_DIR:-src/warp}
 export PATH="$HOME/google-cloud-sdk/bin:$PATH"
 
 repo=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
