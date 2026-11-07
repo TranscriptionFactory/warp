@@ -24,7 +24,7 @@ below landed there too.
 
 What we added since that post:
 
-- Binary releases for macOS (arm64 and Intel), Linux (AppImage, deb, rpm,
+- Binary releases for macOS (Apple Silicon), Linux (AppImage, deb, rpm,
   static CLI tarballs including aarch64), and Windows. The app checks
   GitHub Releases for updates.
 
@@ -37,12 +37,20 @@ What we added since that post:
   less.
 
 - Kitty graphics protocol on macOS and Linux, with Unicode placeholders
-  (images survive tmux and zellij) and animation.
+  (images survive tmux and zellij), animation, and placement crops, so an
+  image a TUI crops while you scroll keeps its shape.
+
+- Voice input runs on your machine. Upstream sends audio to a cloud
+  service; we run Whisper through Candle, a Rust ML framework, on Metal on
+  Apple Silicon and on the CPU elsewhere. An M4 transcribes an 11-second
+  clip in under 2 seconds. You download the model once, on first use, and
+  your audio stays local.
 
 - SSH: splitting a pane in an SSH session opens the new pane on the same
   host and directory, like a tmux split. Click a path that Claude Code or
   Codex printed on the remote and it opens in-app; the command palette
-  searches remote files. The code-review panel diffs, commits, pushes, and
+  searches remote files. In plain SSH sessions with key auth, a file link
+  fetches the file over scp and opens a local copy. The code-review panel diffs, commits, pushes, and
   opens PRs against a remote repo. zerx-lab built the SSH host manager
   and SFTP browser.
 
@@ -103,6 +111,11 @@ In practice:
   codebase instead of toggling them off.
 - **You edit the system prompt yourself.** It is a minijinja template;
   upstream assembles theirs server-side.
+- **Voice input runs locally too.** Whisper runs through Candle, a Rust ML
+  framework: `small.en` on Metal on Apple Silicon, `base.en` on the CPU
+  elsewhere. An M4 transcribes an 11-second clip in under 2 seconds. You
+  download the model once from Hugging Face, and your audio stays on your
+  machine.
 - **Prompt caching is on.** Anthropic requests carry cache breakpoints and
   OpenAI requests carry a stable cache key. Per-provider extra headers
   reach title generation and suggestions too, so gateways that
@@ -115,10 +128,10 @@ In practice:
   protocol on macOS and Linux, so tools that draw images inline work.
 - **Remote boxes are covered.** A built-in SSH host manager and SFTP
   browser, plus a code-review panel that diffs, commits, pushes, and opens
-  PRs on the remote host.
+  PRs on the remote host. File links in plain SSH sessions open over scp.
 
-Binary releases cover macOS (Apple Silicon and Intel), Linux
-(AppImage/deb/rpm), and Windows.
+Binary releases cover macOS (Apple Silicon), Linux (AppImage/deb/rpm), and
+Windows.
 
 Repo: https://github.com/TranscriptionFactory/warp
 Releases: https://github.com/TranscriptionFactory/warp/releases
@@ -144,8 +157,10 @@ and cloud dependency stripped out. It keeps Warp's terminal fundamentals
 - No account, no vendor-cloud telemetry. AI is optional and bring-your-own:
   any OpenAI-compatible endpoint, or Ollama for local models.
 - Kitty graphics protocol on macOS and Linux, including Unicode
-  placeholders (images work through tmux) and animation
+  placeholders (images work through tmux), animation, and placement crops
+- On-device voice input with Whisper; your audio stays on your machine
 - Built-in SSH host manager (with tmux integration) and SFTP file browser
+- File links in plain SSH sessions open over scp
 - Code-review panel that diffs, commits, pushes, and opens PRs on remote
   hosts over SSH
 - In-app image viewer and Markdown preview, local and over SFTP
