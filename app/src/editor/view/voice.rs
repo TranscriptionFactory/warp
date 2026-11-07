@@ -296,6 +296,7 @@ impl EditorView {
 
                     // Immediately transition to Listening state
                     self.set_voice_input_state(VoiceInputState::Listening, ctx);
+                    crate::voice::transcriber::prepare_transcriber(ctx);
 
                     // Send telemetry for start
                     let is_udi_enabled = crate::settings::InputSettings::handle(ctx)
@@ -495,7 +496,9 @@ impl EditorView {
         match result {
             Ok(transcribe_response) => {
                 log::debug!("Transcribed voice input: {transcribe_response:?}");
-                self.user_insert(&transcribe_response, ctx);
+                if !transcribe_response.is_empty() {
+                    self.user_insert(&transcribe_response, ctx);
+                }
             }
             Err(e) => match e {
                 TranscribeError::QuotaLimit => {

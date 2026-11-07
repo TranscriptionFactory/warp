@@ -3648,6 +3648,7 @@ settings-share-with-team = Save locally
 tooltip-secrets-not-sent-to-warp-server = *Secrets are not sent to OpenWarp's server.
 editor-voice-limit-hit-toast = You have hit the limit for Voice requests. Your limit will be refreshed as a part of your next cycle.
 editor-voice-error-toast = An error occurred while processing your voice input.
+editor-voice-model-download-toast = Downloading the speech model ({ $size_mb } MB). Your recording will be transcribed when it finishes.
 ai-copied-branch-name-toast = Copied branch name
 workflow-new-enum = New enum
 workflow-edit-enum = Edit enum

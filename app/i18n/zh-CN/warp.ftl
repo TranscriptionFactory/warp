@@ -3562,6 +3562,7 @@ settings-share-with-team = 本地保存
 tooltip-secrets-not-sent-to-warp-server = *密钥不会发送到 OpenWarp 服务器。
 editor-voice-limit-hit-toast = 你已达到语音请求额度上限。额度将在下个周期刷新。
 editor-voice-error-toast = 处理语音输入时出错。
+editor-voice-model-download-toast = 正在下载语音模型({ $size_mb } MB)。下载完成后将转写你的录音。
 ai-copied-branch-name-toast = 分支名称已复制
 workflow-new-enum = 新建枚举
 workflow-edit-enum = 编辑枚举

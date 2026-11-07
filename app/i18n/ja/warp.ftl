@@ -3482,6 +3482,7 @@ settings-share-with-team = ローカルに保存
 tooltip-secrets-not-sent-to-warp-server = *シークレットは OpenWarp のサーバーに送信されません。
 editor-voice-limit-hit-toast = 音声リクエストの上限に達しました。次のサイクルの一部として上限が更新されます。
 editor-voice-error-toast = 音声入力の処理中にエラーが発生しました。
+editor-voice-model-download-toast = 音声モデルをダウンロードしています({ $size_mb } MB)。完了すると録音が文字起こしされます。
 ai-copied-branch-name-toast = ブランチ名をコピーしました
 workflow-new-enum = 新しい enum
 workflow-edit-enum = enum を編集
