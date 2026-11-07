@@ -61,6 +61,9 @@ pub enum LinkValidationContext {
     Local,
     /// 远端 SSH 会话:用缓存下来的远端文件信息精确校验。
     Remote(RemoteLinkValidation),
+    /// A remote session whose host cannot be queried. Existence is only known
+    /// once the link is opened, so anything shaped like a path is accepted.
+    Unverified,
 }
 
 /// OpenWarp:远端会话链接校验所需的缓存快照。
@@ -172,12 +175,22 @@ fn is_path_valid(
         return !is_dir || clean_path_result.line_and_column_num.is_none();
     }
 
+    if matches!(validation_ctx, LinkValidationContext::Unverified) {
+        return looks_like_file_path(&clean_path_result.path);
+    }
+
     // It should only be a valid path if the path links to a file or a folder without
     // line and column number attached.
     let Ok(metadata) = fs::metadata(path) else {
         return false;
     };
     metadata.is_file() || (metadata.is_dir() && clean_path_result.line_and_column_num.is_none())
+}
+
+/// Whether unverifiable text is worth linking. Without this, every word in the
+/// output would be a link: a bare word is only a path if it has an extension.
+fn looks_like_file_path(path: &str) -> bool {
+    path.contains('/') || Path::new(path).extension().is_some()
 }
 
 /// OpenWarp:判断一个已解析的远端路径是否指向目录。

@@ -47,7 +47,7 @@ fn check(path: &str, line: Option<usize>, ctx: &LinkValidationContext) -> Option
 fn unresolved(ctx: &LinkValidationContext) -> Vec<PathBuf> {
     match ctx {
         LinkValidationContext::Remote(remote) => remote.unresolved.lock().unwrap().clone(),
-        LinkValidationContext::Local => vec![],
+        LinkValidationContext::Local | LinkValidationContext::Unverified => vec![],
     }
 }
 
@@ -100,4 +100,33 @@ fn remote_directory_with_line_number_is_invalid() {
         check("app/src", None, &ctx),
         Some(PathBuf::from("/home/me/proj/app/src"))
     );
+}
+
+#[test]
+fn unverified_link_accepts_only_path_shaped_text() {
+    let resolve = |path: &str| {
+        absolute_path_if_valid(
+            &CleanPathResult {
+                path: path.to_string(),
+                line_and_column_num: None,
+            },
+            ShellPathType::ShellNative(CWD.to_string()),
+            None,
+            &LinkValidationContext::Unverified,
+        )
+    };
+
+    assert_eq!(
+        resolve("/etc/hosts"),
+        Some(std::path::PathBuf::from("/etc/hosts"))
+    );
+    assert_eq!(
+        resolve("src/main.rs"),
+        Some(std::path::Path::new(CWD).join("src/main.rs"))
+    );
+    assert_eq!(
+        resolve("notes.txt"),
+        Some(std::path::Path::new(CWD).join("notes.txt"))
+    );
+    assert_eq!(resolve("word"), None);
 }

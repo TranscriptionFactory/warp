@@ -193,7 +193,11 @@ pub(super) enum LinkSessionLocation {
     Local,
     /// Remote-server session with a connected daemon: validate and open paths on the host.
     Remote(warp_core::HostId),
-    /// Remote session without a connected daemon (legacy SSH, or the daemon is not attached).
+    /// Remote session without a connected daemon, but with a known SSH host. Its paths cannot
+    /// be validated ahead of time, so path-shaped text is linked and fetched over `scp` when
+    /// opened.
+    RemoteOverScp,
+    /// Remote session with neither a connected daemon nor a known SSH host.
     /// Its paths cannot be validated, so no file-path link is shown. Checking them against the
     /// local filesystem would highlight paths that do not exist on the host, or open the local
     /// file with the same path.
@@ -202,9 +206,14 @@ pub(super) enum LinkSessionLocation {
 
 impl LinkSessionLocation {
     /// `session_is_local` is `None` when the session is unknown; that keeps the local behavior.
-    fn new(session_is_local: Option<bool>, remote_host_id: Option<warp_core::HostId>) -> Self {
+    fn new(
+        session_is_local: Option<bool>,
+        remote_host_id: Option<warp_core::HostId>,
+        has_ssh_host: bool,
+    ) -> Self {
         match (remote_host_id, session_is_local) {
             (Some(host_id), _) => Self::Remote(host_id),
+            (None, Some(false)) if has_ssh_host => Self::RemoteOverScp,
             (None, Some(false)) => Self::RemoteUnavailable,
             (None, Some(true) | None) => Self::Local,
         }
@@ -598,7 +607,24 @@ impl super::TerminalView {
         LinkSessionLocation::new(
             session_is_local,
             self.session_remote_host_id(session_id, ctx),
+            self.session_ssh_target(session_id, ctx).is_some(),
         )
+    }
+
+    /// The host and port of the SSH connection that the given session runs in, when known.
+    pub(super) fn session_ssh_target(
+        &self,
+        session_id: Option<crate::terminal::model::session::SessionId>,
+        ctx: &warpui::AppContext,
+    ) -> Option<(String, Option<String>)> {
+        let session = self.sessions.as_ref(ctx).get(session_id?)?;
+        let ssh = session
+            .as_ref()
+            .subshell_info()
+            .as_ref()?
+            .ssh_connection_info
+            .as_ref()?;
+        Some((ssh.host.clone()?, ssh.port.clone()))
     }
 
     /// OpenWarp:取得远端会话某个 cwd 的目录列表。
@@ -872,15 +898,20 @@ impl super::TerminalView {
         //
         // OpenWarp:远端会话的 block `pwd()` 是 shell-integration 上报的远端 cwd,
         // 拼接后即得到正确的远端绝对路径,因此远端 block 也参与扫描(不再跳过)。
-        // A remote session without a daemon has no way to validate its paths, so it
-        // gets no file-path links.
+        // A remote session with no daemon and no known SSH host has no way to reach
+        // its files, so it gets no file-path links.
         let pwd_to_scan_for = match (&location, position) {
             (LinkSessionLocation::RemoteUnavailable, _) => None,
             // 远端会话:`pwd()` 返回的是 shell-integration 上报的远端活动 cwd。
-            (LinkSessionLocation::Remote(_), WithinModel::AltScreen(_)) => self.pwd(),
+            (
+                LinkSessionLocation::Remote(_) | LinkSessionLocation::RemoteOverScp,
+                WithinModel::AltScreen(_),
+            ) => self.pwd(),
             (LinkSessionLocation::Local, WithinModel::AltScreen(_)) => self.pwd_if_local(ctx),
             (
-                LinkSessionLocation::Local | LinkSessionLocation::Remote(_),
+                LinkSessionLocation::Local
+                | LinkSessionLocation::Remote(_)
+                | LinkSessionLocation::RemoteOverScp,
                 WithinModel::BlockList(inner),
             ) => self
                 .model
@@ -896,12 +927,13 @@ impl super::TerminalView {
             (LinkSessionLocation::Remote(_), Some(cwd), Some(session_id)) => {
                 LinkValidationContext::Remote(self.remote_link_validation(session_id, cwd, ctx))
             }
+            (LinkSessionLocation::RemoteOverScp, _, _) => LinkValidationContext::Unverified,
             _ => LinkValidationContext::Local,
         };
         // 扫描结束后取出两个缓存都答不上来的候选路径,交给 daemon 查询。
         let unresolved = match &validation_ctx {
             LinkValidationContext::Remote(remote) => Some(remote.unresolved.clone()),
-            LinkValidationContext::Local => None,
+            LinkValidationContext::Local | LinkValidationContext::Unverified => None,
         };
 
         match pwd_to_scan_for {
