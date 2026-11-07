@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Edit on the Mac, build on the GCP VM `warp-dev`.
 #
-#   tmpfiles/vm.sh sync          mirror this checkout to ~/src/warp on the VM
-#   tmpfiles/vm.sh run <cmd...>  sync, then run <cmd> in ~/src/warp on the VM
+#   tmpfiles/vm.sh sync          mirror the current checkout to ~/src/<repo> on the VM
+#   tmpfiles/vm.sh run <cmd...>  sync, then run <cmd> in ~/src/<repo> on the VM
 #   tmpfiles/vm.sh ssh [cmd...]  run <cmd> on the VM without syncing (or open a shell)
 #
 # The Mac checkout is the source of truth; the VM copy is a build mirror
@@ -10,16 +10,17 @@
 #
 # Set WARP_VM_TARGET=<name> to build in a private ~/warp-targets/<name> on the VM
 # (seeded from the shared target/ on first use), so parallel workers don't queue
-# on one cargo lock. Set WARP_VM_DIR=<path> to mirror a second checkout (a worktree)
-# somewhere other than ~/src/warp, because `sync` deletes whatever it does not have.
+# on one cargo lock. <repo> is the checkout's directory name, so running this from
+# ../carbide mirrors to ~/src/carbide. Set WARP_VM_DIR=<path> to mirror elsewhere,
+# because `sync` deletes whatever it does not have.
 set -euo pipefail
 
 INSTANCE=${WARP_VM_INSTANCE:-warp-dev}
 ZONE=${WARP_VM_ZONE:-us-central1-a}
-REMOTE_DIR=${WARP_VM_DIR:-src/warp}
 export PATH="$HOME/google-cloud-sdk/bin:$PATH"
 
-repo=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+repo=$(git rev-parse --show-toplevel)
+REMOTE_DIR=${WARP_VM_DIR:-src/$(basename "$repo")}
 user=$(gcloud config get-value account 2>/dev/null | sed 's/[@.]/_/g')
 ip=$(gcloud compute instances describe "$INSTANCE" --zone "$ZONE" \
   --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
@@ -34,7 +35,8 @@ vm_sync() {
   vm_ssh "mkdir -p $REMOTE_DIR"
   rsync -az --delete -e "ssh ${ssh_opts[*]}" \
     --exclude /.git/ --exclude /target/ --exclude node_modules/ --exclude /.tmpfiles/ \
-    --exclude /.agent-handoff/ \
+    --exclude /.agent-handoff/ --exclude /src-tauri/target/ --exclude /src-tauri/binaries/ \
+    --exclude /src-tauri/gen/ \
     "$repo/" "$user@$ip:$REMOTE_DIR/"
 }
 
