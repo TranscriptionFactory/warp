@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -438,6 +439,8 @@ pub struct ImagePlacementData {
     /// intersects a given cell or column.
     pub width_cells: usize,
     pub image_size: Vector2F,
+    /// The part of the image this placement shows, in unit UV space.
+    pub source_uv: RectF,
 }
 
 impl ImagePlacementData {

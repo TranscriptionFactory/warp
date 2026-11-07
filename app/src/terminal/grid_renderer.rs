@@ -33,6 +33,7 @@ use warpui::color::ColorU;
 use warpui::elements::{Border, CornerRadius, Fill, Radius, DEFAULT_UI_LINE_HEIGHT_RATIO};
 use warpui::fonts::{Cache as FontCache, FamilyId, FontId, Properties, Style, Weight};
 use warpui::geometry::rect::RectF;
+use warpui::scene::full_source_uv;
 use warpui::geometry::vector::{vec2f, Vector2F, Vector2I};
 use warpui::image_cache::{
     AnimatedImageBehavior, CacheOption, FitType, Image, ImageCache, StaticImage,
@@ -2124,7 +2125,13 @@ fn render_image(
     ctx: &mut PaintContext,
     app: &AppContext,
 ) {
-    let bounds = (image_placement_data.image_size * ctx.scene.scale_factor()).to_i32();
+    // A crop samples part of the texture, so decode the whole image. Using its
+    // native size keeps one cached texture while a client scrolls the crop.
+    let bounds = if image_placement_data.source_uv == full_source_uv() {
+        (image_placement_data.image_size * ctx.scene.scale_factor()).to_i32()
+    } else {
+        image_metadata.image_size().to_i32()
+    };
 
     let asset_cache = AssetCache::as_ref(app);
     let image = ImageCache::as_ref(app).image(
@@ -2161,9 +2168,10 @@ fn render_image(
                 drawn_image_size(image.size(), image_metadata, image_placement_data, ctx);
 
             let image_origin = grid_origin + glyph_offset;
-            ctx.scene.draw_image(
+            ctx.scene.draw_image_with_source(
                 RectF::new(image_origin, logical_image_size),
                 image.clone(),
+                image_placement_data.source_uv,
                 1.,
                 CornerRadius::default(),
             );
@@ -2178,9 +2186,10 @@ fn render_image(
                         drawn_image_size(frame.size(), image_metadata, image_placement_data, ctx);
 
                     let image_origin = grid_origin + glyph_offset;
-                    ctx.scene.draw_image(
+                    ctx.scene.draw_image_with_source(
                         RectF::new(image_origin, logical_image_size),
                         frame,
+                        image_placement_data.source_uv,
                         1.,
                         CornerRadius::default(),
                     );
