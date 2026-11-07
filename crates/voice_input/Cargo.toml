@@ -18,6 +18,18 @@ log = { workspace = true }
 parking_lot = { workspace = true }
 rubato = "0.16.1"
 warpui.workspace = true
+candle-core = { version = "0.9.2", optional = true }
+candle-nn = { version = "0.9.2", optional = true }
+candle-transformers = { version = "0.9.2", optional = true }
+# The default `onig` backend builds a C library; `fancy-regex` keeps this pure Rust.
+tokenizers = { version = "0.21.4", optional = true, default-features = false, features = ["fancy-regex"] }
+serde_json = { workspace = true, optional = true }
+
+[[example]]
+name = "whisper_timing"
+required-features = ["whisper"]
 
 [features]
+whisper = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:serde_json"]
+whisper_metal = ["whisper", "candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]
 # No features; compiled when the app enables its `voice` feature which depends on this crate

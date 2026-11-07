@@ -1,3 +1,6 @@
+#[cfg(feature = "whisper")]
+pub mod whisper;
+
 use std::{io::Cursor, sync::Arc, time::Duration};
 
 use base64::Engine;

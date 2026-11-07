@@ -146,7 +146,6 @@ const AI_SETTINGS_DROPDOWN_MAX_HEIGHT: f32 = 250.;
 // AI 设置页描述文本走 i18n,key 见 app/i18n/{en,zh-CN}/warp.ftl 的 settings-ai-* 段。
 const CONTEXT_WINDOW_SLIDER_WIDTH: f32 = 220.;
 const CONTEXT_WINDOW_INPUT_BOX_WIDTH: f32 = 120.;
-const WISPR_FLOW_URL: &str = "https://wisprflow.ai/";
 
 pub fn init_actions_from_parent_view<T: Action + Clone>(
     app: &mut AppContext,
@@ -5800,7 +5799,7 @@ impl SettingsWidget for AIFactWidget {
 #[derive(Default)]
 struct VoiceWidget {
     voice_input_toggle: SwitchStateHandle,
-    wispr_highlight_index: HighlightedHyperlink,
+    description_highlight_index: HighlightedHyperlink,
 }
 
 impl VoiceWidget {
@@ -5824,10 +5823,8 @@ impl VoiceWidget {
 
         let voice_input_description_text_fragments = vec![
             FormattedTextFragment::plain_text(
-                "Voice input allows you to control OpenWarp by speaking directly to your terminal (powered by ",
+                "Voice input allows you to control OpenWarp by speaking directly to your terminal. Speech is transcribed on your device.",
             ),
-            FormattedTextFragment::hyperlink("Wispr Flow", WISPR_FLOW_URL),
-            FormattedTextFragment::plain_text(")."),
         ];
 
         let voice_input_description = FormattedTextElement::new(
@@ -5838,7 +5835,7 @@ impl VoiceWidget {
             appearance.ui_font_family(),
             appearance.ui_font_family(),
             styles::description_font_color(is_toggleable, app).into(),
-            self.wispr_highlight_index.clone(),
+            self.description_highlight_index.clone(),
         )
         .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
         .with_hyperlink_font_color(appearance.theme().accent().into_solid())

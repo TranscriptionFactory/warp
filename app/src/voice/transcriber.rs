@@ -32,6 +32,42 @@ pub trait Transcriber: Send + Sync {
     /// Transcribe the given base64 encoded wav file into text.
     /// This is expected to be async and called off the main thread.
     async fn transcribe(&self, wav_base64: String) -> Result<String, TranscribeError>;
+
+    /// Gets ready to transcribe. Called when recording starts, so that setup overlaps with the
+    /// user speaking.
+    async fn prepare(&self) -> Result<(), TranscribeError> {
+        Ok(())
+    }
+
+    /// The number of bytes that must be downloaded before transcription can run, if any.
+    fn pending_download_bytes(&self) -> Option<u64> {
+        None
+    }
+}
+
+/// Starts preparing the transcriber for a recording that just began.
+#[cfg(feature = "voice_input")]
+pub fn prepare_transcriber<V: warpui::View>(ctx: &mut warpui::ViewContext<V>) {
+    let Some(transcriber) = VoiceTranscriber::as_ref(ctx).transcriber().cloned() else {
+        return;
+    };
+    if let Some(bytes) = transcriber.pending_download_bytes() {
+        let message = crate::t!(
+            "editor-voice-model-download-toast",
+            size_mb = (bytes / 1_000_000).to_string()
+        );
+        let window_id = ctx.window_id();
+        crate::workspace::ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+            let toast = crate::view_components::DismissibleToast::default(message);
+            toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+        });
+    }
+    // `transcribe` retries, and reports to the user, if this fails.
+    ctx.spawn(async move { transcriber.prepare().await }, |_, result, _| {
+        if let Err(e) = result {
+            log::warn!("Failed to prepare voice transcription: {e:?}");
+        }
+    });
 }
 
 /// A voice transcriber that is enabled or disabled.

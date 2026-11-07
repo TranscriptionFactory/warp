@@ -236,6 +236,7 @@ warp_managed_secrets.workspace = true
 zap_sync = { path = "../crates/zap_sync" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+voice_input = { workspace = true, optional = true, features = ["whisper_metal"] }
 block.workspace = true
 cocoa.workspace = true
 core-foundation.workspace = true
@@ -251,6 +252,7 @@ winit = { workspace = true }
 wgpu.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+voice_input = { workspace = true, optional = true, features = ["whisper"] }
 app-installation-detection.workspace = true
 async-io.workspace = true
 axum.workspace = true

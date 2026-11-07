@@ -1499,6 +1499,7 @@ impl AgentInputFooter {
                     Ok(session) => {
                         self.cli_voice_input_state = CLIVoiceInputState::Listening;
                         self.update_cli_mic_button_state(ctx);
+                        crate::voice::transcriber::prepare_transcriber(ctx);
 
                         if let Some(agent) = self.cli_agent(ctx) {
                             send_telemetry_from_ctx!(

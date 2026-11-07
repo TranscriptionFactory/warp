@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- **Voice input works again, on your device**: Recordings are transcribed locally with Whisper instead of being discarded. Audio stays on your machine. The first use downloads a speech model (about 970 MB on macOS, 290 MB on Linux and Windows).
+
 ## [v2026.11.06.1] — 2026-11-06
 
 - **Inline images keep their shape when scrolled**: Images placed with the kitty graphics protocol now honor crop regions, so a tool that shows only part of an image draws that part instead of squeezing the whole image into the visible rows.
