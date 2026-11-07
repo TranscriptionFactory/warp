@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- **Inline images keep their shape when scrolled**: Images placed with the kitty graphics protocol now honor crop regions, so a tool that shows only part of an image draws that part instead of squeezing the whole image into the visible rows.
 - **Intel Macs no longer supported**: Releases no longer include Intel macOS builds. `v2026.11.04.1` is the last release with an Intel DMG, and `v2026.10.30.1` is the last with an Intel CLI tarball.
 
 ## [v2026.11.04.1] — 2026-11-04

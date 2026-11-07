@@ -863,3 +863,96 @@ fn erasing_the_screen_removes_kitty_placements() {
     assert!(!has_placement(&terminal, 1, 1));
     assert!(!has_placement(&terminal, 2, 2));
 }
+
+/// The part of the image that a placement shows, as (origin, size) in UV space.
+fn placement_uv(
+    terminal: &TerminalModel,
+    image_id: u32,
+    placement_id: u32,
+) -> ((f32, f32), (f32, f32)) {
+    let placement = terminal
+        .block_list()
+        .active_block()
+        .grid_handler()
+        .get_image_placement_data(image_id, placement_id)
+        .expect("placement should exist")
+        .source_uv;
+    (
+        (placement.origin().x(), placement.origin().y()),
+        (placement.size().x(), placement.size().y()),
+    )
+}
+
+/// A 2x4 RGB image stored under id 1.
+fn terminal_with_tall_image() -> TerminalModel {
+    let mut terminal = kitty_terminal();
+    terminal.process_bytes(kitty_apc("a=t,i=1,f=24,s=2,v=4", &[0xff; 2 * 4 * 3]).as_str());
+    terminal
+}
+
+#[test]
+fn cropped_placement_shows_only_the_crop() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = terminal_with_tall_image();
+
+    // A client scrolling an image off the top keeps its lower rows: squeezing
+    // the whole image into those rows would squish it.
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1,y=2,h=2,c=4,r=1", &[]).as_str());
+
+    assert_eq!(placement_uv(&terminal, 1, 1), ((0.0, 0.5), (1.0, 0.5)));
+}
+
+#[test]
+fn crop_with_zero_extent_runs_to_the_image_edge() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = terminal_with_tall_image();
+
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1,x=1,y=1", &[]).as_str());
+
+    assert_eq!(placement_uv(&terminal, 1, 1), ((0.5, 0.25), (0.5, 0.75)));
+}
+
+#[test]
+fn crop_is_clipped_to_the_image() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = terminal_with_tall_image();
+
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1,y=3,h=100", &[]).as_str());
+
+    assert_eq!(placement_uv(&terminal, 1, 1), ((0.0, 0.75), (1.0, 0.25)));
+}
+
+#[test]
+fn placing_again_without_a_crop_restores_the_whole_image() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = terminal_with_tall_image();
+
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1,y=2,h=2", &[]).as_str());
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1", &[]).as_str());
+
+    assert_eq!(placement_uv(&terminal, 1, 1), ((0.0, 0.0), (1.0, 1.0)));
+}
+
+#[test]
+fn crop_past_the_image_edge_places_nothing() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = terminal_with_tall_image();
+
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=1,C=1,y=4", &[]).as_str());
+    terminal.process_bytes(kitty_apc("a=p,i=1,p=2,C=1,y=3", &[]).as_str());
+
+    assert!(!has_placement(&terminal, 1, 1));
+    assert!(has_placement(&terminal, 1, 2));
+}
+
+#[test]
+fn transmit_and_display_honors_the_crop() {
+    let _kitty_images = FeatureFlag::KittyImages.override_enabled(true);
+    let mut terminal = kitty_terminal();
+
+    terminal.process_bytes(
+        kitty_apc("a=T,i=1,p=1,f=24,s=2,v=4,C=1,y=2,h=2", &[0xff; 2 * 4 * 3]).as_str(),
+    );
+
+    assert_eq!(placement_uv(&terminal, 1, 1), ((0.0, 0.5), (1.0, 0.5)));
+}

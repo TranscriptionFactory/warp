@@ -1,6 +1,7 @@
 use anyhow::Result;
 use base64::Engine;
 use flate2::read::ZlibDecoder;
+use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 use rand::Rng;
 use std::cmp::min;
@@ -404,6 +405,7 @@ impl TryFrom<KittyMessage> for KittyAction {
                         z_index: message.control_data.z_index,
                         cols: message.control_data.cols,
                         rows: message.control_data.rows,
+                        source_rect: KittySourceRect::from(&message.control_data),
                         cursor_movement_policy: message.control_data.cursor_movement_policy,
                         unicode_placeholder: message.control_data.unicode_placeholder,
                     },
@@ -434,6 +436,7 @@ impl TryFrom<KittyMessage> for KittyAction {
                         z_index: message.control_data.z_index,
                         cols: message.control_data.cols,
                         rows: message.control_data.rows,
+                        source_rect: KittySourceRect::from(&message.control_data),
                         cursor_movement_policy: message.control_data.cursor_movement_policy,
                         unicode_placeholder: message.control_data.unicode_placeholder,
                     },
@@ -613,11 +616,60 @@ pub struct VirtualPlacement {
     pub z_index: i32,
 }
 
+/// The region of an image that a placement shows, from the `x`, `y`, `w` and
+/// `h` keys, in image pixels. A zero width or height extends to the image's
+/// edge, so the default is the whole image.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct KittySourceRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl From<&KittyControlData> for KittySourceRect {
+    fn from(control_data: &KittyControlData) -> Self {
+        Self {
+            x: control_data.delete_x.unwrap_or(0),
+            y: control_data.delete_y.unwrap_or(0),
+            width: control_data.crop_width,
+            height: control_data.crop_height,
+        }
+    }
+}
+
+impl KittySourceRect {
+    /// This region clipped to an image of `image_size`, in image pixels. Empty
+    /// when the region starts past the image's edge.
+    pub fn clipped_to(&self, image_size: Vector2F) -> RectF {
+        let origin = Vector2F::new(self.x as f32, self.y as f32).min(image_size);
+        let remaining = image_size - origin;
+        let extent = |requested: u32, remaining: f32| match requested {
+            0 => remaining,
+            requested => (requested as f32).min(remaining),
+        };
+
+        RectF::new(
+            origin,
+            Vector2F::new(
+                extent(self.width, remaining.x()),
+                extent(self.height, remaining.y()),
+            ),
+        )
+    }
+}
+
+/// `source`, a region of an image of `image_size`, in unit UV space.
+pub fn source_uv(source: RectF, image_size: Vector2F) -> RectF {
+    RectF::new(source.origin() / image_size, source.size() / image_size)
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct KittyPlacementData {
     pub z_index: i32,
     pub cols: Option<u32>,
     pub rows: Option<u32>,
+    pub source_rect: KittySourceRect,
     pub cursor_movement_policy: CursorMovementPolicy,
     /// Set by `U=1`: the image is not anchored at the cursor, it is drawn
     /// wherever unicode placeholder cells reference it.
@@ -734,14 +786,17 @@ pub struct KittyControlData {
     pub verbosity: KittyResponseVerbosity,
     pub z_index: i32,
     pub delete_action: DeleteAction,
-    /// The `x=` key. It is a crop offset on transmission, a frame offset on
-    /// `a=f`, and either a cell column or an image id bound on deletion. Only the
-    /// delete reading is implemented; a frame offset is read just far enough to
-    /// reject it.
+    /// The `x=` key. It is a crop offset on placement, a frame offset on `a=f`,
+    /// and either a cell column or an image id bound on deletion. A frame offset
+    /// is read just far enough to reject it.
     pub delete_x: Option<u32>,
     /// The `y=` key. See [`KittyControlData::delete_x`].
     pub delete_y: Option<u32>,
     delete_placements_only: bool,
+    /// The `w=` key: the width of the placement's crop, in image pixels.
+    pub crop_width: u32,
+    /// The `h=` key: the height of the placement's crop, in image pixels.
+    pub crop_height: u32,
     pub rows: Option<u32>,
     pub cols: Option<u32>,
     pub cursor_movement_policy: CursorMovementPolicy,
@@ -767,6 +822,8 @@ impl Default for KittyControlData {
             delete_x: None,
             delete_y: None,
             delete_placements_only: true,
+            crop_width: 0,
+            crop_height: 0,
             rows: None,
             cols: None,
             cursor_movement_policy: CursorMovementPolicy::default(),
@@ -972,6 +1029,16 @@ fn parse_kitty_control_data(control_data: &[u8]) -> KittyControlData {
             b"y" => {
                 if let Some(value) = parse_u32(value) {
                     parsed_control_data.delete_y = Some(value);
+                }
+            }
+            b"w" => {
+                if let Some(value) = parse_u32(value) {
+                    parsed_control_data.crop_width = value;
+                }
+            }
+            b"h" => {
+                if let Some(value) = parse_u32(value) {
+                    parsed_control_data.crop_height = value;
                 }
             }
             b"U" => {

@@ -23,6 +23,7 @@ use warp_terminal::model::ansi::CharsetIndex;
 use warp_terminal::model::grid::cell;
 use warp_terminal::model::{KeyboardModes, KeyboardModesApplyBehavior};
 use warpui::image_cache::{resize_dimensions, FitType};
+use warpui::scene::full_source_uv;
 
 use crate::server::telemetry::ImageProtocol;
 use crate::terminal::event::Event;
@@ -38,7 +39,7 @@ use crate::terminal::model::image_map::{ImagePlacementData, ImageType, StoredIma
 use crate::terminal::model::index::{Point, VisibleRow};
 use crate::terminal::model::iterm_image::{ITermImage, ITermImageDimensionUnit};
 use crate::terminal::model::kitty::{
-    CursorMovementPolicy, DeletionType, InvalidKittyAction, KittyAction, KittyError, KittyResponse,
+    source_uv, CursorMovementPolicy, DeletionType, InvalidKittyAction, KittyAction, KittyError, KittyResponse,
     StorageError,
 };
 use crate::terminal::model::selection::ScrollDelta;
@@ -1403,6 +1404,7 @@ impl ansi::Handler for GridHandler {
                 height_cells,
                 width_cells,
                 image_size,
+                source_uv: full_source_uv(),
             },
         );
 
@@ -1890,8 +1892,13 @@ impl GridHandler {
                 // A virtual placement has no anchor in the grid and must not
                 // disturb the cursor: the unicode placeholder cells that
                 // reference it decide where it is drawn. The image data still
-                // has to reach the asset cache.
-                if action.placement_data.unicode_placeholder {
+                // has to reach the asset cache. Neither does a crop that starts
+                // past the image's edge, which shows nothing.
+                let source = action.placement_data.source_rect.clipped_to(metadata.image_size);
+                if action.placement_data.unicode_placeholder
+                    || source.width() == 0.0
+                    || source.height() == 0.0
+                {
                     self.ansi_handler_state
                         .event_proxy
                         .send_terminal_event(Event::ImageReceived {
@@ -1910,7 +1917,7 @@ impl GridHandler {
                     MAX_IMAGE_CELL_HEIGHT as usize * self.ansi_handler_state.cell_height;
 
                 let desired_dimensions = action.placement_data.get_desired_dimensions(
-                    metadata.image_size,
+                    source.size(),
                     self.ansi_handler_state.cell_height,
                     self.ansi_handler_state.cell_width,
                     max_width,
@@ -1918,8 +1925,8 @@ impl GridHandler {
                 );
 
                 let (width_px, height_px) = resize_dimensions(
-                    metadata.image_size.x() as u32,
-                    metadata.image_size.y() as u32,
+                    source.width() as u32,
+                    source.height() as u32,
                     desired_dimensions.x() as u32,
                     desired_dimensions.y() as u32,
                     FitType::Stretch,
@@ -1949,6 +1956,7 @@ impl GridHandler {
                         height_cells,
                         width_cells,
                         image_size,
+                        source_uv: source_uv(source, metadata.image_size),
                     },
                 );
 
@@ -2008,7 +2016,11 @@ impl GridHandler {
 
                 // See the matching branch in `StoreAndDisplay`: a virtual
                 // placement is anchored by its placeholder cells, not the grid.
-                if action.placement_data.unicode_placeholder {
+                let source = action.placement_data.source_rect.clipped_to(metadata.image_size);
+                if action.placement_data.unicode_placeholder
+                    || source.width() == 0.0
+                    || source.height() == 0.0
+                {
                     return Ok(());
                 }
 
@@ -2019,7 +2031,7 @@ impl GridHandler {
                     MAX_IMAGE_CELL_HEIGHT as usize * self.ansi_handler_state.cell_height;
 
                 let desired_dimensions = action.placement_data.get_desired_dimensions(
-                    metadata.image_size,
+                    source.size(),
                     self.ansi_handler_state.cell_height,
                     self.ansi_handler_state.cell_width,
                     max_width,
@@ -2027,8 +2039,8 @@ impl GridHandler {
                 );
 
                 let (width_px, height_px) = resize_dimensions(
-                    metadata.image_size.x() as u32,
-                    metadata.image_size.y() as u32,
+                    source.width() as u32,
+                    source.height() as u32,
                     desired_dimensions.x() as u32,
                     desired_dimensions.y() as u32,
                     FitType::Stretch,
@@ -2050,6 +2062,7 @@ impl GridHandler {
                         height_cells,
                         width_cells,
                         image_size,
+                        source_uv: source_uv(source, metadata.image_size),
                     },
                 );
 
