@@ -229,6 +229,40 @@ fn parse_ssh_command_tokens(command: &str) -> Option<Vec<String>> {
     Some(tokens)
 }
 
+/// Arguments for `scp` to copy `remote_path` from `host` to `local_path`.
+///
+/// `remote_path` comes from terminal output, so it is untrusted. `-s` selects
+/// the SFTP protocol, which never hands the path to a remote shell. `BatchMode`
+/// fails instead of prompting, because there is no terminal to prompt on.
+pub fn scp_download_args(
+    host: &str,
+    port: Option<&str>,
+    remote_path: &std::path::Path,
+    local_path: &std::path::Path,
+) -> Vec<std::ffi::OsString> {
+    let mut args: Vec<std::ffi::OsString> = ["-s", "-q", "-o", "BatchMode=yes", "-o"]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    args.push("ConnectTimeout=10".into());
+    if let Some(port) = port {
+        args.push("-P".into());
+        args.push(port.into());
+    }
+    args.push("--".into());
+
+    // A bare IPv6 address needs brackets to separate it from the path.
+    let mut source = std::ffi::OsString::from(if host.contains(':') {
+        format!("[{host}]:")
+    } else {
+        format!("{host}:")
+    });
+    source.push(remote_path);
+    args.push(source);
+    args.push(local_path.into());
+    args
+}
+
 /// Creates an sftp command that copies a given local file into the pwd in the warpified ssh session.
 pub fn transfer_file_sftp_command(
     local_file_path: String,
@@ -274,6 +308,53 @@ pub fn transfer_file_sftp_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scp_args(host: &str, port: Option<&str>, remote: &str) -> Vec<String> {
+        scp_download_args(
+            host,
+            port,
+            std::path::Path::new(remote),
+            std::path::Path::new("/cache/file"),
+        )
+        .into_iter()
+        .map(|arg| arg.into_string().unwrap())
+        .collect()
+    }
+
+    #[test]
+    fn scp_download_uses_sftp_protocol_and_never_prompts() {
+        let args = scp_args("user@host", None, "/var/log/a.log");
+
+        assert_eq!(args[0], "-s");
+        assert!(args.contains(&"BatchMode=yes".to_string()));
+        assert_eq!(
+            args[args.len() - 3..],
+            ["--", "user@host:/var/log/a.log", "/cache/file"]
+        );
+    }
+
+    #[test]
+    fn scp_download_passes_the_port() {
+        let args = scp_args("host", Some("2222"), "/a");
+
+        let port_flag = args.iter().position(|arg| arg == "-P").unwrap();
+        assert_eq!(args[port_flag + 1], "2222");
+    }
+
+    #[test]
+    fn scp_download_brackets_ipv6_hosts() {
+        let args = scp_args("::1", None, "/a");
+
+        assert_eq!(args[args.len() - 2], "[::1]:/a");
+    }
+
+    #[test]
+    fn scp_download_keeps_option_like_paths_after_the_separator() {
+        let args = scp_args("host", None, "-oProxyCommand=evil");
+
+        let separator = args.iter().position(|arg| arg == "--").unwrap();
+        assert_eq!(args[separator + 1], "host:-oProxyCommand=evil");
+    }
 
     #[test]
     fn ssh_gcloud_ssh_parsing() {

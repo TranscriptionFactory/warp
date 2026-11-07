@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- **File links in SSH sessions**: In SSH sessions without the remote server, file paths are now clickable. OpenWarp fetches a fresh copy over `scp` and opens it locally, or shows an error if the host needs a password.
 - **Intel Macs no longer supported**: Releases no longer include Intel macOS builds. `v2026.11.04.1` is the last release with an Intel DMG, and `v2026.10.30.1` is the last with an Intel CLI tarball.
 
 ## [v2026.11.04.1] — 2026-11-04

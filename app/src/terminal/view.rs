@@ -16882,26 +16882,7 @@ impl TerminalView {
             return;
         };
 
-        // 主机 id 和路径都来自远端,只保留安全字符和普通路径分量,防止写出缓存目录。
-        let host_dir: String = host_id
-            .as_str()
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-        let mut local_path = warp_core::paths::cache_dir()
-            .join("remote-files")
-            .join(host_dir);
-        for component in remote_path.components() {
-            if let std::path::Component::Normal(part) = component {
-                local_path.push(part);
-            }
-        }
+        let local_path = Self::remote_file_cache_path(host_id.as_str(), &remote_path);
 
         let remote_path_str = remote_path.to_string_lossy().into_owned();
         ctx.spawn(
@@ -16924,6 +16905,102 @@ impl TerminalView {
                 Err(err) => log::warn!("下载远端文件失败 {remote_path:?}: {err}"),
             },
         );
+    }
+
+    /// Where a downloaded remote file is cached:
+    /// `<cache>/remote-files/<host>/<remote absolute path>`.
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn remote_file_cache_path(host: &str, remote_path: &std::path::Path) -> PathBuf {
+        // 主机 id 和路径都来自远端,只保留安全字符和普通路径分量,防止写出缓存目录。
+        let host_dir: String = host
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        let mut local_path = warp_core::paths::cache_dir()
+            .join("remote-files")
+            .join(host_dir);
+        for component in remote_path.components() {
+            if let std::path::Component::Normal(part) = component {
+                local_path.push(part);
+            }
+        }
+        local_path
+    }
+
+    /// Opens a file from an SSH session with no daemon: fetches a fresh copy with
+    /// `scp` into the local cache, then opens that copy. Returns `false`, doing
+    /// nothing, if the session is not reached over scp.
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn open_file_over_scp(
+        &mut self,
+        session_id: Option<SessionId>,
+        remote_path: &std::path::Path,
+        line_col: Option<LineAndColumnArg>,
+        ctx: &mut ViewContext<Self>,
+    ) -> bool {
+        if self.link_session_location(session_id, ctx)
+            != link_detection::LinkSessionLocation::RemoteOverScp
+        {
+            return false;
+        }
+        let Some((host, port)) = self.session_ssh_target(session_id, ctx) else {
+            return false;
+        };
+
+        let local_path = Self::remote_file_cache_path(&host, remote_path);
+        let args = super::ssh::util::scp_download_args(
+            &host,
+            port.as_deref(),
+            remote_path,
+            &local_path,
+        );
+        let cache_dir = local_path.parent().map(PathBuf::from);
+        let display_path = remote_path.display().to_string();
+
+        ctx.spawn(
+            async move {
+                if let Some(cache_dir) = cache_dir {
+                    std::fs::create_dir_all(cache_dir)?;
+                }
+                command::r#async::Command::new("scp")
+                    .args(args)
+                    .output()
+                    .await
+            },
+            move |me, result, ctx| {
+                let failure = match result {
+                    Ok(output) if output.status.success() => {
+                        let target =
+                            resolve_file_target(&local_path, EditorSettings::as_ref(ctx), None);
+                        ctx.emit(Event::OpenFileWithTarget {
+                            path: local_path,
+                            target,
+                            line_col,
+                        });
+                        return;
+                    }
+                    Ok(output) => String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                    Err(err) => err.to_string(),
+                };
+                log::warn!("scp of {display_path} failed: {failure}");
+                me.show_error_toast(format!("Could not open {display_path}: {failure}"), ctx);
+            },
+        );
+        true
     }
 
     /// OpenWarp:在当前(远端)终端会话里 `cd` 进指定目录。
@@ -16957,6 +17034,15 @@ impl TerminalView {
             return;
         }
 
+        #[cfg(all(
+            feature = "local_tty",
+            feature = "local_fs",
+            not(target_family = "wasm")
+        ))]
+        if self.open_file_over_scp(session_id, &path, line_and_column_num, ctx) {
+            return;
+        }
+
         let settings = EditorSettings::as_ref(ctx);
         let target = resolve_file_target(&path, settings, None);
 
@@ -16983,6 +17069,15 @@ impl TerminalView {
         #[cfg(all(feature = "local_tty", feature = "local_fs"))]
         if let Some(host_id) = self.session_remote_host_id(session_id, ctx) {
             self.open_remote_terminal_path(host_id, session_id, path, line_and_column_num, ctx);
+            return;
+        }
+
+        #[cfg(all(
+            feature = "local_tty",
+            feature = "local_fs",
+            not(target_family = "wasm")
+        ))]
+        if self.open_file_over_scp(session_id, &path, line_and_column_num, ctx) {
             return;
         }
 
