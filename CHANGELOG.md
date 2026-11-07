@@ -4,10 +4,9 @@
 
 ## [Unreleased]
 
+## [v2026.11.06.2] — 2026-11-06
+
 - **Voice input works again, on your device**: Recordings are transcribed locally with Whisper instead of being discarded. Audio stays on your machine. The first use downloads a speech model (about 970 MB on macOS, 290 MB on Linux and Windows).
-
-## [v2026.11.06.1] — 2026-11-06
-
 - **Inline images keep their shape when scrolled**: Images placed with the kitty graphics protocol now honor crop regions, so a tool that shows only part of an image draws that part instead of squeezing the whole image into the visible rows.
 - **File links in SSH sessions**: In SSH sessions without the remote server, file paths are now clickable. OpenWarp fetches a fresh copy over `scp` and opens it locally, or shows an error if the host needs a password.
 - **Intel Macs no longer supported**: Releases no longer include Intel macOS builds. `v2026.11.04.1` is the last release with an Intel DMG, and `v2026.10.30.1` is the last with an Intel CLI tarball.
