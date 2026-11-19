@@ -1007,7 +1007,7 @@ settings-ai-rules-description = Rules help the OpenWarp Agent follow your conven
 # Voice
 settings-ai-voice-input-label = Voice Input
 settings-ai-voice-key = Key for Activating Voice Input
-settings-ai-voice-key-hint = Press and hold to activate.
+settings-ai-voice-key-hint = Press and hold to activate. To use a shortcut instead, bind "Toggle Voice Input" in Settings > Keyboard Shortcuts.
 
 # Other section
 settings-ai-show-use-agent-footer = Show "Use Agent" footer
@@ -1893,6 +1893,7 @@ keybinding-desc-input-clear-and-reset-ai-context-menu-query = Clear and reset AI
 # Terminal view bindings
 keybinding-desc-terminal-alternate-paste = Alternate terminal paste
 keybinding-desc-terminal-toggle-cli-agent-rich-input = Toggle CLI Agent Rich Input
+keybinding-desc-terminal-toggle-voice-input = Toggle Voice Input
 keybinding-desc-terminal-warpify-subshell = Warpify subshell
 keybinding-desc-terminal-warpify-ssh-session = Warpify ssh session
 keybinding-desc-terminal-accept-prompt-suggestion = Accept Prompt Suggestion
@@ -3274,7 +3275,7 @@ onboarding-theme-title = Choose a theme
 onboarding-theme-subtitle = Click or use arrow keys to select, Enter to confirm.
 onboarding-theme-sync-with-os = Sync light/dark theme with OS
 onboarding-third-party-title = Customize third party agents
-onboarding-third-party-subtitle = Select defaults for using agents like Claude Code, Codex, and Gemini.
+onboarding-third-party-subtitle = Select defaults for using agents like Claude Code, Codex, and Antigravity.
 onboarding-third-party-cli-toolbar = CLI agent toolbar
 onboarding-third-party-notifications = Notifications
 onboarding-customize-title = Customize your OpenWarp

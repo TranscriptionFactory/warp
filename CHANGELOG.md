@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- **Voice input shortcut**: "Toggle Voice Input" is now a bindable action in Settings > Keyboard Shortcuts. It starts and stops voice input with any shortcut; the hold-to-talk key still works.
+- **Antigravity replaces Gemini in coding-agent settings**: Settings and onboarding now name Antigravity (`agy`) instead of the retired Gemini CLI.
+- **SSH file links report what they are doing**: Opening a file over `scp` now shows a fetching notice, gives up after 60 seconds, and no longer stalls when your SSH config starts a persistent master connection. Failed downloads in remote-server sessions show an error instead of doing nothing.
+
 ## [v2026.11.06.2] — 2026-11-06
 
 - **Voice input works again, on your device**: Recordings are transcribed locally with Whisper instead of being discarded. Audio stays on your machine. The first use downloads a speech model (about 970 MB on macOS, 290 MB on Linux and Windows).

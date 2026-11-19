@@ -2074,6 +2074,11 @@ impl AISettingsPageView {
                         if matches!(agent, CLIAgent::Unknown) {
                             continue;
                         }
+                        // The Gemini CLI is retired in favor of Antigravity (`agy`); it stays
+                        // listed only for a pattern that still maps to it.
+                        if agent == CLIAgent::Gemini && current_agent != CLIAgent::Gemini {
+                            continue;
+                        }
                         let icon = agent.icon();
                         let mut fields = MenuItemFields::new(agent.display_name())
                             .with_on_select_action(DropdownAction::SelectActionAndClose(
@@ -6084,7 +6089,7 @@ impl SettingsWidget for CLIAgentWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "third party cli coding agent claude codex gemini toolbar footer layout chip chips rearrange re-arrange bar command regex auto show rich input dismiss"
+        "third party cli coding agent claude codex antigravity agy toolbar footer layout chip chips rearrange re-arrange bar command regex auto show rich input dismiss"
     }
 
     fn render(
@@ -6116,7 +6121,7 @@ impl SettingsWidget for CLIAgentWidget {
             FormattedTextFragment::plain_text(", "),
             FormattedTextFragment::inline_code("codex"),
             FormattedTextFragment::plain_text(", or "),
-            FormattedTextFragment::inline_code("gemini"),
+            FormattedTextFragment::inline_code("agy"),
             FormattedTextFragment::plain_text("."),
         ];
 

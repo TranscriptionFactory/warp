@@ -990,7 +990,7 @@ settings-ai-rules-description = 规则帮助 OpenWarp 智能体遵循你的约�
 # 语音
 settings-ai-voice-input-label = 语音输入
 settings-ai-voice-key = 激活语音输入的按键
-settings-ai-voice-key-hint = 按住以激活。
+settings-ai-voice-key-hint = 按住以激活。如需使用快捷键，请在“设置 > 键盘快捷键”中绑定“切换语音输入”。
 
 # 其他区段
 settings-ai-show-use-agent-footer = 显示「使用智能体」页脚
@@ -1816,6 +1816,7 @@ keybinding-desc-input-clear-and-reset-ai-context-menu-query = 清空并重置 AI
 # 终端视图相关 binding
 keybinding-desc-terminal-alternate-paste = 终端备用粘贴
 keybinding-desc-terminal-toggle-cli-agent-rich-input = 切换 CLI 智能体富文本输入
+keybinding-desc-terminal-toggle-voice-input = 切换语音输入
 keybinding-desc-terminal-warpify-subshell = Warpify 子 shell
 keybinding-desc-terminal-warpify-ssh-session = Warpify SSH 会话
 keybinding-desc-terminal-accept-prompt-suggestion = 接受 Prompt 建议
@@ -3173,7 +3174,7 @@ onboarding-theme-title = 选择主题
 onboarding-theme-subtitle = 点击或使用方向键选择，按 Enter 确认。
 onboarding-theme-sync-with-os = 跟随系统切换浅色/深色主题
 onboarding-third-party-title = 自定义第三方智能体
-onboarding-third-party-subtitle = 为 Claude Code、Codex、Gemini 等智能体设置默认行为。
+onboarding-third-party-subtitle = 为 Claude Code、Codex、Antigravity 等智能体设置默认行为。
 onboarding-third-party-cli-toolbar = CLI 智能体工具栏
 onboarding-third-party-notifications = 通知
 onboarding-customize-title = 自定义你的 OpenWarp

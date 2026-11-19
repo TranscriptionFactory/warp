@@ -944,7 +944,7 @@ settings-ai-rules-description = ルールは、OpenWarp エージェントがコ
 # Voice
 settings-ai-voice-input-label = 音声入力
 settings-ai-voice-key = 音声入力を有効化するキー
-settings-ai-voice-key-hint = 押し続けると有効になります。
+settings-ai-voice-key-hint = 押し続けると有効になります。ショートカットを使うには、設定 > キーボードショートカットで「音声入力を切り替え」を割り当ててください。
 
 # Other section
 settings-ai-show-use-agent-footer = 「Use Agent」フッターを表示
@@ -1812,6 +1812,7 @@ keybinding-desc-input-clear-and-reset-ai-context-menu-query = AI コンテキス
 # Terminal view bindings
 keybinding-desc-terminal-alternate-paste = 代替ターミナルペースト
 keybinding-desc-terminal-toggle-cli-agent-rich-input = CLI エージェントのリッチ入力を切り替え
+keybinding-desc-terminal-toggle-voice-input = 音声入力を切り替え
 keybinding-desc-terminal-warpify-subshell = サブシェルを Warpify
 keybinding-desc-terminal-warpify-ssh-session = SSH セッションを Warpify
 keybinding-desc-terminal-accept-prompt-suggestion = プロンプトサジェストを承認
@@ -3091,7 +3092,7 @@ onboarding-theme-title = テーマを選択
 onboarding-theme-subtitle = クリックまたは矢印キーで選択し、Enter で確定します。
 onboarding-theme-sync-with-os = OS のライト/ダークテーマと同期
 onboarding-third-party-title = サードパーティエージェントをカスタマイズ
-onboarding-third-party-subtitle = Claude Code、Codex、Gemini などのエージェントを使う際の既定値を選択します。
+onboarding-third-party-subtitle = Claude Code、Codex、Antigravity などのエージェントを使う際の既定値を選択します。
 onboarding-third-party-cli-toolbar = CLI エージェントツールバー
 onboarding-third-party-notifications = 通知
 onboarding-customize-title = OpenWarp をカスタマイズ

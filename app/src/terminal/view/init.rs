@@ -324,6 +324,16 @@ pub fn init(app: &mut AppContext) {
         ),
     ]);
 
+    // Unbound by default: the hold-to-talk key in Settings > AI > Voice covers the common
+    // case, and this lets a full shortcut start and stop voice input instead.
+    #[cfg(feature = "voice_input")]
+    app.register_editable_bindings([EditableBinding::new(
+        "terminal:toggle_voice_input",
+        crate::t!("keybinding-desc-terminal-toggle-voice-input"),
+        TerminalAction::ToggleCLIAgentVoiceInput(voice_input::VoiceInputToggledFrom::Button),
+    )
+    .with_context_predicate(id!("Terminal") & !id!("IMEOpen"))]);
+
     app.register_editable_bindings([
         // Ctrl-G: toggle CLI agent rich input.
         EditableBinding::new(
