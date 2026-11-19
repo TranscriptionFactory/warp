@@ -688,6 +688,14 @@ pub const NOTIFICATIONS_TROUBLESHOOT_URL: &str =
 
 const DEBOUNCE_PERIOD: Duration = Duration::from_millis(40);
 
+/// How long an `scp` fetch of a clicked remote file may run before it is abandoned.
+#[cfg(all(
+    feature = "local_tty",
+    feature = "local_fs",
+    not(target_family = "wasm")
+))]
+const SCP_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Key used in user defaults to save whether the user has seen the banner.
 pub const ALIAS_EXPANSION_BANNER_SEEN_KEY: &str = "AliasExpansionBannerSeen";
 
@@ -16879,6 +16887,13 @@ impl TerminalView {
             .cloned()
         else {
             log::warn!("没有远端会话的 daemon 客户端,无法下载 {remote_path:?}");
+            self.show_error_toast(
+                format!(
+                    "Could not open {}: the remote server is not connected",
+                    remote_path.display()
+                ),
+                ctx,
+            );
             return;
         };
 
@@ -16893,7 +16908,7 @@ impl TerminalView {
                 Default::default(),
                 0,
             ),
-            move |_me, result, ctx| match result {
+            move |me, result, ctx| match result {
                 Ok(()) => {
                     let target = resolve_file_target(&local_path, EditorSettings::as_ref(ctx), None);
                     ctx.emit(Event::OpenFileWithTarget {
@@ -16902,7 +16917,13 @@ impl TerminalView {
                         line_col: None,
                     });
                 }
-                Err(err) => log::warn!("下载远端文件失败 {remote_path:?}: {err}"),
+                Err(err) => {
+                    log::warn!("下载远端文件失败 {remote_path:?}: {err}");
+                    me.show_error_toast(
+                        format!("Could not open {}: {err}", remote_path.display()),
+                        ctx,
+                    );
+                }
             },
         );
     }
@@ -16971,15 +16992,31 @@ impl TerminalView {
         let cache_dir = local_path.parent().map(PathBuf::from);
         let display_path = remote_path.display().to_string();
 
+        let window_id = ctx.window_id();
+        ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+            let toast = DismissibleToast::default(format!("Fetching {display_path} from {host}…"));
+            toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+        });
+
         ctx.spawn(
             async move {
+                use warpui::r#async::FutureExt as _;
+
                 if let Some(cache_dir) = cache_dir {
                     std::fs::create_dir_all(cache_dir)?;
                 }
                 command::r#async::Command::new("scp")
                     .args(args)
+                    .kill_on_drop(true)
                     .output()
+                    .with_timeout(SCP_DOWNLOAD_TIMEOUT)
                     .await
+                    .unwrap_or_else(|_| {
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            format!("scp timed out after {SCP_DOWNLOAD_TIMEOUT:?}"),
+                        ))
+                    })
             },
             move |me, result, ctx| {
                 let failure = match result {

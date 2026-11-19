@@ -234,17 +234,28 @@ fn parse_ssh_command_tokens(command: &str) -> Option<Vec<String>> {
 /// `remote_path` comes from terminal output, so it is untrusted. `-s` selects
 /// the SFTP protocol, which never hands the path to a remote shell. `BatchMode`
 /// fails instead of prompting, because there is no terminal to prompt on.
+/// `ControlMaster=no` reuses an existing master connection but never starts
+/// one: a persistent master inherits the output pipes and keeps the caller
+/// waiting after the copy ends.
 pub fn scp_download_args(
     host: &str,
     port: Option<&str>,
     remote_path: &std::path::Path,
     local_path: &std::path::Path,
 ) -> Vec<std::ffi::OsString> {
-    let mut args: Vec<std::ffi::OsString> = ["-s", "-q", "-o", "BatchMode=yes", "-o"]
-        .into_iter()
-        .map(Into::into)
-        .collect();
-    args.push("ConnectTimeout=10".into());
+    let mut args: Vec<std::ffi::OsString> = [
+        "-s",
+        "-q",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ControlMaster=no",
+        "-o",
+        "ConnectTimeout=10",
+    ]
+    .into_iter()
+    .map(Into::into)
+    .collect();
     if let Some(port) = port {
         args.push("-P".into());
         args.push(port.into());
@@ -327,6 +338,7 @@ mod tests {
 
         assert_eq!(args[0], "-s");
         assert!(args.contains(&"BatchMode=yes".to_string()));
+        assert!(args.contains(&"ControlMaster=no".to_string()));
         assert_eq!(
             args[args.len() - 3..],
             ["--", "user@host:/var/log/a.log", "/cache/file"]
