@@ -16981,7 +16981,25 @@ impl TerminalView {
         let Some((host, port)) = self.session_ssh_target(session_id, ctx) else {
             return false;
         };
+        self.fetch_and_open_over_scp(host, port, remote_path, line_col, ctx);
+        true
+    }
 
+    /// Fetches a fresh copy of `remote_path` from `host` with `scp` into the local cache,
+    /// then opens that copy.
+    #[cfg(all(
+        feature = "local_tty",
+        feature = "local_fs",
+        not(target_family = "wasm")
+    ))]
+    fn fetch_and_open_over_scp(
+        &mut self,
+        host: String,
+        port: Option<String>,
+        remote_path: &std::path::Path,
+        line_col: Option<LineAndColumnArg>,
+        ctx: &mut ViewContext<Self>,
+    ) {
         let local_path = Self::remote_file_cache_path(&host, remote_path);
         let args = super::ssh::util::scp_download_args(
             &host,
@@ -17037,7 +17055,27 @@ impl TerminalView {
                 me.show_error_toast(format!("Could not open {display_path}: {failure}"), ctx);
             },
         );
-        true
+    }
+
+    /// Opens the file that a link in the terminal grid points at.
+    #[cfg(feature = "local_fs")]
+    fn open_grid_file_link(
+        &mut self,
+        link: &WithinModel<crate::util::file::FileLink>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(path) = link.get_inner().absolute_path() else {
+            return;
+        };
+        let line_col = link.get_inner().line_and_column_num;
+
+        #[cfg(all(feature = "local_tty", not(target_family = "wasm")))]
+        if let Some((host, port)) = self.plain_ssh_scp_target(link, ctx) {
+            self.fetch_and_open_over_scp(host, port, &path, line_col, ctx);
+            return;
+        }
+
+        self.open_file_path(path, line_col, self.link_session_id(link), ctx);
     }
 
     /// OpenWarp:在当前(远端)终端会话里 `cd` 进指定目录。
@@ -17145,11 +17183,8 @@ impl TerminalView {
         match link {
             #[cfg(feature = "local_fs")]
             GridHighlightedLink::File(link) if link.contains(position) => {
-                let session_id = self.link_session_id(link);
-                let link = link.get_inner();
-                if let Some(path) = link.absolute_path() {
-                    self.open_file_path(path, link.line_and_column_num, session_id, ctx);
-                }
+                let link = link.clone();
+                self.open_grid_file_link(&link, ctx);
             }
             GridHighlightedLink::Url(url) if url.contains(position) => {
                 let uri = self

@@ -64,6 +64,9 @@ pub enum LinkValidationContext {
     /// A remote session whose host cannot be queried. Existence is only known
     /// once the link is opened, so anything shaped like a path is accepted.
     Unverified,
+    /// Like `Unverified`, for a host whose working directory is also unknown:
+    /// only absolute paths are accepted, because a relative one cannot be placed.
+    UnverifiedAbsolute,
 }
 
 /// OpenWarp:远端会话链接校验所需的缓存快照。
@@ -107,6 +110,15 @@ pub fn absolute_path_if_valid(
     shell_launch_data: Option<&ShellLaunchData>,
     validation_ctx: &LinkValidationContext,
 ) -> Option<PathBuf> {
+    // The path belongs to a remote Unix host, so the local shell's path rules
+    // and working directory do not apply to it.
+    if matches!(validation_ctx, LinkValidationContext::UnverifiedAbsolute) {
+        return clean_path_result
+            .path
+            .starts_with('/')
+            .then(|| PathBuf::from(&clean_path_result.path));
+    }
+
     let (maybe_absolute_path, relative_path) = match shell_launch_data {
         Some(shell_launch_data) => {
             // Attempt to parse the clean path result as an absolute path.

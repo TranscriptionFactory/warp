@@ -197,6 +197,10 @@ pub(super) enum LinkSessionLocation {
     /// be validated ahead of time, so path-shaped text is linked and fetched over `scp` when
     /// opened.
     RemoteOverScp,
+    /// Output of a running plain `ssh` command in a local session, with a known SSH host.
+    /// The remote working directory is unknown, so only absolute paths are linked; they are
+    /// fetched over `scp` when opened.
+    RemoteOverScpNoCwd,
     /// Remote session with neither a connected daemon nor a known SSH host.
     /// Its paths cannot be validated, so no file-path link is shown. Checking them against the
     /// local filesystem would highlight paths that do not exist on the host, or open the local
@@ -216,6 +220,17 @@ impl LinkSessionLocation {
             (None, Some(false)) if has_ssh_host => Self::RemoteOverScp,
             (None, Some(false)) => Self::RemoteUnavailable,
             (None, Some(true) | None) => Self::Local,
+        }
+    }
+
+    /// The location of output printed by a plain `ssh` command that a local session ran.
+    /// That output never belongs to the local filesystem. Its host is reachable only while
+    /// the command still runs and names a host.
+    fn for_plain_ssh(has_ssh_host: bool, is_running: bool) -> Self {
+        if has_ssh_host && is_running {
+            Self::RemoteOverScpNoCwd
+        } else {
+            Self::RemoteUnavailable
         }
     }
 }
@@ -477,11 +492,7 @@ impl super::TerminalView {
         match link {
             #[cfg(feature = "local_fs")]
             GridHighlightedLink::File(link) => {
-                let session_id = self.link_session_id(link);
-                let link = link.get_inner();
-                if let Some(path) = link.absolute_path() {
-                    self.open_file_path(path.clone(), link.line_and_column_num, session_id, ctx);
-                }
+                self.open_grid_file_link(link, ctx);
             }
             GridHighlightedLink::Url(url) => {
                 let uri = self
@@ -609,6 +620,55 @@ impl super::TerminalView {
             self.session_remote_host_id(session_id, ctx),
             self.session_ssh_target(session_id, ctx).is_some(),
         )
+    }
+
+    /// Where the files named at the given link location live. A session that looks local
+    /// still shows remote output while it runs a plain `ssh` command.
+    pub(super) fn link_location<T>(
+        &self,
+        location: &WithinModel<T>,
+        ctx: &warpui::AppContext,
+    ) -> LinkSessionLocation {
+        let session_location = self.link_session_location(self.link_session_id(location), ctx);
+        if session_location != LinkSessionLocation::Local {
+            return session_location;
+        }
+        match self.plain_ssh_at(location) {
+            Some((ssh, is_running)) => {
+                LinkSessionLocation::for_plain_ssh(ssh.host.is_some(), is_running)
+            }
+            None => LinkSessionLocation::Local,
+        }
+    }
+
+    /// The interactive `ssh` command whose block (or alt screen) holds the link location,
+    /// and whether that command is still running.
+    fn plain_ssh_at<T>(
+        &self,
+        location: &WithinModel<T>,
+    ) -> Option<(crate::terminal::ssh::util::InteractiveSshCommand, bool)> {
+        let model = self.model.lock();
+        let block = match location {
+            WithinModel::AltScreen(_) => model.block_list().active_block(),
+            WithinModel::BlockList(inner) => model.block_list().block_at(inner.block_index)?,
+        };
+        let ssh =
+            crate::terminal::ssh::util::parse_interactive_ssh_command(&block.command_to_string())?;
+        Some((ssh, block.is_active_and_long_running()))
+    }
+
+    /// The host and port to fetch a clicked file from over `scp`, when the link location is
+    /// output of a running plain `ssh` command in a local session.
+    pub(super) fn plain_ssh_scp_target<T>(
+        &self,
+        location: &WithinModel<T>,
+        ctx: &warpui::AppContext,
+    ) -> Option<(String, Option<String>)> {
+        if self.link_location(location, ctx) != LinkSessionLocation::RemoteOverScpNoCwd {
+            return None;
+        }
+        let (ssh, _) = self.plain_ssh_at(location)?;
+        Some((ssh.host?, ssh.port))
     }
 
     /// The host and port of the SSH connection that the given session runs in, when known.
@@ -891,7 +951,7 @@ impl super::TerminalView {
         // 远端会话的文件不在本地磁盘上,需要用 `LinkValidationContext::Remote`
         // 携带 daemon 拉取来的真实目录列表做精确校验。
         let block_session_id = self.link_session_id(&position);
-        let location = self.link_session_location(block_session_id, ctx);
+        let location = self.link_location(&position, ctx);
 
         // For AltScreen we scan for relative path with the current working directory.
         // For BlockList we scan for relative path with the pwd of the hovered block.
@@ -902,6 +962,8 @@ impl super::TerminalView {
         // its files, so it gets no file-path links.
         let pwd_to_scan_for = match (&location, position) {
             (LinkSessionLocation::RemoteUnavailable, _) => None,
+            // Only absolute paths are linked, so the working directory is never used.
+            (LinkSessionLocation::RemoteOverScpNoCwd, _) => Some(String::new()),
             // 远端会话:`pwd()` 返回的是 shell-integration 上报的远端活动 cwd。
             (
                 LinkSessionLocation::Remote(_) | LinkSessionLocation::RemoteOverScp,
@@ -928,12 +990,17 @@ impl super::TerminalView {
                 LinkValidationContext::Remote(self.remote_link_validation(session_id, cwd, ctx))
             }
             (LinkSessionLocation::RemoteOverScp, _, _) => LinkValidationContext::Unverified,
+            (LinkSessionLocation::RemoteOverScpNoCwd, _, _) => {
+                LinkValidationContext::UnverifiedAbsolute
+            }
             _ => LinkValidationContext::Local,
         };
         // 扫描结束后取出两个缓存都答不上来的候选路径,交给 daemon 查询。
         let unresolved = match &validation_ctx {
             LinkValidationContext::Remote(remote) => Some(remote.unresolved.clone()),
-            LinkValidationContext::Local | LinkValidationContext::Unverified => None,
+            LinkValidationContext::Local
+            | LinkValidationContext::Unverified
+            | LinkValidationContext::UnverifiedAbsolute => None,
         };
 
         match pwd_to_scan_for {

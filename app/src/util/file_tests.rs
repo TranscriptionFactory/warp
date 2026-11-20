@@ -47,7 +47,9 @@ fn check(path: &str, line: Option<usize>, ctx: &LinkValidationContext) -> Option
 fn unresolved(ctx: &LinkValidationContext) -> Vec<PathBuf> {
     match ctx {
         LinkValidationContext::Remote(remote) => remote.unresolved.lock().unwrap().clone(),
-        LinkValidationContext::Local | LinkValidationContext::Unverified => vec![],
+        LinkValidationContext::Local
+        | LinkValidationContext::Unverified
+        | LinkValidationContext::UnverifiedAbsolute => vec![],
     }
 }
 
@@ -129,4 +131,26 @@ fn unverified_link_accepts_only_path_shaped_text() {
         Some(std::path::Path::new(CWD).join("notes.txt"))
     );
     assert_eq!(resolve("word"), None);
+}
+
+#[test]
+fn unverified_absolute_link_rejects_relative_paths() {
+    let resolve = |path: &str| {
+        absolute_path_if_valid(
+            &CleanPathResult {
+                path: path.to_string(),
+                line_and_column_num: None,
+            },
+            ShellPathType::ShellNative(CWD.to_string()),
+            None,
+            &LinkValidationContext::UnverifiedAbsolute,
+        )
+    };
+
+    assert_eq!(
+        resolve("/etc/hosts"),
+        Some(std::path::PathBuf::from("/etc/hosts"))
+    );
+    assert_eq!(resolve("src/main.rs"), None);
+    assert_eq!(resolve("~/notes.txt"), None);
 }

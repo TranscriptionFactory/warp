@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- **File links in a plain `ssh` session no longer open local files**: Output of an `ssh` command you run yourself was checked against your own disk, so a remote path opened the local file or folder of the same name. Absolute paths in that output are now fetched from the host over `scp`; relative paths are not linked, because the remote working directory is unknown.
+
 ## [v2026.11.19.1] — 2026-11-19
 
 - **Voice input shortcut**: "Toggle Voice Input" is now a bindable action in Settings > Keyboard Shortcuts. It starts and stops voice input with any shortcut; the hold-to-talk key still works.

@@ -38,6 +38,26 @@ mod link_session_location {
     }
 
     #[test]
+    fn running_plain_ssh_with_a_host_is_reached_over_scp_without_a_cwd() {
+        assert_eq!(
+            LinkSessionLocation::for_plain_ssh(true, true),
+            LinkSessionLocation::RemoteOverScpNoCwd
+        );
+    }
+
+    #[test]
+    fn plain_ssh_output_is_never_local() {
+        assert_eq!(
+            LinkSessionLocation::for_plain_ssh(true, false),
+            LinkSessionLocation::RemoteUnavailable
+        );
+        assert_eq!(
+            LinkSessionLocation::for_plain_ssh(false, true),
+            LinkSessionLocation::RemoteUnavailable
+        );
+    }
+
+    #[test]
     fn local_or_unknown_session_is_local() {
         assert_eq!(
             LinkSessionLocation::new(Some(true), None, false),
