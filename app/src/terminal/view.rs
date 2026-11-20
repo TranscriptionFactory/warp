@@ -16778,8 +16778,49 @@ impl TerminalView {
         }
 
         if should_directly_open_link {
+            #[cfg(feature = "local_fs")]
+            self.log_link_click_diagnostics(position, ctx);
             self.maybe_open_link(LinkOpenMethod::CmdClick, position, ctx);
         }
+    }
+
+    /// TEMPORARY diagnostic for SSH file links: records how a cmd+click was classified.
+    #[cfg(feature = "local_fs")]
+    fn log_link_click_diagnostics(&self, position: &WithinModel<Point>, ctx: &AppContext) {
+        let session_id = self.link_session_id(position);
+        let session_is_local = session_id
+            .and_then(|id| self.sessions.as_ref(ctx).get(id))
+            .map(|session| session.is_local());
+        let (block_command, block_running) = {
+            let model = self.model.lock();
+            let block = match position {
+                WithinModel::AltScreen(_) => Some(model.block_list().active_block()),
+                WithinModel::BlockList(inner) => model.block_list().block_at(inner.block_index),
+            };
+            (
+                block.map(|b| b.command_to_string()),
+                block.map(|b| b.is_active_and_long_running()),
+            )
+        };
+        let highlighted = match self.highlighted_link.as_ref() {
+            Some(GridHighlightedLink::File(link)) => format!(
+                "file {:?} contains_click={}",
+                link.get_inner().absolute_path(),
+                link.contains(position)
+            ),
+            Some(_) => "non-file link".to_string(),
+            None => "none".to_string(),
+        };
+        log::info!(
+            "LINKDIAG click: alt_screen={} session_id={session_id:?} session_is_local={session_is_local:?} \
+             remote_host={:?} session_ssh_target={:?} block_command={block_command:?} \
+             block_running={block_running:?} location={:?} plain_ssh_target={:?} highlighted={highlighted}",
+            matches!(position, WithinModel::AltScreen(_)),
+            self.session_remote_host_id(session_id, ctx),
+            self.session_ssh_target(session_id, ctx),
+            self.link_location(position, ctx),
+            self.plain_ssh_scp_target(position, ctx),
+        );
     }
 
     /// OpenWarp:把终端文件链接里已解析出的绝对路径当作远端路径,构造 `RemotePath`。

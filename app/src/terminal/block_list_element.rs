@@ -1634,8 +1634,11 @@ impl BlockListElement {
                                 ctx.request_soft_keyboard();
                             }
 
+                            // The open-link modifier keeps the click for OpenWarp, so a link
+                            // stays openable while the running program tracks the mouse.
                             if on_long_running_block
                                 && !should_intercept_mouse(&model, modifiers.shift, app)
+                                && !crate::terminal::links::should_directly_open_link(modifiers)
                             {
                                 let within_block = viewport.block_list_point_to_grid_point(point);
 
@@ -1781,7 +1784,8 @@ impl BlockListElement {
                         .is_some_and(|block| block.is_active_and_long_running());
 
                     let alt_mouse_action = on_long_running_block
-                        && !should_intercept_mouse(&model, modifiers.shift, app);
+                        && !should_intercept_mouse(&model, modifiers.shift, app)
+                        && !crate::terminal::links::should_directly_open_link(modifiers);
 
                     if alt_mouse_action {
                         let grid_point = point_from_first_visible_row(&viewport, within_block);
